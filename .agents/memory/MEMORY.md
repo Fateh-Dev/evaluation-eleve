@@ -1,0 +1,2 @@
+- [Report reference contract](report-reference.md) — preserve the supplied A4 evaluation sheet hierarchy in dynamic DOCX/PDF generation.
+- [Generated API client typings](api-client-tsconfig.md) — keep iterable DOM typings enabled for regenerated Orval clients.

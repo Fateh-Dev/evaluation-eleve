@@ -1,6 +1,6 @@
-# [Project name]
+# Teacher Competency Assessment
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A French-first Android and Web workspace for teachers to manage classes and competency-based pupil evaluations.
 
 ## Run & Operate
 
@@ -22,15 +22,31 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/teacher-assessment` — shared Expo Router app for Android and Web.
+- `artifacts/teacher-assessment/context/AppDataContext.tsx` — first-build local
+  assessment state, seed data, and offline draft persistence.
+- `artifacts/teacher-assessment/app/assessments/[assessmentId].tsx` — responsive
+  evaluation matrix and mobile one-pupil workflow.
+- `docs/architecture.md` — functional contract, ERD, report reference analysis,
+  navigation map, sync strategy, and roadmap.
+- `lib/api-spec/openapi.yaml` — shared API contract source of truth.
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- One Expo Router app serves Android and React Native Web; there is no separate
+  web frontend.
+- Evaluation values are stored as semantic enum values and only rendered as
+  `+`, `±`, `-`, or an empty marker at the UI/report boundary.
+- The supplied Word file is treated as a report-layout reference; structured
+  application data remains the source of truth.
+- The first build persists a structured local draft so the evaluation surface
+  remains usable without a network connection.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+Teachers can review their active class, search pupils, inspect pupil history,
+continue an assessment on mobile or desktop, save evaluation drafts locally,
+and identify objectives needing attention.
 
 ## User preferences
 
@@ -38,7 +54,11 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- Run `pnpm --filter @workspace/teacher-assessment run typecheck` after Expo
+  changes.
+- If the API contract changes, update `lib/api-spec/openapi.yaml` and run
+  `pnpm --filter @workspace/api-spec run codegen` before consuming new hooks.
+- Restart only the managed Expo workflow after dependency or Metro changes.
 
 ## Pointers
 

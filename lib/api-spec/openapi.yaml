@@ -10,6 +10,12 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: dashboard
+    description: Teacher dashboard operations
+  - name: classes
+    description: Class and pupil operations
+  - name: assessments
+    description: Assessment and evaluation operations
 paths:
   /healthz:
     get:
@@ -24,7 +30,145 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /dashboard:
+    get:
+      operationId: getDashboard
+      tags: [dashboard]
+      summary: Get the teacher dashboard
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dashboard"
+  /classes:
+    get:
+      operationId: listClasses
+      tags: [classes]
+      summary: List active classes
+      responses:
+        "200":
+          description: Classes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ClassSummary"
+  /classes/{classId}/pupils:
+    get:
+      operationId: listClassPupils
+      tags: [classes]
+      summary: List pupils in a class
+      parameters:
+        - $ref: "#/components/parameters/ClassId"
+      responses:
+        "200":
+          description: Pupils
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Pupil"
+  /classes/{classId}/assessments:
+    get:
+      operationId: listClassAssessments
+      tags: [assessments]
+      summary: List assessments for a class
+      parameters:
+        - $ref: "#/components/parameters/ClassId"
+      responses:
+        "200":
+          description: Assessments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Assessment"
+  /assessments/{assessmentId}:
+    get:
+      operationId: getAssessment
+      tags: [assessments]
+      summary: Get an assessment with its objectives
+      parameters:
+        - $ref: "#/components/parameters/AssessmentId"
+      responses:
+        "200":
+          description: Assessment detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssessmentDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /assessments/{assessmentId}/statistics:
+    get:
+      operationId: getAssessmentStatistics
+      tags: [assessments]
+      summary: Get evaluated-only statistics by objective
+      parameters:
+        - $ref: "#/components/parameters/AssessmentId"
+      responses:
+        "200":
+          description: Assessment statistics
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ObjectiveStatistics"
+  /assessments/{assessmentId}/evaluations/bulk:
+    post:
+      operationId: saveBulkEvaluations
+      tags: [assessments]
+      summary: Upsert multiple evaluation values in one transaction
+      parameters:
+        - $ref: "#/components/parameters/AssessmentId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/EvaluationInput"
+      responses:
+        "200":
+          description: Saved evaluations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  saved:
+                    type: integer
+                required: [saved]
 components:
+  parameters:
+    ClassId:
+      name: classId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AssessmentId:
+      name: assessmentId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
   schemas:
     HealthStatus:
       type: object
@@ -33,4 +177,140 @@ components:
           type: string
       required:
         - status
+    Error:
+      type: object
+      properties:
+        message:
+          type: string
+      required: [message]
+    ClassSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        level:
+          type: string
+        academicYear:
+          type: string
+        pupilCount:
+          type: integer
+      required: [id, name, level, academicYear, pupilCount]
+    Pupil:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        registrationNumber:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        classId:
+          type: string
+          format: uuid
+        active:
+          type: boolean
+      required: [id, registrationNumber, firstName, lastName, classId, active]
+    Assessment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        date:
+          type: string
+        classId:
+          type: string
+          format: uuid
+        subject:
+          type: string
+        level:
+          type: string
+        competency:
+          type: string
+        status:
+          type: string
+      required: [id, title, date, classId, subject, level, competency, status]
+    Objective:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        order:
+          type: integer
+        description:
+          type: string
+      required: [id, order, description]
+    AssessmentDetail:
+      allOf:
+        - $ref: "#/components/schemas/Assessment"
+        - type: object
+          properties:
+            support:
+              type: string
+              nullable: true
+            sessionObjectives:
+              type: string
+              nullable: true
+            objectives:
+              type: array
+              items:
+                $ref: "#/components/schemas/Objective"
+          required: [objectives]
+    EvaluationInput:
+      type: object
+      properties:
+        pupilId:
+          type: string
+          format: uuid
+        objectiveId:
+          type: string
+          format: uuid
+        value:
+          type: string
+          enum: [NotEvaluated, Acquired, PartiallyAcquired, NotAcquired]
+      required: [pupilId, objectiveId, value]
+    ObjectiveStatistics:
+      type: object
+      properties:
+        objectiveId:
+          type: string
+          format: uuid
+        evaluated:
+          type: integer
+        notEvaluated:
+          type: integer
+        acquired:
+          type: integer
+        partiallyAcquired:
+          type: integer
+        notAcquired:
+          type: integer
+        acquiredPercent:
+          type: integer
+      required: [objectiveId, evaluated, notEvaluated, acquired, partiallyAcquired, notAcquired, acquiredPercent]
+    Dashboard:
+      type: object
+      properties:
+        schoolName:
+          type: string
+        academicYear:
+          type: string
+        classes:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClassSummary"
+        recentAssessments:
+          type: array
+          items:
+            $ref: "#/components/schemas/Assessment"
+      required: [schoolName, academicYear, classes, recentAssessments]
 

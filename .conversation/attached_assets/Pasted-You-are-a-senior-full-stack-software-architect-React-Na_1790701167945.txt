@@ -1,0 +1,2293 @@
+You are a senior full-stack software architect, React Native/Expo developer,
+React Native Web developer, ASP.NET Core developer, PostgreSQL developer,
+UX/UI designer, offline-first application architect, and document-generation
+specialist.
+
+I want you to design and develop a complete production-quality application
+for teachers to manage pupils and perform competency-based evaluations.
+
+The application must run on:
+
+1. Android
+2. Web browser
+
+The application must use a shared React/TypeScript codebase as much as
+technically possible.
+
+I have provided an existing Word document named:
+
+notation.docx
+
+and an image showing the corresponding evaluation sheet.
+
+The existing Word document is the reference for the generated report.
+
+IMPORTANT:
+The application must NOT be designed around editing Word documents.
+
+The database is the source of truth.
+
+The teacher enters structured assessment data once.
+
+That data is then used to generate:
+- evaluation grids
+- statistics
+- pupil history
+- remediation information
+- Word documents
+- PDF documents
+- printed reports
+
+============================================================
+1. TECHNOLOGY STACK
+============================================================
+
+FRONTEND:
+
+Use:
+
+- React
+- TypeScript
+- React Native
+- Expo
+- Expo Router
+- React Native Web
+
+Do NOT use Angular.
+
+Do NOT create an Angular application.
+
+Do NOT create two independent frontends.
+
+The target architecture is:
+
+                Shared React/TypeScript
+                         |
+             ┌───────────┴───────────┐
+             |                       |
+      React Native              React Native Web
+             |                       |
+          Android                  Browser
+
+
+Use the latest stable Expo SDK and its compatible React,
+React Native, and React Native Web versions.
+
+IMPORTANT:
+Never manually mix incompatible React / React Native / Expo versions.
+
+Use Expo's compatibility matrix and install compatible packages
+using `npx expo install` where appropriate.
+
+At the time this specification is written, the current Expo documentation
+lists Expo SDK 57 with:
+- React Native 0.86
+- React 19.2.3
+- React Native Web 0.21.0
+
+However, do not hardcode these versions if a newer stable compatible
+Expo SDK is available when development begins.
+
+Always use one coherent Expo SDK version.
+
+============================================================
+2. NAVIGATION
+============================================================
+
+Use:
+
+Expo Router
+
+because it supports React Native and Web using a unified file-based
+navigation system.
+
+Do not use a completely separate web router.
+
+Use dynamic routes where appropriate.
+
+Example route structure:
+
+app/
+    _layout.tsx
+
+    index.tsx
+
+    login.tsx
+
+    (app)/
+        _layout.tsx
+
+        dashboard.tsx
+
+        classes/
+            index.tsx
+            [classId]/
+                index.tsx
+                pupils.tsx
+                assessments.tsx
+
+        pupils/
+            index.tsx
+            [pupilId].tsx
+
+        assessments/
+            index.tsx
+            new.tsx
+            [assessmentId]/
+                index.tsx
+                objectives.tsx
+                evaluation.tsx
+                statistics.tsx
+                remediation.tsx
+                document.tsx
+
+        templates/
+            index.tsx
+
+        statistics/
+            index.tsx
+
+        settings/
+            index.tsx
+
+Use route protection for authenticated areas.
+
+============================================================
+3. BACKEND
+============================================================
+
+Use:
+
+- ASP.NET Core Web API
+- Current supported .NET LTS version
+- Entity Framework Core
+- PostgreSQL
+- JWT authentication
+- Refresh tokens
+- Role-based authorization
+
+Architecture:
+
+React / React Native
+        |
+        | HTTPS REST API
+        |
+ASP.NET Core
+        |
+        +---- Entity Framework Core
+        |
+        +---- Document Generation
+        |
+        +---- Excel Import
+        |
+        +---- Statistics
+        |
+     PostgreSQL
+
+React must NEVER connect directly to PostgreSQL.
+
+============================================================
+4. APPLICATION OBJECTIVE
+============================================================
+
+The application is a:
+
+Teacher Competency Assessment Management System.
+
+The teacher must be able to:
+
+1. Login
+2. Manage academic years
+3. Manage classes
+4. Manage pupils
+5. Import pupils from Excel
+6. Create assessments
+7. Define competencies
+8. Define evaluation objectives
+9. Reuse objective templates
+10. Evaluate pupils
+11. Use + / ± / -
+12. Save evaluations
+13. Work offline
+14. Synchronize later
+15. Analyze results
+16. See pupil history
+17. Create remediation decisions
+18. Generate Word
+19. Generate PDF
+20. Print
+21. Share generated documents on Android
+
+============================================================
+5. USER ROLES
+============================================================
+
+Initially support:
+
+TEACHER
+
+Teacher can:
+
+- manage own classes
+- manage own pupils
+- create assessments
+- define objectives
+- evaluate pupils
+- view statistics
+- view pupil history
+- create remediation decisions
+- generate Word/PDF
+
+ADMINISTRATOR
+
+Administrator can:
+
+- manage teachers
+- manage schools
+- manage academic years
+- manage classes
+- manage pupils
+- import pupils
+- manage templates
+- view system information
+
+Design authorization so more roles can be added later.
+
+============================================================
+6. SCHOOL
+============================================================
+
+Create a School entity.
+
+Example:
+
+School name:
+Abdelhamid DOUROUAZ
+
+Fields:
+
+Id
+Name
+Address
+Wilaya
+Logo
+Active
+CreatedAt
+UpdatedAt
+
+The school information must be configurable.
+
+The generated Word/PDF must use the configured school information.
+
+============================================================
+7. ACADEMIC YEAR
+============================================================
+
+Create:
+
+AcademicYear
+
+Fields:
+
+Id
+Label
+StartDate
+EndDate
+IsActive
+
+Examples:
+
+2025-2026
+2026-2027
+2027-2028
+
+A class belongs to one academic year.
+
+Do not mix pupils from different academic years.
+
+============================================================
+8. CLASS
+============================================================
+
+Class entity:
+
+Id
+Name
+Level
+AcademicYearId
+TeacherId
+SchoolId
+Active
+CreatedAt
+UpdatedAt
+
+Example:
+
+Class:
+2AS LPH2
+
+Level:
+2AS
+
+Academic year:
+2026-2027
+
+Teacher:
+...
+
+The teacher dashboard should display classes.
+
+Example:
+
+2AS LPH1
+34 élèves
+
+2AS LPH2
+32 élèves
+
+1AS LPH3
+29 élèves
+
+============================================================
+9. PUPILS
+============================================================
+
+Pupil fields:
+
+Id
+RegistrationNumber
+FirstName
+LastName
+DateOfBirth
+Gender
+ClassId
+Active
+Notes
+CreatedAt
+UpdatedAt
+
+Do not store only a full name.
+
+Store:
+
+FirstName
+LastName
+
+and construct:
+
+Nom et Prénom
+
+when displaying.
+
+The database must support Unicode.
+
+Arabic and French names must work correctly.
+
+============================================================
+10. PUPIL IMPORT
+============================================================
+
+Implement Excel import.
+
+Example Excel:
+
+N°
+Nom
+Prénom
+Date de naissance
+
+Import wizard:
+
+STEP 1:
+Upload Excel
+
+STEP 2:
+Read columns
+
+STEP 3:
+Map columns
+
+Example:
+
+Nom -> LastName
+Prénom -> FirstName
+Date de naissance -> DateOfBirth
+N° -> RegistrationNumber
+
+STEP 4:
+Preview
+
+STEP 5:
+Validate
+
+STEP 6:
+Show errors/duplicates
+
+STEP 7:
+Confirm
+
+Do not insert duplicates automatically.
+
+Display a clear validation report.
+
+============================================================
+11. ASSESSMENT
+============================================================
+
+Assessment is the central business entity.
+
+Fields:
+
+Id
+Title
+Date
+ClassId
+TeacherId
+Subject
+Level
+Competency
+Support
+SessionObjectives
+Notes
+Status
+CreatedAt
+CreatedBy
+UpdatedAt
+UpdatedBy
+
+Status:
+
+Draft
+InProgress
+Completed
+Archived
+
+Example:
+
+Établissement:
+Abdelhamid DOUROUAZ
+
+Niveau:
+2AS
+
+Compétence:
+Compréhension de l'écrit
+
+Classe:
+2AS LPH2
+
+The fields must be configurable.
+
+Do not hardcode these values.
+
+============================================================
+12. ASSESSMENT OBJECTIVES
+============================================================
+
+Each assessment contains objectives.
+
+AssessmentObjective:
+
+Id
+AssessmentId
+Order
+Description
+Active
+
+The teacher can:
+
+- add
+- edit
+- delete
+- reorder
+- duplicate
+
+Example objectives:
+
+1. Repérer le thème principal d'un texte.
+2. Comprendre les idées essentielles du texte.
+3. Identifier les outils linguistiques utilisés.
+4. Identifier les procédés explicatifs utilisés dans un texte.
+5. Repérer l'utilisation de l'indicatif présent à valeur de vérité générale dans un texte.
+6. Savoir en déduire la visée.
+
+These are example/reference objectives.
+
+DO NOT hardcode them.
+
+============================================================
+13. ASSESSMENT TEMPLATES
+============================================================
+
+Implement reusable templates.
+
+Example:
+
+Français
+
+    Compréhension de l'écrit
+    Production écrite
+    Compréhension orale
+    Production orale
+
+Template contains:
+
+Id
+Name
+Subject
+Competency
+Default objectives
+Default remediation suggestions
+
+When creating an assessment:
+
+[ Créer depuis un modèle ]
+
+The objectives are copied into the assessment.
+
+After copying, the teacher can modify them without changing
+the original template.
+
+============================================================
+14. EVALUATION VALUES
+============================================================
+
+Do not store "+" / "±" / "-" as the database value.
+
+Use:
+
+NotEvaluated
+Acquired
+PartiallyAcquired
+NotAcquired
+
+Display:
+
+Acquired          = +
+PartiallyAcquired = ±
+NotAcquired       = -
+
+Prepare for:
+
+Absent
+NotApplicable
+
+later.
+
+============================================================
+15. EVALUATION DATA MODEL
+============================================================
+
+Evaluation:
+
+Id
+AssessmentId
+PupilId
+ObjectiveId
+Value
+CreatedAt
+UpdatedAt
+
+Database constraint:
+
+AssessmentId + PupilId + ObjectiveId
+
+must be unique.
+
+An evaluation belongs to:
+
+one assessment
+one pupil
+one objective
+
+============================================================
+16. EVALUATION GRID
+============================================================
+
+This is the most important feature.
+
+Desktop:
+
+                    OBJECTIVES
+
+Pupil              1   2   3   4   5   6
+
+Ahmed Benali       +   +   ±   +   -   +
+
+Mohamed X          ±   +   +   -   ±   +
+
+Ali X              +   -   +   +   +   +
+
+The grid must support dynamic:
+
+- number of pupils
+- number of objectives
+
+Do NOT assume exactly six objectives.
+
+============================================================
+17. GRID INTERACTION
+============================================================
+
+Clicking an evaluation cell can cycle:
+
+Empty
+  ↓
++
+  ↓
+±
+  ↓
+-
+  ↓
+Empty
+
+Or provide:
+
+[ + ] [ ± ] [ - ]
+
+depending on platform.
+
+The teacher must be able to evaluate an entire class quickly.
+
+============================================================
+18. DESKTOP WEB EVALUATION
+============================================================
+
+On desktop:
+
+Display a large evaluation grid.
+
+Support:
+
+- horizontal scrolling
+- fixed pupil-name column where practical
+- fixed header where practical
+- keyboard navigation
+- Tab
+- Arrow keys
+- Enter
+- mouse
+- bulk operations
+
+Do not create one separate form per pupil.
+
+============================================================
+19. MOBILE ANDROID EVALUATION
+============================================================
+
+Do NOT squeeze the desktop grid onto a phone.
+
+On Android phone:
+
+Display one pupil at a time.
+
+Example:
+
+Ahmed Benali
+
+Objective 1
+
+[ + ] [ ± ] [ - ]
+
+Objective 2
+
+[ + ] [ ± ] [ - ]
+
+Objective 3
+
+[ + ] [ ± ] [ - ]
+
+...
+
+[ Save ]
+[ Save & Next ]
+
+Provide:
+
+Previous pupil
+Next pupil
+
+The user should be able to evaluate a whole class quickly.
+
+============================================================
+20. TABLET
+============================================================
+
+On tablets:
+
+Use a grid similar to desktop.
+
+Allow horizontal scrolling.
+
+Make touch targets large enough for touch interaction.
+
+============================================================
+21. BULK OPERATIONS
+============================================================
+
+Support:
+
+- Mark all pupils for an objective
+- Copy previous value
+- Clear row
+- Clear column
+- Clear assessment
+- Bulk save
+
+"Mark all as +" must require confirmation.
+
+Do not allow accidental mass modification.
+
+============================================================
+22. SAVE
+============================================================
+
+Implement:
+
+- explicit Save
+- debounced save
+- local draft state
+- unsaved indicator
+- recovery after navigation
+
+Display:
+
+✓ Enregistré
+
+or:
+
+● Modifications non enregistrées
+
+============================================================
+23. OFFLINE-FIRST
+============================================================
+
+Offline support is a core requirement.
+
+A teacher may be in a classroom without reliable Internet.
+
+The teacher must be able to:
+
+1. Open a previously synchronized class.
+2. Open an assessment.
+3. Evaluate pupils.
+4. Save locally.
+5. Close the app.
+6. Reopen the app.
+7. Continue.
+8. Synchronize when Internet returns.
+
+Use a real local structured database/cache where appropriate.
+
+For Android consider:
+
+Expo SQLite
+
+For server-state caching:
+
+TanStack Query persistence.
+
+Do NOT rely only on AsyncStorage for the complete assessment database.
+
+============================================================
+24. SYNCHRONIZATION
+============================================================
+
+Display:
+
+🟢 Synchronisé
+
+or:
+
+🟠 Modifications non synchronisées
+
+When Internet returns:
+
+Synchronize automatically.
+
+The backend must handle:
+
+- retries
+- duplicate requests
+- failed synchronization
+- conflict detection
+
+Do not silently overwrite conflicting data.
+
+============================================================
+25. WEB PWA
+============================================================
+
+The Web version should support PWA capabilities where practical.
+
+Cache:
+
+- authenticated session where safe
+- recent classes
+- pupil lists
+- recent assessments
+- evaluation drafts
+
+If connection disappears:
+
+continue current evaluation.
+
+When connection returns:
+
+synchronize.
+
+============================================================
+26. STATISTICS
+============================================================
+
+For every objective calculate:
+
+Total pupils
+Evaluated pupils
+Not evaluated pupils
+Acquired
+Partially acquired
+Not acquired
+
+Example:
+
+Objective 1
+
+Acquired: 25
+Partially acquired: 5
+Not acquired: 2
+Not evaluated: 0
+
+Percentages must be calculated from evaluated pupils where appropriate.
+
+Do not incorrectly include absent/non-evaluated pupils in the denominator.
+
+============================================================
+27. CLASS ANALYSIS
+============================================================
+
+Display assessment statistics.
+
+Example:
+
+Objective 1
+78% acquired
+
+Objective 2
+72%
+
+Objective 3
+64%
+
+Objective 4
+51%
+
+Objective 5
+81%
+
+Objective 6
+69%
+
+Allow the teacher to configure a threshold.
+
+Example:
+
+Attention threshold:
+60%
+
+If below threshold:
+
+"Objectif nécessitant une attention particulière"
+
+This is a DATA INDICATOR, not an automatic pedagogical judgment.
+
+The teacher makes the final decision.
+
+============================================================
+28. INDIVIDUAL PUPIL HISTORY
+============================================================
+
+Every assessment remains historically available.
+
+Never overwrite old assessment results.
+
+Pupil page:
+
+Ahmed Benali
+
+Assessment:
+28/09/2026
+
+Compréhension de l'écrit
+
+Obj 1 +
+Obj 2 +
+Obj 3 ±
+Obj 4 +
+Obj 5 -
+Obj 6 +
+
+Then later assessments.
+
+Allow filtering by:
+
+- academic year
+- class
+- competency
+- subject
+- date
+
+============================================================
+29. REMEDIATION
+============================================================
+
+The reference document includes:
+
+DÉCISIONS À PRENDRE
+
+A) Au plan individuel
+
+B) Au plan de la classe
+
+Implement both.
+
+Assessment:
+
+IndividualRemediation
+ClassRemediation
+
+Allow:
+
+- predefined suggestions
+- custom text
+- edit
+- delete
+
+Example suggestions:
+
+"Encourager les élèves à lire régulièrement des textes à la maison afin de développer leur capacité de compréhension et d'analyse."
+
+"Aider l'élève à reconnaître les indices d'un texte explicatif/argumentatif/narratif."
+
+"Proposer des activités de langue pour travailler les procédés explicatifs."
+
+"Proposer un ou plusieurs courts extraits portant sur des modèles discursifs différents."
+
+These are editable templates, not hardcoded output.
+
+============================================================
+30. DASHBOARD
+============================================================
+
+Modern, simple teacher dashboard.
+
+Example:
+
+Bonjour Mme X
+
+Mes classes
+
+2AS LPH1
+34 élèves
+
+2AS LPH2
+32 élèves
+
+1AS LPH3
+29 élèves
+
+Dernières évaluations
+
+Compréhension de l'écrit
+2AS LPH2
+28/09/2026
+
+Buttons:
+
+[ + Nouvelle évaluation ]
+
+[ Mes classes ]
+
+[ Mes élèves ]
+
+Do not overload the dashboard.
+
+============================================================
+31. NAVIGATION
+============================================================
+
+Main navigation:
+
+Tableau de bord
+Classes
+Élèves
+Évaluations
+Modèles
+Statistiques
+Paramètres
+
+Desktop:
+
+Sidebar.
+
+Tablet:
+
+Compact sidebar/navigation.
+
+Mobile:
+
+Bottom navigation or compact navigation.
+
+Use Expo Router for the navigation architecture.
+
+============================================================
+32. REACT PROJECT STRUCTURE
+============================================================
+
+Use a feature-based architecture.
+
+Example:
+
+src/
+
+    components/
+        Button/
+        Input/
+        Modal/
+        EvaluationCell/
+        EvaluationGrid/
+        DataTable/
+        Loading/
+        EmptyState/
+        ErrorState/
+
+    features/
+
+        auth/
+            components/
+            hooks/
+            services/
+            schemas/
+
+        dashboard/
+
+        academic-years/
+
+        classes/
+
+        pupils/
+
+        assessments/
+
+        evaluation/
+
+        statistics/
+
+        remediation/
+
+        templates/
+
+        settings/
+
+    services/
+        api/
+        auth/
+        documents/
+        synchronization/
+
+    store/
+        authStore.ts
+        assessmentStore.ts
+        syncStore.ts
+
+    models/
+
+    schemas/
+
+    utils/
+
+    i18n/
+
+============================================================
+33. SHARED CODE
+============================================================
+
+Share as much code as possible between Android and Web.
+
+Share:
+
+- TypeScript models
+- DTOs
+- API client
+- authentication logic
+- authorization
+- validation
+- Zod schemas
+- TanStack Query
+- Zustand stores
+- statistics calculations
+- evaluation logic
+- synchronization logic
+- translations
+- business rules
+- reusable components
+
+Use platform-specific files only where necessary:
+
+Component.web.tsx
+Component.native.tsx
+
+Do not duplicate complete applications.
+
+============================================================
+34. PLATFORM-SPECIFIC UI
+============================================================
+
+Use React Native primitives:
+
+View
+Text
+Pressable
+ScrollView
+FlatList
+TextInput
+Modal
+
+Do not build the entire application using HTML:
+
+div
+span
+button
+input
+
+because Android must use native React Native rendering.
+
+React Native Web will render the shared components for browsers.
+
+============================================================
+35. STATE MANAGEMENT
+============================================================
+
+Use:
+
+TanStack Query
+
+for server state:
+
+- API data
+- caching
+- synchronization
+- refetching
+
+Use:
+
+Zustand
+
+for client state:
+
+- authentication
+- UI state
+- temporary assessment state
+- synchronization state
+
+Do not create one huge global store.
+
+============================================================
+36. FORMS
+============================================================
+
+Use:
+
+React Hook Form
++
+Zod
+
+For:
+
+- login
+- class
+- pupil
+- assessment
+- objective
+- template
+- remediation
+
+Validate both:
+
+Frontend
+Backend
+
+============================================================
+37. UI DESIGN
+============================================================
+
+Design:
+
+- modern
+- clean
+- professional
+- teacher-focused
+- fast
+- minimal
+- accessible
+
+Avoid:
+
+- excessive animation
+- unnecessary gradients
+- excessive cards
+- complicated navigation
+
+Prioritize:
+
+- data entry speed
+- readability
+- touch usability
+- clear feedback
+
+============================================================
+38. RESPONSIVE BREAKPOINTS
+============================================================
+
+Support:
+
+Mobile:
+360px+
+
+Tablet:
+768px+
+
+Desktop:
+1024px+
+
+Large desktop:
+1440px+
+
+Do not simply scale desktop UI down to mobile.
+
+Use adaptive layouts.
+
+============================================================
+39. FRENCH FIRST
+============================================================
+
+Initial application language:
+
+French.
+
+Examples:
+
+Tableau de bord
+Classes
+Élèves
+Évaluations
+Objectifs
+Compétences
+Statistiques
+Paramètres
+Nouvelle évaluation
+Enregistrer
+Annuler
+Générer Word
+Générer PDF
+Imprimer
+
+Do not hardcode UI strings in components.
+
+Create translation infrastructure.
+
+============================================================
+40. ARABIC SUPPORT
+============================================================
+
+Prepare for Arabic.
+
+Support:
+
+- UTF-8
+- Arabic names
+- Arabic text
+- RTL
+- LTR
+- mixed French/Arabic
+
+The application must be able to switch direction.
+
+Do not assume all pupil names are Latin.
+
+============================================================
+41. SEARCH
+============================================================
+
+Search pupils by:
+
+- Nom
+- Prénom
+- Registration number
+
+Search:
+
+- classes
+- assessments
+- templates
+
+============================================================
+42. FILTERS
+============================================================
+
+Classes:
+
+- academic year
+- teacher
+- active/inactive
+
+Pupils:
+
+- active/inactive
+- class
+
+Assessments:
+
+- class
+- date
+- subject
+- competency
+- status
+
+Statistics:
+
+- assessment
+- class
+- academic year
+- date range
+
+============================================================
+43. DATABASE MODEL
+============================================================
+
+Entities:
+
+User
+Role
+School
+AcademicYear
+Class
+Pupil
+Assessment
+AssessmentObjective
+Evaluation
+AssessmentTemplate
+TemplateObjective
+RemediationTemplate
+AssessmentRemediation
+RefreshToken
+
+Relationships:
+
+School
+ └── Teachers
+ └── Classes
+
+Teacher
+ └── Classes
+ └── Assessments
+
+AcademicYear
+ └── Classes
+
+Class
+ └── Pupils
+ └── Assessments
+
+Assessment
+ └── Objectives
+ └── Evaluations
+
+Pupil
+ └── Evaluations
+
+Objective
+ └── Evaluations
+
+============================================================
+44. DATABASE CONSTRAINTS
+============================================================
+
+Implement proper constraints.
+
+Examples:
+
+Unique:
+
+AssessmentId + PupilId + ObjectiveId
+
+for evaluations.
+
+Prevent duplicate pupils within the same class using the same
+registration number.
+
+Objective order must be unique within an assessment.
+
+Use foreign keys.
+
+Use indexes for:
+
+Pupil.LastName
+Pupil.FirstName
+Pupil.RegistrationNumber
+Assessment.ClassId
+Assessment.Date
+Evaluation.AssessmentId
+Evaluation.PupilId
+
+============================================================
+45. API
+============================================================
+
+Authentication:
+
+POST /api/auth/login
+POST /api/auth/refresh
+POST /api/auth/logout
+
+Academic years:
+
+GET /api/academic-years
+POST /api/academic-years
+PUT /api/academic-years/{id}
+DELETE /api/academic-years/{id}
+
+Classes:
+
+GET /api/classes
+GET /api/classes/{id}
+POST /api/classes
+PUT /api/classes/{id}
+DELETE /api/classes/{id}
+
+Pupils:
+
+GET /api/classes/{classId}/pupils
+POST /api/classes/{classId}/pupils
+PUT /api/pupils/{id}
+DELETE /api/pupils/{id}
+
+Excel:
+
+POST /api/classes/{classId}/pupils/import
+
+Assessments:
+
+GET /api/classes/{classId}/assessments
+GET /api/assessments/{id}
+POST /api/assessments
+PUT /api/assessments/{id}
+DELETE /api/assessments/{id}
+
+Objectives:
+
+GET /api/assessments/{id}/objectives
+POST /api/assessments/{id}/objectives
+PUT /api/objectives/{id}
+DELETE /api/objectives/{id}
+
+Evaluations:
+
+GET /api/assessments/{id}/evaluations
+POST /api/assessments/{id}/evaluations/bulk
+PUT /api/assessments/{id}/evaluations/bulk
+
+Statistics:
+
+GET /api/assessments/{id}/statistics
+
+Pupil history:
+
+GET /api/pupils/{id}/history
+
+Documents:
+
+GET /api/assessments/{id}/document/word
+GET /api/assessments/{id}/document/pdf
+
+============================================================
+46. BULK EVALUATION
+============================================================
+
+Do NOT send one HTTP request for every evaluation cell.
+
+Use bulk operations.
+
+Example:
+
+POST /api/assessments/{id}/evaluations/bulk
+
+[
+    {
+        "pupilId": "...",
+        "objectiveId": "...",
+        "value": "Acquired"
+    },
+    {
+        "pupilId": "...",
+        "objectiveId": "...",
+        "value": "PartiallyAcquired"
+    }
+]
+
+Use database transactions.
+
+Make requests idempotent where possible.
+
+============================================================
+47. VALIDATION
+============================================================
+
+Assessment:
+
+- Class required
+- Date required
+- Competency required
+- At least one objective
+
+Objective:
+
+- Description required
+- Order valid
+
+Pupil:
+
+- First name required
+- Last name required
+
+Do not rely on frontend validation.
+
+============================================================
+48. SECURITY
+============================================================
+
+Implement:
+
+- HTTPS
+- JWT
+- Refresh tokens
+- secure password hashing
+- role authorization
+- validation
+- CORS
+- rate limiting where appropriate
+- secure file upload
+- Excel file size limits
+- document generation limits
+
+Never trust TeacherId supplied by the client.
+
+Determine identity from authenticated JWT.
+
+Do not expose stack traces to users.
+
+Log technical errors securely.
+
+============================================================
+49. AUDIT
+============================================================
+
+Use:
+
+CreatedAt
+CreatedBy
+UpdatedAt
+UpdatedBy
+
+Assessment statuses:
+
+Draft
+InProgress
+Completed
+Archived
+
+Completed assessments should not be accidentally modified.
+
+If editing completed assessments:
+
+require explicit confirmation.
+
+============================================================
+50. DOCUMENT GENERATION
+============================================================
+
+The supplied:
+
+notation.docx
+
+is the authoritative reference for report structure.
+
+Before implementing document generation:
+
+INSPECT THE DOCUMENT.
+
+Identify:
+
+- page size
+- margins
+- fonts
+- font sizes
+- headers
+- footers
+- tables
+- column widths
+- borders
+- alignment
+- row heights
+- labels
+- spacing
+- + / ± / - structure
+- totals
+- decisions section
+
+Do not redesign the document arbitrarily.
+
+============================================================
+51. REPORT CONTENT
+============================================================
+
+The generated report should contain the equivalent of:
+
+Établissement :
+{schoolName}
+
+Niveau :
+{level}
+
+Compétence :
+{competency}
+
+Objectifs de la séance :
+{sessionObjectives}
+
+Support :
+{support}
+
+Objectifs d'évaluation:
+
+01 {objective1}
+02 {objective2}
+03 {objective3}
+...
+
+GRILLE D'ANALYSE DES RÉSULTATS
+
+Classe :
+{className}
+
+N°
+Nom et Prénom
+Objective columns
+
+Evaluation values:
+
++
+±
+-
+
+Then totals.
+
+Then:
+
+DÉCISIONS À PRENDRE
+
+A) Au plan individuel
+
+{individualRemediation}
+
+B) Au plan de la classe
+
+{classRemediation}
+
+============================================================
+52. DYNAMIC WORD TABLE
+============================================================
+
+The number of objectives is dynamic.
+
+Assessment A:
+4 objectives
+
+Assessment B:
+6 objectives
+
+Assessment C:
+10 objectives
+
+The generated Word table must automatically adapt.
+
+If many objectives exist:
+
+- adjust column widths
+- adjust font size carefully
+- use landscape orientation where necessary
+- preserve readability
+
+Never cut off columns.
+
+Never generate an unusable table.
+
+============================================================
+53. DOCUMENT ARCHITECTURE
+============================================================
+
+Create:
+
+AssessmentReportDto
+
+DocumentGenerationService
+
+WordAssessmentGenerator
+
+PdfAssessmentGenerator
+
+Architecture:
+
+Assessment
+    ↓
+AssessmentReportDto
+    ↓
+WordAssessmentGenerator
+    ↓
+DOCX
+
+and:
+
+AssessmentReportDto
+    ↓
+PdfAssessmentGenerator
+    ↓
+PDF
+
+Do not place document-generation logic in React.
+
+============================================================
+54. WORD FORMAT
+============================================================
+
+Generate:
+
+.docx
+
+Filename example:
+
+Evaluation_2AS_LPH2_Comprehension_ecrit_2026-09-28.docx
+
+Sanitize filename characters.
+
+============================================================
+55. PDF
+============================================================
+
+Generate PDF preserving the same logical structure.
+
+Default:
+
+A4
+
+Support:
+
+Portrait
+Landscape when necessary
+
+Ensure:
+
+- no clipped columns
+- readable text
+- repeating table headers
+- proper page breaks
+
+============================================================
+56. PRINT
+============================================================
+
+Provide a print-friendly version.
+
+The printed report should resemble the Word/PDF report.
+
+============================================================
+57. ANDROID DOCUMENT HANDLING
+============================================================
+
+After generating a document on Android:
+
+Allow:
+
+- Open
+- Share
+- Save
+
+Use appropriate Expo-compatible APIs.
+
+Do not assume browser download APIs will work on Android.
+
+============================================================
+58. WEB DOCUMENT HANDLING
+============================================================
+
+On Web:
+
+[ Télécharger Word ]
+
+[ Télécharger PDF ]
+
+Use browser-compatible download behavior.
+
+============================================================
+59. SCHOOL SETTINGS
+============================================================
+
+Settings:
+
+School name
+Address
+Wilaya
+Logo
+Default language
+Default document format
+Teacher information
+
+============================================================
+60. ASSESSMENT CREATION WIZARD
+============================================================
+
+Use a six-step workflow:
+
+STEP 1
+Informations
+
+Class
+Subject
+Competency
+Date
+Support
+
+STEP 2
+Objectifs
+
+Add/edit/reorder objectives.
+
+STEP 3
+Évaluation
+
+Evaluate pupils.
+
+STEP 4
+Analyse
+
+Statistics.
+
+STEP 5
+Remédiation
+
+Individual and class decisions.
+
+STEP 6
+Document
+
+Word
+PDF
+Print
+
+Allow going backward without losing data.
+
+============================================================
+61. PUPIL HISTORY
+============================================================
+
+When opening a pupil:
+
+Show:
+
+Personal information
+
+Current class
+
+Assessment history
+
+Example:
+
+Ahmed Benali
+
+28/09/2026
+Compréhension de l'écrit
+
+Obj 1 +
+Obj 2 +
+Obj 3 ±
+Obj 4 +
+Obj 5 -
+Obj 6 +
+
+Show previous assessments.
+
+============================================================
+62. PERFORMANCE
+============================================================
+
+The application should support at least:
+
+50+ pupils/class
+20+ objectives/assessment
+many historical assessments
+
+Avoid N+1 queries.
+
+Use efficient EF Core queries.
+
+Use AsNoTracking for read-only queries.
+
+Use pagination where appropriate.
+
+Do not load the entire database.
+
+============================================================
+63. TESTING
+============================================================
+
+Backend:
+
+- unit tests
+- integration tests
+- API tests
+
+Frontend:
+
+- component tests
+- service tests
+- validation tests
+
+Test:
+
+1. Login
+2. Create academic year
+3. Create class
+4. Add pupil
+5. Import Excel
+6. Create assessment
+7. Add objectives
+8. Evaluate pupil
+9. Bulk evaluate class
+10. Save
+11. Offline save
+12. Synchronize
+13. Calculate statistics
+14. View pupil history
+15. Generate Word
+16. Generate PDF
+
+============================================================
+64. DEVELOPMENT SEED DATA
+============================================================
+
+Seed:
+
+School:
+
+Abdelhamid DOUROUAZ
+
+Academic year:
+
+2026-2027
+
+Class:
+
+2AS LPH2
+
+20-30 sample pupils.
+
+Example assessment:
+
+Compréhension de l'écrit
+
+with six example objectives.
+
+Add sample evaluation data.
+
+The application should be immediately demonstrable after setup.
+
+============================================================
+65. PROJECT STRUCTURE
+============================================================
+
+Backend:
+
+src/
+    Domain/
+    Application/
+    Infrastructure/
+    API/
+
+Frontend:
+
+app/
+src/
+    components/
+    features/
+    services/
+    models/
+    schemas/
+    store/
+    utils/
+    i18n/
+
+Keep feature boundaries clean.
+
+============================================================
+66. CODE QUALITY
+============================================================
+
+Do NOT:
+
+- create giant components
+- put business logic in screens
+- put API calls directly everywhere
+- duplicate business logic
+- access database from frontend
+- hardcode UI text
+- hardcode objectives
+- hardcode school information
+- hardcode report data
+- create separate complete Android/Web applications
+
+Use:
+
+- TypeScript strict mode
+- dependency injection in backend
+- DTOs
+- services
+- validation
+- reusable components
+- typed API clients
+- clear feature boundaries
+
+============================================================
+67. DEVELOPMENT PHASES
+============================================================
+
+Implement progressively.
+
+PHASE 1
+Infrastructure
+
+- React Native
+- Expo
+- React Native Web
+- Expo Router
+- TypeScript
+- ASP.NET Core
+- PostgreSQL
+- EF Core
+- authentication
+
+PHASE 2
+Academic years
+Classes
+Pupils
+
+PHASE 3
+Excel import
+
+PHASE 4
+Assessments
+Objectives
+Templates
+
+PHASE 5
+Evaluation grid
+Bulk evaluation
+Auto-save
+
+PHASE 6
+Offline storage
+Synchronization
+
+PHASE 7
+Statistics
+Pupil history
+
+PHASE 8
+Remediation
+
+PHASE 9
+Word generation
+PDF generation
+Printing
+
+PHASE 10
+PWA
+
+PHASE 11
+Android build
+
+PHASE 12
+Testing
+Security
+Performance
+Production deployment
+
+============================================================
+68. DEVELOPMENT METHOD
+============================================================
+
+Do NOT generate the entire project blindly in one step.
+
+For each phase:
+
+1. Explain architecture briefly.
+2. Implement database changes.
+3. Create EF migration.
+4. Implement backend services.
+5. Implement API.
+6. Implement frontend API services.
+7. Implement screens.
+8. Implement validation.
+9. Implement tests.
+10. Run backend build.
+11. Run frontend TypeScript/build checks.
+12. Fix all errors.
+13. Only then continue.
+
+Never leave core functionality as TODO.
+
+============================================================
+69. FIRST TASK
+============================================================
+
+Before writing application code:
+
+Analyze:
+
+1. notation.docx
+2. supplied evaluation image
+
+The Word document is the reference for the report.
+
+Create first:
+
+1. Functional specification
+2. Entity Relationship Diagram
+3. Database schema
+4. API specification
+5. React/Expo architecture
+6. Navigation map
+7. Screen list
+8. Word document structure
+9. Offline synchronization strategy
+10. Development roadmap
+
+Then implement Phase 1.
+
+============================================================
+70. SUCCESS CRITERIA
+============================================================
+
+A teacher must be able to:
+
+1. Login
+2. Select academic year
+3. Select class 2AS LPH2
+4. View pupils
+5. Import pupils from Excel
+6. Create an assessment
+7. Select Compréhension de l'écrit
+8. Enter support
+9. Add six objectives
+10. Evaluate every pupil
+11. Use + / ± / -
+12. Save
+13. Lose Internet and continue evaluating
+14. Restore Internet and synchronize
+15. View statistics
+16. Identify objectives needing attention
+17. Add individual decisions
+18. Add class decisions
+19. Generate Word
+20. Generate PDF
+21. Print
+22. Reopen the assessment later
+23. See the same evaluation data
+24. Open a pupil
+25. See historical evaluations
+26. Use the same account/application on Android
+27. Use the same account/application through the Web browser
+
+============================================================
+71. MOST IMPORTANT DESIGN PRINCIPLE
+============================================================
+
+The system is NOT a Word-document editor.
+
+It is a structured educational assessment system.
+
+The database is the source of truth.
+
+The teacher enters information once.
+
+From that information the application generates:
+
+Evaluation grid
+Statistics
+Pupil history
+Remediation
+Word
+PDF
+Print
+Future reports
+
+Build the entire architecture around this principle.
+
+============================================================
+72. FINAL TECHNOLOGY RULE
+============================================================
+
+Frontend:
+
+React
+TypeScript
+React Native
+Expo
+Expo Router
+React Native Web
+
+Backend:
+
+ASP.NET Core
+Entity Framework Core
+PostgreSQL
+
+State:
+
+TanStack Query
+Zustand
+
+Forms:
+
+React Hook Form
+Zod
+
+Mobile:
+
+Expo / Android
+
+Web:
+
+React Native Web / Expo Web
+
+Documents:
+
+ASP.NET Core document generation
+
+Do NOT use Angular.
+
+Do NOT build a separate Angular web application.
+
+Do NOT build a separate unrelated React web application.
+
+Use a unified Expo/React Native project capable of running on Android
+and Web, with platform-specific implementations only where necessary.
