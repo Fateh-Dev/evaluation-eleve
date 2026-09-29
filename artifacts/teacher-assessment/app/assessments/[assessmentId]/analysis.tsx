@@ -1,7 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useMemo } from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { Alert, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useGetAssessmentStatistics } from '@workspace/api-client-react';
 import { AppHeader, Button, ProgressBar, Screen, SectionTitle, Surface } from '@/components/AppShell';
 import { useAppData } from '@/context/AppDataContext';
@@ -10,6 +10,9 @@ import { useColors } from '@/hooks/useColors';
 export default function AssessmentAnalysisScreen() {
   const colors = useColors();
   const data = useAppData();
+  const [editingRemediation, setEditingRemediation] = useState(false);
+  const [individualRemediation, setIndividualRemediation] = useState(data.individualRemediation);
+  const [classRemediation, setClassRemediation] = useState(data.classRemediation);
   const { data: serverStatistics } = useGetAssessmentStatistics(data.assessment.id);
   const statistics = useMemo(
     () => data.objectives.map((objective) => {
@@ -58,6 +61,13 @@ export default function AssessmentAnalysisScreen() {
       </View>
 
       <SectionTitle title="Remédiation" />
+      {editingRemediation ? <Surface style={styles.editor}>
+        <Text style={[styles.editorLabel, { color: colors.mutedForeground }]}>DÉCISION INDIVIDUELLE</Text>
+        <TextInput multiline value={individualRemediation} onChangeText={setIndividualRemediation} style={[styles.editorInput, { color: colors.foreground, borderColor: colors.border }]} />
+        <Text style={[styles.editorLabel, { color: colors.mutedForeground }]}>DÉCISION POUR LA CLASSE</Text>
+        <TextInput multiline value={classRemediation} onChangeText={setClassRemediation} style={[styles.editorInput, { color: colors.foreground, borderColor: colors.border }]} />
+        <View style={styles.editorActions}><Button label="Annuler" compact secondary onPress={() => setEditingRemediation(false)} /><Button label="Enregistrer" compact onPress={() => { data.updateRemediation(individualRemediation, classRemediation); setEditingRemediation(false); Alert.alert('Remédiation enregistrée', 'Les décisions sont disponibles hors connexion.'); }} /></View>
+      </Surface> : <>
       <Surface style={styles.remediation}>
         <View style={[styles.remediationIcon, { backgroundColor: colors.accent }]}><Feather name="user" size={17} color={colors.primary} /></View>
         <View style={styles.remediationCopy}>
@@ -72,8 +82,10 @@ export default function AssessmentAnalysisScreen() {
           <Text style={[styles.remediationText, { color: colors.mutedForeground }]}>{data.classRemediation}</Text>
         </View>
       </Surface>
+      <Button label="Modifier les décisions" icon="edit-3" compact secondary onPress={() => setEditingRemediation(true)} />
+      </>}
       <Button label="Retour à l’évaluation" icon="arrow-left" secondary onPress={() => router.back()} />
-      <Button label="Préparer le document" icon="file-text" onPress={() => Alert.alert('Document', 'La génération Word/PDF sera activée avec le service de documents.')} />
+      <Button label="Préparer le document" icon="file-text" onPress={() => router.push(`/assessments/${data.assessment.id}/document`)} />
     </Screen>
   );
 }
@@ -99,4 +111,8 @@ const styles = StyleSheet.create({
   remediationCopy: { flex: 1, gap: 4 },
   remediationTitle: { fontSize: 14, fontWeight: '700' },
   remediationText: { fontSize: 13, lineHeight: 19 },
+  editor: { gap: 9, marginBottom: 10 },
+  editorLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 1 },
+  editorInput: { minHeight: 76, borderWidth: 1, borderRadius: 11, padding: 10, fontSize: 13, lineHeight: 18, textAlignVertical: 'top' },
+  editorActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 3 },
 });

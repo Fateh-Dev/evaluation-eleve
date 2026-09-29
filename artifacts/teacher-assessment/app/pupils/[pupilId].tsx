@@ -18,7 +18,7 @@ export default function PupilDetailScreen() {
       <SectionTitle title="Historique d’évaluation" />
       <Surface style={styles.historyCard}>
         <View style={styles.historyHeader}><View style={styles.historyHeading}><Text style={[styles.subject, { color: colors.primary }]}>{data.assessment.competency}</Text><Text style={[styles.historyTitle, { color: colors.foreground }]}>{data.assessment.date}</Text></View><View style={[styles.status, { backgroundColor: colors.accent }]}><Text style={[styles.statusText, { color: colors.accentForeground }]}>En cours</Text></View></View>
-        {data.objectives.map((objective) => <View key={objective.id} style={styles.objectiveRow}><Text style={[styles.objectiveText, { color: colors.foreground }]} numberOfLines={1}>Obj. {String(objective.order).padStart(2, '0')} · {objective.description}</Text><ValueMark value={data.evaluations[pupil.id]?.[objective.id] ?? 'NotEvaluated'} size="small" /></View>)}
+        {data.objectives.map((objective) => <View key={objective.id} style={[styles.objectiveRow, { borderTopColor: colors.border }]}><Text style={[styles.objectiveText, { color: colors.foreground }]} numberOfLines={1}>Obj. {String(objective.order).padStart(2, '0')} · {objective.description}</Text><ValueMark value={data.evaluations[pupil.id]?.[objective.id] ?? 'NotEvaluated'} size="small" /></View>)}
       </Surface>
       <SectionTitle title="Décisions individuelles" />
       <Surface style={styles.note}><Feather name="edit-3" size={16} color={colors.primary} /><Text style={[styles.noteText, { color: colors.foreground }]}>{data.individualRemediation}</Text></Surface>
@@ -39,7 +39,7 @@ const styles = StyleSheet.create({
   historyTitle: { fontSize: 16, fontWeight: '700' },
   status: { paddingHorizontal: 8, paddingVertical: 5, borderRadius: 8 },
   statusText: { fontSize: 11, fontWeight: '700' },
-  objectiveRow: { minHeight: 40, borderTopWidth: 1, borderTopColor: '#eee9e1', flexDirection: 'row', alignItems: 'center', gap: 8 },
+  objectiveRow: { minHeight: 40, borderTopWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
   objectiveText: { flex: 1, fontSize: 12 },
   note: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
   noteText: { flex: 1, fontSize: 13, lineHeight: 19 },

@@ -22,14 +22,14 @@ export default function DashboardScreen() {
     <Screen>
       <AppHeader eyebrow="Espace enseignant" title="Bonjour, Mme X" />
       <SyncPill status={data.syncStatus} />
-      <View style={styles.hero}>
+      <View style={[styles.hero, { backgroundColor: colors.hero }]}>
         <View style={styles.heroCopy}>
           <Text style={[styles.heroKicker, { color: colors.primary }]}>Évaluation en cours</Text>
-          <Text style={[styles.heroTitle, { color: colors.foreground }]}>{data.assessment.title}</Text>
-          <Text style={[styles.heroMeta, { color: colors.mutedForeground }]}>{className} · {data.assessment.date}</Text>
+          <Text style={[styles.heroTitle, { color: colors.heroForeground }]}>{data.assessment.title}</Text>
+          <Text style={[styles.heroMeta, { color: colors.heroForeground }]}>{className} · {data.assessment.date}</Text>
           <View style={styles.heroProgressRow}>
-            <Text style={[styles.progressLabel, { color: colors.foreground }]}>{completion}% de la classe évaluée</Text>
-            <Text style={[styles.progressCount, { color: colors.mutedForeground }]}>{pupilCount} élèves</Text>
+            <Text style={[styles.progressLabel, { color: colors.heroForeground }]}>{completion}% de la classe évaluée</Text>
+            <Text style={[styles.progressCount, { color: colors.heroForeground }]}>{pupilCount} élèves</Text>
           </View>
           <ProgressBar value={completion} />
           <Button label="Continuer l’évaluation" icon="arrow-right" onPress={() => router.push(`/assessments/${data.assessment.id}`)} />
@@ -50,7 +50,7 @@ export default function DashboardScreen() {
       <SectionTitle title="À surveiller" />
       <Surface style={styles.focusCard}>
         <View style={styles.focusTop}>
-          <View style={[styles.focusIcon, { backgroundColor: '#fff0cf' }]}><Feather name="alert-circle" size={18} color="#9a7124" /></View>
+          <View style={[styles.focusIcon, { backgroundColor: colors.warningSurface }]}><Feather name="alert-circle" size={18} color={colors.warningForeground} /></View>
           <View style={styles.rowCopy}><Text style={[styles.rowTitle, { color: colors.foreground }]}>Objectif {String(focusIndex + 1).padStart(2, '0')}</Text><Text style={[styles.rowSubtitle, { color: colors.mutedForeground }]}>{data.objectives[focusIndex]?.description}</Text></View>
           <Text style={[styles.focusPercent, { color: colors.primary }]}>{focusObjective?.acquiredPercent ?? 0}%</Text>
         </View>
@@ -72,7 +72,7 @@ export default function DashboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  hero: { marginTop: 18, borderRadius: 22, padding: 20, backgroundColor: '#183143', flexDirection: 'row', gap: 20, overflow: 'hidden' },
+  hero: { marginTop: 18, borderRadius: 22, padding: 20, flexDirection: 'row', gap: 20, overflow: 'hidden' },
   heroCopy: { flex: 1, gap: 10 },
   heroKicker: { fontSize: 11, fontWeight: '800', letterSpacing: 1.2, textTransform: 'uppercase' },
   heroTitle: { fontSize: 25, lineHeight: 30, fontWeight: '700' },

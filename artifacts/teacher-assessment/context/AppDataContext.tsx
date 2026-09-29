@@ -72,6 +72,9 @@ type AppDataContextValue = AppState & {
   setEvaluation: (pupilId: string, objectiveId: string, value: EvaluationValue) => void;
   cycleEvaluation: (pupilId: string, objectiveId: string) => void;
   setAllForObjective: (objectiveId: string, value: EvaluationValue) => void;
+  addPupils: (pupils: Array<Pick<Pupil, 'registrationNumber' | 'firstName' | 'lastName' | 'dateOfBirth'>>) => { imported: number; skipped: number };
+  updateRemediation: (individual: string, classroom: string) => void;
+  createAssessment: (input: Pick<Assessment, 'title' | 'subject' | 'level' | 'competency' | 'support' | 'sessionObjectives' | 'date'>) => string;
   clearAssessment: () => void;
   saveDraft: () => void;
   markSynced: () => void;
@@ -266,6 +269,49 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     setSyncStatus('pending');
   };
 
+  const addPupils = (incoming: Array<Pick<Pupil, 'registrationNumber' | 'firstName' | 'lastName' | 'dateOfBirth'>>) => {
+    let imported = 0;
+    let skipped = 0;
+    const existing = new Set(state.pupils.map((pupil) => pupil.registrationNumber.trim().toLowerCase()));
+    const additions: Pupil[] = [];
+    incoming.forEach((pupil, index) => {
+      const registrationNumber = pupil.registrationNumber.trim();
+      const key = registrationNumber.toLowerCase();
+      if (!registrationNumber || existing.has(key)) {
+        skipped += 1;
+        return;
+      }
+      existing.add(key);
+      additions.push({ ...pupil, id: `local-pupil-${Date.now()}-${index}`, registrationNumber, firstName: pupil.firstName.trim(), lastName: pupil.lastName.trim(), classId: state.classId });
+      imported += 1;
+    });
+    if (additions.length) setState((current) => ({ ...current, pupils: [...current.pupils, ...additions] }));
+    if (imported > 0) {
+      setIsDirty(true);
+      setSyncStatus('pending');
+    }
+    return { imported, skipped };
+  };
+
+  const updateRemediation = (individual: string, classroom: string) => {
+    setState((current) => ({ ...current, individualRemediation: individual.trim(), classRemediation: classroom.trim() }));
+    setIsDirty(true);
+    setSyncStatus('pending');
+  };
+
+  const createAssessment = (input: Pick<Assessment, 'title' | 'subject' | 'level' | 'competency' | 'support' | 'sessionObjectives' | 'date'>) => {
+    const id = `local-assessment-${Date.now()}`;
+    const evaluations: AppState['evaluations'] = {};
+    state.pupils.forEach((pupil) => {
+      evaluations[pupil.id] = {};
+      state.objectives.forEach((objective) => { evaluations[pupil.id][objective.id] = 'NotEvaluated'; });
+    });
+    setState((current) => ({ ...current, assessment: { ...input, id, classId: current.classId, status: 'Draft' }, evaluations, individualRemediation: '', classRemediation: '' }));
+    setIsDirty(true);
+    setSyncStatus('pending');
+    return id;
+  };
+
   const clearAssessment = () => {
     setState((current) => {
       const evaluations: AppState['evaluations'] = {};
@@ -312,6 +358,9 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     setEvaluation,
     cycleEvaluation,
     setAllForObjective,
+    addPupils,
+    updateRemediation,
+    createAssessment,
     clearAssessment,
     saveDraft: () => {
       setIsDirty(false);

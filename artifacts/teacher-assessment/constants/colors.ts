@@ -1,58 +1,64 @@
-/**
- * Semantic design tokens for the mobile app.
- *
- * These tokens mirror the naming conventions used in web artifacts (index.css)
- * so that multi-artifact projects share a cohesive visual identity.
- *
- * Replace the placeholder values below with values that match the project's
- * brand. If a sibling web artifact exists, read its index.css and convert the
- * HSL values to hex so both artifacts use the same palette.
- *
- * To add dark mode, add a `dark` key with the same token names.
- * The useColors() hook will automatically pick it up.
- */
-
 const colors = {
   light: {
-    // Legacy aliases (kept for backward compatibility)
     text: '#183143',
     tint: '#ef765c',
-
-    // Core surfaces
     background: '#f7f4ef',
     foreground: '#183143',
-
-    // Cards / elevated surfaces
     card: '#fffdfa',
     cardForeground: '#183143',
-
-    // Primary action color (buttons, links, active states)
     primary: '#ef765c',
     primaryForeground: '#ffffff',
-
-    // Secondary / less-emphasis interactive surfaces
     secondary: '#e9e3d9',
     secondaryForeground: '#183143',
-
-    // Muted / subdued elements (dividers, timestamps, placeholders)
     muted: '#eee9e1',
     mutedForeground: '#6c7a82',
-
-    // Accent highlights (badges, selected items, focus rings)
     accent: '#d9e8e4',
     accentForeground: '#183143',
-
-    // Destructive actions (delete, error states)
     destructive: '#c94f4f',
     destructiveForeground: '#ffffff',
-
-    // Borders and input outlines
     border: '#ded7cc',
     input: '#cfc6b9',
+    successSurface: '#e5f1ed',
+    successForeground: '#36735f',
+    warningSurface: '#fff0cf',
+    warningForeground: '#8a641e',
+    errorSurface: '#f9ded7',
+    errorForeground: '#a24e42',
+    pendingSurface: '#fff0e7',
+    pendingForeground: '#9a5d25',
+    hero: '#183143',
+    heroForeground: '#f7f4ef',
   },
-
-  // Border radius (in px). Sync from the sibling web artifact's --radius
-  // CSS variable. This value applies to cards, buttons, inputs, and modals.
+  dark: {
+    text: '#f3f6f5',
+    tint: '#ff967b',
+    background: '#101a22',
+    foreground: '#f3f6f5',
+    card: '#182731',
+    cardForeground: '#f3f6f5',
+    primary: '#ff967b',
+    primaryForeground: '#24130f',
+    secondary: '#263945',
+    secondaryForeground: '#f3f6f5',
+    muted: '#24343e',
+    mutedForeground: '#aab9bf',
+    accent: '#24453f',
+    accentForeground: '#d9f1e9',
+    destructive: '#f07b77',
+    destructiveForeground: '#291313',
+    border: '#344852',
+    input: '#4a5d66',
+    successSurface: '#1e3b35',
+    successForeground: '#9dd9c3',
+    warningSurface: '#4a3b20',
+    warningForeground: '#f4ca72',
+    errorSurface: '#482a2c',
+    errorForeground: '#ffaaa4',
+    pendingSurface: '#4a3023',
+    pendingForeground: '#ffc18f',
+    hero: '#1e3d50',
+    heroForeground: '#f3f6f5',
+  },
   radius: 14,
 };
 

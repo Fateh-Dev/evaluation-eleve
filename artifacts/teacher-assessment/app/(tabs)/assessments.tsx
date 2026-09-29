@@ -14,16 +14,16 @@ export default function AssessmentsScreen() {
   return (
     <Screen>
       <AppHeader eyebrow="Suivi pédagogique" title="Évaluations" />
-      <Button label="Nouvelle évaluation" icon="plus" onPress={() => undefined} />
+      <Button label="Nouvelle évaluation" icon="plus" onPress={() => router.push('/assessments/new')} />
       <SectionTitle title="Récentes" />
       <Pressable onPress={() => router.push(`/assessments/${data.assessment.id}`)} style={({ pressed }) => [styles.assessmentCard, { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.82 : 1 }]}>
         <View style={[styles.assessmentAccent, { backgroundColor: colors.primary }]} />
-        <View style={styles.assessmentCopy}><Text style={[styles.subject, { color: colors.primary }]}>{data.assessment.subject}</Text><Text style={[styles.assessmentTitle, { color: colors.foreground }]}>{data.assessment.title}</Text><Text style={[styles.assessmentMeta, { color: colors.mutedForeground }]}>{data.className} · {data.assessment.date}</Text><View style={styles.statusLine}><View style={[styles.statusDot, { backgroundColor: '#e89555' }]} /><Text style={[styles.statusText, { color: colors.mutedForeground }]}>{Math.round((evaluated / total) * 100)}% évalué · En cours</Text></View></View><Feather name="chevron-right" size={19} color={colors.mutedForeground} />
+        <View style={styles.assessmentCopy}><Text style={[styles.subject, { color: colors.primary }]}>{data.assessment.subject}</Text><Text style={[styles.assessmentTitle, { color: colors.foreground }]}>{data.assessment.title}</Text><Text style={[styles.assessmentMeta, { color: colors.mutedForeground }]}>{data.className} · {data.assessment.date}</Text><View style={styles.statusLine}><View style={[styles.statusDot, { backgroundColor: colors.primary }]} /><Text style={[styles.statusText, { color: colors.mutedForeground }]}>{Math.round((evaluated / total) * 100)}% évalué · En cours</Text></View></View><Feather name="chevron-right" size={19} color={colors.mutedForeground} />
       </Pressable>
       <SectionTitle title="Étapes de l’évaluation" />
       <Surface style={styles.steps}>
         {['Informations', 'Objectifs', 'Évaluation', 'Analyse', 'Remédiation', 'Document'].map((step, index) => (
-          <View key={step} style={styles.stepRow}><View style={[styles.stepNumber, { backgroundColor: index === 2 ? colors.primary : colors.secondary }]}><Text style={[styles.stepNumberText, { color: index === 2 ? colors.primaryForeground : colors.foreground }]}>{index + 1}</Text></View><Text style={[styles.stepText, { color: colors.foreground }]}>{step}</Text><Feather name={index < 2 ? 'check' : index === 2 ? 'arrow-right' : 'lock'} size={15} color={index < 2 ? '#4c9b83' : colors.mutedForeground} /></View>
+          <View key={step} style={styles.stepRow}><View style={[styles.stepNumber, { backgroundColor: index === 2 ? colors.primary : colors.secondary }]}><Text style={[styles.stepNumberText, { color: index === 2 ? colors.primaryForeground : colors.foreground }]}>{index + 1}</Text></View><Text style={[styles.stepText, { color: colors.foreground }]}>{step}</Text><Feather name={index < 2 ? 'check' : index === 2 ? 'arrow-right' : 'lock'} size={15} color={index < 2 ? colors.successForeground : colors.mutedForeground} /></View>
         ))}
       </Surface>
     </Screen>

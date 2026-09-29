@@ -33,14 +33,23 @@ export default function PupilImportScreen() {
   const importMutation = useImportClassPupils();
 
   const importRows = () => {
+    if (rows.length === 0) {
+      Alert.alert('Import impossible', 'Ajoutez au moins une ligne valide avant de confirmer.');
+      return;
+    }
     importMutation.mutate(
       { classId: data.classId, data: { rows } },
       {
         onSuccess: (result) => {
-          Alert.alert('Import terminé', `${result.imported} élève(s) importé(s), ${result.skipped} doublon(s).`);
+          const localResult = data.addPupils(rows);
+          Alert.alert('Import terminé', `${result.imported} élève(s) importé(s), ${result.skipped} doublon(s).${localResult.skipped ? ` ${localResult.skipped} déjà présent(s) localement.` : ''}`);
           router.back();
         },
-        onError: () => Alert.alert('Import impossible', 'Vérifiez le format des lignes et la connexion au serveur.'),
+        onError: () => {
+          const localResult = data.addPupils(rows);
+          if (localResult.imported > 0) router.back();
+          Alert.alert('Import local', `${localResult.imported} élève(s) ajouté(s) localement, ${localResult.skipped} doublon(s). Ils seront synchronisés au prochain envoi.`);
+        },
       },
     );
   };

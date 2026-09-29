@@ -37,9 +37,9 @@ export function SyncPill({ status }: { status: 'synced' | 'pending' }) {
   const colors = useColors();
   const pending = status === 'pending';
   return (
-    <View style={[styles.syncPill, { backgroundColor: pending ? '#fff0e7' : '#e5f1ed' }]}>
-      <View style={[styles.syncDot, { backgroundColor: pending ? '#e89555' : '#4c9b83' }]} />
-      <Text style={[styles.syncText, { color: pending ? '#9a5d25' : '#36735f' }]}>
+    <View style={[styles.syncPill, { backgroundColor: pending ? colors.pendingSurface : colors.successSurface }]}>
+      <View style={[styles.syncDot, { backgroundColor: pending ? colors.primary : colors.successForeground }]} />
+      <Text style={[styles.syncText, { color: pending ? colors.pendingForeground : colors.successForeground }]}>
         {pending ? 'Modifications non synchronisées' : 'Synchronisé'}
       </Text>
     </View>
@@ -83,7 +83,7 @@ export function Surface({ children, style }: PropsWithChildren<{ style?: object 
 
 export function ValueMark({ value, size = 'medium' }: { value: string; size?: 'small' | 'medium' }) {
   const colors = useColors();
-  const palette = value === 'Acquired' ? { bg: '#d9e8e4', fg: '#276b59' } : value === 'PartiallyAcquired' ? { bg: '#fff0cf', fg: '#9a7124' } : value === 'NotAcquired' ? { bg: '#f9ded7', fg: '#a24e42' } : { bg: colors.muted, fg: colors.mutedForeground };
+  const palette = value === 'Acquired' ? { bg: colors.accent, fg: colors.successForeground } : value === 'PartiallyAcquired' ? { bg: colors.warningSurface, fg: colors.warningForeground } : value === 'NotAcquired' ? { bg: colors.errorSurface, fg: colors.errorForeground } : { bg: colors.muted, fg: colors.mutedForeground };
   const label = value === 'Acquired' ? '+' : value === 'PartiallyAcquired' ? '±' : value === 'NotAcquired' ? '-' : '·';
   return <View style={[styles.valueMark, size === 'small' && styles.valueMarkSmall, { backgroundColor: palette.bg }]}><Text style={[styles.valueMarkText, size === 'small' && styles.valueMarkTextSmall, { color: palette.fg }]}>{label}</Text></View>;
 }

@@ -59,7 +59,7 @@ export default function AssessmentEvaluationScreen() {
         <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={styles.gridScroll}>
           <View style={styles.grid}>
             <View style={[styles.gridRow, styles.gridHeader, { backgroundColor: colors.secondary, borderColor: colors.border }]}><View style={[styles.nameCell, styles.headerCell]}><Text style={[styles.headerText, { color: colors.foreground }]}>Élève</Text></View>{data.objectives.map((objective) => <View key={objective.id} style={styles.objectiveCell}><Text style={[styles.objectiveNumber, { color: colors.foreground }]}>{String(objective.order).padStart(2, '0')}</Text><Pressable onPress={() => confirmMarkAll(objective.id)}><Text style={[styles.markAll, { color: colors.primary }]}>marquer +</Text></Pressable></View>)}</View>
-            {data.pupils.map((pupil, rowIndex) => <View key={pupil.id} style={[styles.gridRow, { borderBottomColor: colors.border, backgroundColor: rowIndex % 2 ? colors.card : '#fffdfa' }]}><View style={styles.nameCell}><Text style={[styles.pupilName, { color: colors.foreground }]} numberOfLines={1}>{pupil.firstName} {pupil.lastName}</Text><Text style={[styles.pupilNumber, { color: colors.mutedForeground }]}>N° {pupil.registrationNumber}</Text></View>{data.objectives.map((objective) => { const value = data.evaluations[pupil.id]?.[objective.id] ?? 'NotEvaluated'; return <Pressable key={objective.id} onPress={() => data.cycleEvaluation(pupil.id, objective.id)} style={styles.cell}><ValueMark value={value} size="small" /></Pressable>; })}</View>)}
+            {data.pupils.map((pupil, rowIndex) => <View key={pupil.id} style={[styles.gridRow, { borderBottomColor: colors.border, backgroundColor: rowIndex % 2 ? colors.card : colors.background }]}><View style={styles.nameCell}><Text style={[styles.pupilName, { color: colors.foreground }]} numberOfLines={1}>{pupil.firstName} {pupil.lastName}</Text><Text style={[styles.pupilNumber, { color: colors.mutedForeground }]}>N° {pupil.registrationNumber}</Text></View>{data.objectives.map((objective) => { const value = data.evaluations[pupil.id]?.[objective.id] ?? 'NotEvaluated'; return <Pressable key={objective.id} onPress={() => data.cycleEvaluation(pupil.id, objective.id)} style={styles.cell}><ValueMark value={value} size="small" /></Pressable>; })}</View>)}
             <View style={[styles.totalRow, { backgroundColor: colors.secondary }]}><View style={styles.nameCell}><Text style={[styles.headerText, { color: colors.foreground }]}>Total</Text></View>{data.statistics.map((stat) => <View key={stat.objectiveId} style={styles.cell}><Text style={[styles.totalText, { color: colors.primary }]}>{stat.acquiredPercent}%</Text></View>)}</View>
           </View>
         </ScrollView>
@@ -82,7 +82,7 @@ const styles = StyleSheet.create({
   metaLabel: { fontSize: 9, letterSpacing: 1, fontWeight: '800' },
   metaValue: { fontSize: 13, fontWeight: '700' },
   gridScroll: { paddingBottom: 24 },
-  grid: { minWidth: 740, borderWidth: 1, borderColor: '#ded7cc', borderRadius: 14, overflow: 'hidden' },
+  grid: { minWidth: 740, borderWidth: 1, borderRadius: 14, overflow: 'hidden' },
   gridRow: { flexDirection: 'row', borderBottomWidth: 1, minHeight: 53, alignItems: 'stretch' },
   gridHeader: { minHeight: 65, borderBottomWidth: 1 },
   headerCell: { justifyContent: 'center' },
