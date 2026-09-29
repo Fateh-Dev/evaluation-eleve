@@ -5,6 +5,7 @@ import { Alert, Dimensions, Platform, Pressable, ScrollView, StyleSheet, Text, V
 import { AppHeader, Button, Screen, SectionTitle, Surface, SyncPill, ValueMark } from '@/components/AppShell';
 import { EvaluationValue, useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
+import { useSaveBulkEvaluations } from '@workspace/api-client-react';
 
 function displayValue(value: EvaluationValue) {
   return value === 'Acquired' ? '+' : value === 'PartiallyAcquired' ? '±' : value === 'NotAcquired' ? '-' : '·';
@@ -17,6 +18,7 @@ export default function AssessmentEvaluationScreen() {
   const [pupilIndex, setPupilIndex] = useState(0);
   const isDesktop = Platform.OS === 'web' && Dimensions.get('window').width >= 850;
   const currentPupil = data.pupils[pupilIndex];
+  const saveMutation = useSaveBulkEvaluations();
   const evaluatedTotal = data.statistics.reduce((sum, stat) => sum + stat.evaluated, 0);
   const total = data.pupils.length * data.objectives.length;
   const currentValues = useMemo(() => data.evaluations[currentPupil.id] ?? {}, [data.evaluations, currentPupil.id]);
@@ -30,13 +32,28 @@ export default function AssessmentEvaluationScreen() {
 
   const save = () => {
     data.saveDraft();
+    const entries = data.pupils.flatMap((pupil) =>
+      data.objectives.map((objective) => ({
+        pupilId: pupil.id,
+        objectiveId: objective.id,
+        value: data.evaluations[pupil.id]?.[objective.id] ?? 'NotEvaluated',
+      })),
+    );
+    saveMutation.mutate({ assessmentId: data.assessment.id, data: entries }, {
+      onSuccess: () => data.markSynced(),
+      onError: () => {
+        if (Platform.OS !== 'web') {
+          Alert.alert('Enregistrement local', 'Le serveur est indisponible. Votre brouillon reste disponible hors connexion.');
+        }
+      },
+    });
     if (Platform.OS !== 'web') Alert.alert('Évaluation enregistrée', 'Le brouillon est disponible hors connexion.');
   };
 
   return (
     <Screen scroll={false}>
       <AppHeader eyebrow={`${data.assessment.subject} · ${data.className}`} title="Évaluation" onBack={() => router.back()} />
-      <View style={styles.topLine}><SyncPill status={data.isDirty ? 'pending' : data.syncStatus} /><View style={styles.topActions}><Button label="Enregistrer" icon="save" compact onPress={save} /><Button label="Analyse" icon="bar-chart-2" compact secondary onPress={() => router.push(`/assessments/${data.assessment.id}/analysis`)} /></View></View>
+      <View style={styles.topLine}><SyncPill status={data.isDirty || saveMutation.isPending ? 'pending' : data.syncStatus} /><View style={styles.topActions}><Button label={saveMutation.isPending ? 'Envoi…' : 'Enregistrer'} icon="save" compact onPress={save} /><Button label="Analyse" icon="bar-chart-2" compact secondary onPress={() => router.push(`/assessments/${data.assessment.id}/analysis`)} /></View></View>
       <Surface style={styles.metaCard}><View style={styles.metaItem}><Text style={[styles.metaLabel, { color: colors.mutedForeground }]}>COMPÉTENCE</Text><Text style={[styles.metaValue, { color: colors.foreground }]}>{data.assessment.competency}</Text></View><View style={styles.metaItem}><Text style={[styles.metaLabel, { color: colors.mutedForeground }]}>OBJECTIFS</Text><Text style={[styles.metaValue, { color: colors.foreground }]}>{data.objectives.length}</Text></View><View style={styles.metaItem}><Text style={[styles.metaLabel, { color: colors.mutedForeground }]}>PROGRESSION</Text><Text style={[styles.metaValue, { color: colors.primary }]}>{Math.round((evaluatedTotal / total) * 100)}%</Text></View></Surface>
       {isDesktop ? (
         <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={styles.gridScroll}>

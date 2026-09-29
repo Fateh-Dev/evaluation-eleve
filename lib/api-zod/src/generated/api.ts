@@ -75,6 +75,37 @@ export const ListClassPupilsResponse = zod.array(ListClassPupilsResponseItem)
 
 
 /**
+ * @summary Import pupils into a class
+ */
+export const ImportClassPupilsParams = zod.object({
+  "classId": zod.coerce.string().uuid()
+})
+
+export const importClassPupilsBodyRowsMax = 1000;
+
+
+
+export const ImportClassPupilsBody = zod.object({
+  "rows": zod.array(zod.object({
+  "registrationNumber": zod.string(),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "dateOfBirth": zod.string().nullish(),
+  "gender": zod.string().nullish()
+})).max(importClassPupilsBodyRowsMax)
+})
+
+export const ImportClassPupilsResponse = zod.object({
+  "imported": zod.number().int(),
+  "skipped": zod.number().int(),
+  "errors": zod.array(zod.object({
+  "row": zod.number().int(),
+  "message": zod.string()
+}))
+})
+
+
+/**
  * @summary List assessments for a class
  */
 export const ListClassAssessmentsParams = zod.object({

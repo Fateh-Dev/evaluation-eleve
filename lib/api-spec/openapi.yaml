@@ -72,6 +72,25 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Pupil"
+    post:
+      operationId: importClassPupils
+      tags: [classes]
+      summary: Import pupils into a class
+      parameters:
+        - $ref: "#/components/parameters/ClassId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PupilImportRequest"
+      responses:
+        "200":
+          description: Import result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PupilImportResult"
   /classes/{classId}/assessments:
     get:
       operationId: listClassAssessments
@@ -216,6 +235,51 @@ components:
         active:
           type: boolean
       required: [id, registrationNumber, firstName, lastName, classId, active]
+    PupilImportRow:
+      type: object
+      properties:
+        registrationNumber:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        dateOfBirth:
+          type: string
+          nullable: true
+        gender:
+          type: string
+          nullable: true
+      required: [registrationNumber, firstName, lastName]
+    PupilImportRequest:
+      type: object
+      properties:
+        rows:
+          type: array
+          maxItems: 1000
+          items:
+            $ref: "#/components/schemas/PupilImportRow"
+      required: [rows]
+    PupilImportError:
+      type: object
+      properties:
+        row:
+          type: integer
+        message:
+          type: string
+      required: [row, message]
+    PupilImportResult:
+      type: object
+      properties:
+        imported:
+          type: integer
+        skipped:
+          type: integer
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/PupilImportError"
+      required: [imported, skipped, errors]
     Assessment:
       type: object
       properties:

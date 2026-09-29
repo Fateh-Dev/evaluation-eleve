@@ -11,7 +11,7 @@ export default function ClassesScreen() {
   const colors = useColors();
   const data = useAppData();
   const { data: serverClasses } = useListClasses();
-  const serverClass = serverClasses?.[0];
+  const serverClass = Array.isArray(serverClasses) ? serverClasses[0] : undefined;
   return (
     <Screen>
       <AppHeader eyebrow="Organisation" title="Classes" />

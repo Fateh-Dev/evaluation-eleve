@@ -18,4 +18,8 @@ export * from './notFoundResponse';
 export * from './objective';
 export * from './objectiveStatistics';
 export * from './pupil';
+export * from './pupilImportError';
+export * from './pupilImportRequest';
+export * from './pupilImportResult';
+export * from './pupilImportRow';
 export * from './saveBulkEvaluations200';

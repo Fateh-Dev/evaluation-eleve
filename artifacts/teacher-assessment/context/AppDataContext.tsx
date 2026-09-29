@@ -153,6 +153,55 @@ function createSeedState(): AppState {
 
 const initialState = createSeedState();
 
+function migrateState(stored: AppState): AppState {
+  const hasLegacyIds =
+    stored.classId !== initialState.classId ||
+    stored.assessment.id !== initialState.assessment.id ||
+    stored.pupils.some((pupil) => pupil.id.startsWith('pupil-')) ||
+    stored.objectives.some((objective) => objective.id.startsWith('objective-'));
+
+  if (!hasLegacyIds) return stored;
+
+  const pupilIds = new Map(stored.pupils.map((pupil, index) => [
+    pupil.id,
+    initialState.pupils[index]?.id ?? pupil.id,
+  ]));
+  const objectiveIds = new Map(stored.objectives.map((objective, index) => [
+    objective.id,
+    initialState.objectives[index]?.id ?? objective.id,
+  ]));
+  const evaluations: AppState['evaluations'] = {};
+  Object.entries(stored.evaluations).forEach(([pupilId, values]) => {
+    const migratedPupilId = pupilIds.get(pupilId) ?? pupilId;
+    evaluations[migratedPupilId] = Object.fromEntries(
+      Object.entries(values).map(([objectiveId, value]) => [
+        objectiveIds.get(objectiveId) ?? objectiveId,
+        value,
+      ]),
+    );
+  });
+
+  return {
+    ...stored,
+    classId: initialState.classId,
+    pupils: stored.pupils.map((pupil, index) => ({
+      ...pupil,
+      id: initialState.pupils[index]?.id ?? pupil.id,
+      classId: initialState.classId,
+    })),
+    assessment: {
+      ...stored.assessment,
+      id: initialState.assessment.id,
+      classId: initialState.classId,
+    },
+    objectives: stored.objectives.map((objective, index) => ({
+      ...objective,
+      id: initialState.objectives[index]?.id ?? objective.id,
+    })),
+    evaluations,
+  };
+}
+
 const AppDataContext = createContext<AppDataContextValue | null>(null);
 
 export function AppDataProvider({ children }: PropsWithChildren) {
@@ -166,7 +215,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       .then((stored) => {
         if (stored) {
           try {
-            setState(JSON.parse(stored) as AppState);
+            setState(migrateState(JSON.parse(stored) as AppState));
           } catch {
             setState(initialState);
           }

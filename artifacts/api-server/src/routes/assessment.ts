@@ -20,6 +20,14 @@ const evaluationInput = z.object({
   value: z.enum(["NotEvaluated", "Acquired", "PartiallyAcquired", "NotAcquired"]),
 });
 
+const pupilImportRow = z.object({
+  registrationNumber: z.string().trim().min(1).max(40),
+  firstName: z.string().trim().min(1).max(120),
+  lastName: z.string().trim().min(1).max(120),
+  dateOfBirth: z.string().trim().max(20).optional().nullable(),
+  gender: z.string().trim().max(40).optional().nullable(),
+});
+
 router.get("/dashboard", async (_req, res, next) => {
   try {
     const [school] = await db.select({ name: schools.name }).from(schools).where(eq(schools.active, true)).limit(1);
@@ -94,6 +102,47 @@ router.get("/classes/:classId/pupils", async (req, res, next) => {
       .where(eq(pupils.classId, req.params.classId))
       .orderBy(asc(pupils.lastName), asc(pupils.firstName));
     res.json(rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/classes/:classId/pupils", async (req, res, next) => {
+  try {
+    const classId = z.string().uuid().parse(req.params.classId);
+    const rows = z.object({ rows: z.array(pupilImportRow).max(1000) }).parse(req.body).rows;
+    const [classExists] = await db.select({ id: classes.id }).from(classes).where(eq(classes.id, classId)).limit(1);
+    if (!classExists) {
+      res.status(404).json({ message: "Class not found" });
+      return;
+    }
+
+    let imported = 0;
+    let skipped = 0;
+    const errors: Array<{ row: number; message: string }> = [];
+    await db.transaction(async (transaction) => {
+      for (const [index, row] of rows.entries()) {
+        try {
+          const inserted = await transaction
+            .insert(pupils)
+            .values({
+              classId,
+              registrationNumber: row.registrationNumber,
+              firstName: row.firstName,
+              lastName: row.lastName,
+              dateOfBirth: row.dateOfBirth || null,
+              gender: row.gender || null,
+            })
+            .onConflictDoNothing()
+            .returning({ id: pupils.id });
+          if (inserted.length > 0) imported += 1;
+          else skipped += 1;
+        } catch {
+          errors.push({ row: index + 1, message: "Ligne invalide" });
+        }
+      }
+    });
+    res.json({ imported, skipped, errors });
   } catch (error) {
     next(error);
   }

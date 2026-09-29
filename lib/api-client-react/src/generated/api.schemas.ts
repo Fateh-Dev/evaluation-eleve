@@ -30,6 +30,30 @@ export interface Pupil {
   active: boolean;
 }
 
+export interface PupilImportRow {
+  registrationNumber: string;
+  firstName: string;
+  lastName: string;
+  dateOfBirth?: string | null;
+  gender?: string | null;
+}
+
+export interface PupilImportRequest {
+  /** @maxItems 1000 */
+  rows: PupilImportRow[];
+}
+
+export interface PupilImportError {
+  row: number;
+  message: string;
+}
+
+export interface PupilImportResult {
+  imported: number;
+  skipped: number;
+  errors: PupilImportError[];
+}
+
 export interface Assessment {
   id: string;
   title: string;

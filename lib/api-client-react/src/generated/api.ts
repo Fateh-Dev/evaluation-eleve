@@ -29,6 +29,8 @@ import type {
   NotFoundResponse,
   ObjectiveStatistics,
   Pupil,
+  PupilImportRequest,
+  PupilImportResult,
   SaveBulkEvaluations200
 } from './api.schemas';
 
@@ -367,6 +369,95 @@ export function useListClassPupils<TData = Awaited<ReturnType<typeof listClassPu
 
 
 
+
+export const getImportClassPupilsUrl = (classId: string,) => {
+
+
+
+
+  return `/api/classes/${classId}/pupils`
+}
+
+/**
+ * @summary Import pupils into a class
+ */
+export const importClassPupils = async (classId: string,
+    pupilImportRequest: PupilImportRequest, options?: Parameters<typeof customFetch>[1]): Promise<PupilImportResult> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<PupilImportResult>(getImportClassPupilsUrl(classId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(pupilImportRequest)
+  }
+);}
+
+
+
+
+
+export const getImportClassPupilsMutationKey = () => ['importClassPupils'] as const;
+
+export const getImportClassPupilsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importClassPupils>>, TError,ImportClassPupilsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof importClassPupils>>, TError,ImportClassPupilsMutationVariables, TContext> => {
+
+const mutationKey = getImportClassPupilsMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof importClassPupils>>, ImportClassPupilsMutationVariables> = (props) => {
+          const {classId,data} = props ?? {};
+
+          return  importClassPupils(classId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ImportClassPupilsMutationResult = NonNullable<Awaited<ReturnType<typeof importClassPupils>>>
+    export type ImportClassPupilsMutationBody = BodyType<PupilImportRequest>
+    export type ImportClassPupilsMutationError = ErrorType<unknown>
+    export type ImportClassPupilsMutationVariables = {classId: string;data: BodyType<PupilImportRequest>}
+
+    /**
+ * @summary Import pupils into a class
+ */
+export const useImportClassPupils = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importClassPupils>>, TError,ImportClassPupilsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof importClassPupils>>,
+        TError,
+        ImportClassPupilsMutationVariables,
+        TContext
+      > => {
+      return useMutation(getImportClassPupilsMutationOptions(options));
+    }
 
 export const getListClassAssessmentsUrl = (classId: string,) => {
 

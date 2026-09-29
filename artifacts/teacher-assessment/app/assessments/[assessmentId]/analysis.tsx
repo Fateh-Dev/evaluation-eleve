@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router } from 'expo-router';
 import React, { useMemo } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import { useGetAssessmentStatistics } from '@workspace/api-client-react';
@@ -10,12 +10,13 @@ import { useColors } from '@/hooks/useColors';
 export default function AssessmentAnalysisScreen() {
   const colors = useColors();
   const data = useAppData();
-  const { assessmentId } = useLocalSearchParams<{ assessmentId: string }>();
-  const { data: serverStatistics } = useGetAssessmentStatistics(assessmentId);
+  const { data: serverStatistics } = useGetAssessmentStatistics(data.assessment.id);
   const statistics = useMemo(
     () => data.objectives.map((objective) => {
       const local = data.statistics.find((item) => item.objectiveId === objective.id);
-      const remote = serverStatistics?.find((item) => item.objectiveId === objective.id);
+      const remote = Array.isArray(serverStatistics)
+        ? serverStatistics.find((item) => item.objectiveId === objective.id)
+        : undefined;
       return { objective, stat: remote ?? local };
     }),
     [data.objectives, data.statistics, serverStatistics],
