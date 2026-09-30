@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Dimensions,
@@ -57,6 +57,14 @@ export default function AssessmentEvaluationScreen() {
   });
   const [objectivesModalVisible, setObjectivesModalVisible] = useState(false);
   const [newObjectiveText, setNewObjectiveText] = useState('');
+  const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const mobileScrollRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    if (!savedMessage) return;
+    const timer = setTimeout(() => setSavedMessage(null), 2200);
+    return () => clearTimeout(timer);
+  }, [savedMessage]);
 
   const isDesktop = Platform.OS === 'web' && Dimensions.get('window').width >= 850;
 
@@ -128,7 +136,7 @@ export default function AssessmentEvaluationScreen() {
     setNewObjectiveText('');
   };
 
-  const save = () => {
+  const save = (message = 'Évaluation enregistrée') => {
     data.saveDraft();
     const entries = currentPupils.flatMap((pupil) =>
       currentObjectives.map((objective) => ({
@@ -148,7 +156,16 @@ export default function AssessmentEvaluationScreen() {
         },
       },
     );
-    if (Platform.OS !== 'web') Alert.alert('Évaluation enregistrée', 'Le brouillon est disponible hors connexion.');
+    setSavedMessage(message);
+  };
+
+  const saveAndNext = () => {
+    const isLastPupil = pupilIndex >= currentPupils.length - 1;
+    save(isLastPupil ? 'Dernière évaluation enregistrée' : 'Enregistré — passage à l’élève suivant');
+    if (!isLastPupil) {
+      setPupilIndex((value) => Math.min(currentPupils.length - 1, value + 1));
+      requestAnimationFrame(() => mobileScrollRef.current?.scrollTo({ y: 0, animated: true }));
+    }
   };
 
   if (!currentAssessment || !currentAssessment.id) {
@@ -216,6 +233,12 @@ export default function AssessmentEvaluationScreen() {
           </Pressable>
         </View>
       </View>
+      {savedMessage ? (
+        <View style={[styles.savedBanner, { backgroundColor: colors.successSurface, borderColor: colors.successForeground }]} accessibilityLiveRegion="polite">
+          <Feather name="check-circle" size={16} color={colors.successForeground} />
+          <Text style={[styles.savedBannerText, { color: colors.successForeground }]}>{savedMessage}</Text>
+        </View>
+      ) : null}
 
       <Surface style={styles.metaCard}>
         <View style={styles.metaItem}>
@@ -346,7 +369,7 @@ export default function AssessmentEvaluationScreen() {
           </View>
         </ScrollView>
       ) : (
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.mobileContent}>
+        <ScrollView ref={mobileScrollRef} showsVerticalScrollIndicator={false} contentContainerStyle={styles.mobileContent}>
           <View style={styles.pupilNavigator}>
             <Pressable
               disabled={pupilIndex === 0}
@@ -446,15 +469,7 @@ export default function AssessmentEvaluationScreen() {
 
           <View style={styles.mobileFooter}>
             <Button label="Enregistrer" icon="save" onPress={save} />
-            <Button
-              label={pupilIndex === currentPupils.length - 1 ? 'Terminer' : 'Enregistrer et suivant'}
-              icon="arrow-right"
-              secondary
-              onPress={() => {
-                save();
-                setPupilIndex((value) => Math.min(currentPupils.length - 1, value + 1));
-              }}
-            />
+            <Button label={pupilIndex === currentPupils.length - 1 ? 'Terminer' : 'Enregistrer et suivant'} icon="arrow-right" secondary onPress={saveAndNext} />
           </View>
         </ScrollView>
       )}
@@ -544,6 +559,8 @@ export default function AssessmentEvaluationScreen() {
 
 const styles = StyleSheet.create({
   topLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  savedBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, marginBottom: 10 },
+  savedBannerText: { fontSize: 12, fontWeight: '700' },
   topActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   deleteTopBtn: {
     width: 32,

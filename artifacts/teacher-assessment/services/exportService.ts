@@ -76,11 +76,11 @@ export function generateAssessmentExcel(data: AssessmentExportData): Uint8Array 
     `Enseignant(e) : ${data.teacherName || ''}`,
   ]);
   rows.push([
-    `CompÃ©tence : ${data.assessment.competency || ''}`,
-    `Objectif de la sÃ©ance : ${data.assessment.sessionObjectives || ''}`,
+    `Compétence : ${data.assessment.competency || ''}`,
+    `Objectif de la séance : ${data.assessment.sessionObjectives || ''}`,
     `Support : ${data.assessment.support || ''}`,
   ]);
-  rows.push([`Objectifs d'Ã©valuation (${data.objectives.length} Objectifs) :`]);
+  rows.push([`Objectifs d'évaluation (${data.objectives.length} Objectifs) :`]);
   data.objectives.forEach((obj, idx) => {
     const num = String(obj.order || idx + 1).padStart(2, '0');
     rows.push([`${num}. ${obj.description}`]);
@@ -88,15 +88,15 @@ export function generateAssessmentExcel(data: AssessmentExportData): Uint8Array 
   rows.push([]); // spacer
 
   // â”€â”€ Grid title â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  rows.push([`Grille d'analyse des rÃ©sultats â€” Classe : ${data.className || ''}`]);
+  rows.push([`Grille d'analyse des résultats — Classe : ${data.className || ''}`]);
 
   // â”€â”€ Table header row 1 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const objHeaders: string[] = [];
   data.objectives.forEach((obj, idx) => {
     const num = String(obj.order || idx + 1).padStart(2, '0');
-    objHeaders.push(`Obj ${num} (+)`, `Obj ${num} (Â±)`, `Obj ${num} (-)`);
+    objHeaders.push(`Obj ${num} (+)`, `Obj ${num} (±)`, `Obj ${num} (-)`);
   });
-  rows.push(['NÂ°', 'Nom et PrÃ©nom', ...objHeaders, 'Total (+)', 'Total (Â±)', 'Total (-)']);
+  rows.push(['N°', 'Nom et Prénom', ...objHeaders, 'Total (+)', 'Total (±)', 'Total (-)']);
 
   // â”€â”€ Pupil data rows â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const objectiveTotals = data.objectives.map(() => ({ plus: 0, pm: 0, minus: 0 }));
@@ -119,7 +119,7 @@ export function generateAssessmentExcel(data: AssessmentExportData): Uint8Array 
         pPlus++;
         objectiveTotals[oIdx].plus++;
       } else if (val === 'PartiallyAcquired') {
-        evalCells.push('', 'Â±', '');
+        evalCells.push('', '±', '');
         pPm++;
         objectiveTotals[oIdx].pm++;
       } else if (val === 'NotAcquired') {
@@ -148,14 +148,14 @@ export function generateAssessmentExcel(data: AssessmentExportData): Uint8Array 
   rows.push([]); // spacer
 
   // â”€â”€ Remediation decisions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  rows.push(['DÃ©cisions Ã  prendre :']);
+  rows.push(['Décisions à prendre :']);
   rows.push(['A) Au plan individuel :']);
-  (data.individualRemediation || 'Aucune dÃ©cision saisie.').split('\n').filter(Boolean).forEach((line) => {
-    rows.push([`   ${line.startsWith('â€¢') || line.startsWith('-') ? line : `â€¢ ${line}`}`]);
+  (data.individualRemediation || 'Aucune décision saisie.').split('\n').filter(Boolean).forEach((line) => {
+    rows.push([`   ${line.startsWith('•') || line.startsWith('-') ? line : `• ${line}`}`]);
   });
   rows.push(['B) Au plan de la classe :']);
-  (data.classRemediation || 'Aucune dÃ©cision saisie.').split('\n').filter(Boolean).forEach((line) => {
-    rows.push([`   ${line.startsWith('â€¢') || line.startsWith('-') ? line : `â€¢ ${line}`}`]);
+  (data.classRemediation || 'Aucune décision saisie.').split('\n').filter(Boolean).forEach((line) => {
+    rows.push([`   ${line.startsWith('•') || line.startsWith('-') ? line : `• ${line}`}`]);
   });
 
   // â”€â”€ Encode to CSV bytes with UTF-8 BOM â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -178,10 +178,10 @@ export async function generateAssessmentDocx(data: AssessmentExportData): Promis
   const numObjectives = data.objectives.length;
 
   // Column width calculations (landscape 15840 twips - 1440 twips margins = 14400 twips available)
-  const colWNum = 440; // NÂ°
-  const colWName = 2560; // Nom et PrÃ©nom
-  const colWObj = 320; // Each objective subcol (+, Â±, -)
-  const colWTotal = 360; // Each total subcol (+, Â±, -)
+  const colWNum = 440; // N°
+  const colWName = 2560; // Nom et Prénom
+  const colWObj = 320; // Each objective subcol (+, ±, -)
+  const colWTotal = 360; // Each total subcol (+, ±, -)
 
   const borderSingle = { style: BorderStyle.SINGLE, size: 4, color: COLOR_BORDER };
   const cellBorders = {
@@ -194,9 +194,9 @@ export async function generateAssessmentDocx(data: AssessmentExportData): Promis
   const tableRows: TableRow[] = [];
 
   // ROW 1:
-  // - NÂ° (rowSpan 3)
-  // - Nom et PrÃ©nom (rowSpan 3)
-  // - Objectifs dâ€™Ã©valuation (columnSpan: numObjectives * 3)
+  // - N° (rowSpan 3)
+  // - Nom et Prénom (rowSpan 3)
+  // - Objectifs d’évaluation (columnSpan: numObjectives * 3)
   // - Total (columnSpan: 3, rowSpan: 2)
   tableRows.push(
     new TableRow({
@@ -212,7 +212,7 @@ export async function generateAssessmentDocx(data: AssessmentExportData): Promis
           children: [
             new Paragraph({
               alignment: AlignmentType.CENTER,
-              children: [new TextRun({ text: 'NÂ°', bold: true, size: 16, font: 'Calibri' })],
+              children: [new TextRun({ text: 'N°', bold: true, size: 16, font: 'Calibri' })],
             }),
           ],
         }),
@@ -225,7 +225,7 @@ export async function generateAssessmentDocx(data: AssessmentExportData): Promis
           children: [
             new Paragraph({
               alignment: AlignmentType.CENTER,
-              children: [new TextRun({ text: 'Nom et PrÃ©nom', bold: true, size: 16, font: 'Calibri' })],
+              children: [new TextRun({ text: 'Nom et Prénom', bold: true, size: 16, font: 'Calibri' })],
             }),
           ],
         }),
@@ -237,7 +237,7 @@ export async function generateAssessmentDocx(data: AssessmentExportData): Promis
           children: [
             new Paragraph({
               alignment: AlignmentType.CENTER,
-              children: [new TextRun({ text: 'Objectifs dâ€™Ã©valuation', bold: true, size: 17, font: 'Calibri' })],
+              children: [new TextRun({ text: 'Objectifs d’évaluation', bold: true, size: 17, font: 'Calibri' })],
             }),
           ],
         }),
@@ -289,11 +289,11 @@ export async function generateAssessmentDocx(data: AssessmentExportData): Promis
   );
 
   // ROW 3:
-  // - (+, Â±, -) for each objective
-  // - (+, Â±, -) for Total
+  // - (+, ±, -) for each objective
+  // - (+, ±, -) for Total
   const r3SubCells: TableCell[] = [];
   for (let idx = 0; idx < numObjectives; idx++) {
-    ['+', 'Â±', '-'].forEach((mark) => {
+    ['+', '±', '-'].forEach((mark) => {
       r3SubCells.push(
         new TableCell({
           width: { size: colWObj, type: WidthType.DXA },
@@ -311,7 +311,7 @@ export async function generateAssessmentDocx(data: AssessmentExportData): Promis
     });
   }
   // Total subcols
-  ['+', 'Â±', '-'].forEach((mark) => {
+  ['+', '±', '-'].forEach((mark) => {
     r3SubCells.push(
       new TableCell({
         width: { size: colWTotal, type: WidthType.DXA },
@@ -394,7 +394,7 @@ export async function generateAssessmentDocx(data: AssessmentExportData): Promis
         pPlus++;
         objectiveTotals[objIdx].plus++;
       } else if (evalVal === 'PartiallyAcquired') {
-        valPlusMinus = 'Â±';
+        valPlusMinus = '±';
         pPlusMinus++;
         objectiveTotals[objIdx].plusMinus++;
       } else if (evalVal === 'NotAcquired') {
@@ -531,14 +531,14 @@ export async function generateAssessmentDocx(data: AssessmentExportData): Promis
     }),
   );
 
-  // Line 2: CompÃ©tence | Objectif | Support
+  // Line 2: Compétence | Objectif | Support
   paragraphs.push(
     new Paragraph({
       spacing: { after: 120 },
       children: [
-        new TextRun({ text: 'CompÃ©tence : ', bold: true, size: 19, font: 'Calibri' }),
+        new TextRun({ text: 'Compétence : ', bold: true, size: 19, font: 'Calibri' }),
         new TextRun({ text: `${data.assessment.competency || ''}   |   `, size: 19, font: 'Calibri' }),
-        new TextRun({ text: 'Objectif de la sÃ©ance : ', bold: true, size: 19, font: 'Calibri' }),
+        new TextRun({ text: 'Objectif de la séance : ', bold: true, size: 19, font: 'Calibri' }),
         new TextRun({ text: `${data.assessment.sessionObjectives || ''}   |   `, size: 19, font: 'Calibri' }),
         new TextRun({ text: 'Support : ', bold: true, size: 19, font: 'Calibri' }),
         new TextRun({ text: `${data.assessment.support || ''}`, size: 19, font: 'Calibri' }),
@@ -546,13 +546,13 @@ export async function generateAssessmentDocx(data: AssessmentExportData): Promis
     }),
   );
 
-  // Line 3: Objectifs dâ€™Ã©valuation Title
+  // Line 3: Objectifs d’évaluation Title
   paragraphs.push(
     new Paragraph({
       spacing: { after: 50 },
       children: [
         new TextRun({
-          text: `Objectifs dâ€™Ã©valuation (${numObjectives} Objectifs) :`,
+          text: `Objectifs d’évaluation (${numObjectives} Objectifs) :`,
           bold: true,
           size: 20,
           color: COLOR_PRIMARY_HEX,
@@ -577,13 +577,13 @@ export async function generateAssessmentDocx(data: AssessmentExportData): Promis
     );
   });
 
-  // Table Title: Grille dâ€™analyse des rÃ©sultats
+  // Table Title: Grille d’analyse des résultats
   paragraphs.push(
     new Paragraph({
       spacing: { before: 140, after: 80 },
       children: [
         new TextRun({
-          text: `Grille dâ€™analyse des rÃ©sultats â€” Classe : ${data.className || ''}`,
+          text: `Grille d’analyse des résultats — Classe : ${data.className || ''}`,
           bold: true,
           size: 22,
           color: COLOR_PRIMARY_HEX,
@@ -605,7 +605,7 @@ export async function generateAssessmentDocx(data: AssessmentExportData): Promis
       spacing: { before: 180, after: 70 },
       children: [
         new TextRun({
-          text: 'DÃ©cisions Ã  prendre :',
+          text: 'Décisions à prendre :',
           bold: true,
           size: 20,
           color: COLOR_PRIMARY_HEX,
@@ -626,9 +626,9 @@ export async function generateAssessmentDocx(data: AssessmentExportData): Promis
     }),
   ];
 
-  const indivLines = (data.individualRemediation || 'Aucune dÃ©cision saisie.').split('\n').filter(Boolean);
+  const indivLines = (data.individualRemediation || 'Aucune décision saisie.').split('\n').filter(Boolean);
   indivLines.forEach((line) => {
-    const text = line.startsWith('â€¢') || line.startsWith('-') ? line : `â€¢ ${line}`;
+    const text = line.startsWith('•') || line.startsWith('-') ? line : `• ${line}`;
     decisionParagraphs.push(
       new Paragraph({
         spacing: { after: 30 },
@@ -652,9 +652,9 @@ export async function generateAssessmentDocx(data: AssessmentExportData): Promis
     }),
   );
 
-  const classLines = (data.classRemediation || 'Aucune dÃ©cision saisie.').split('\n').filter(Boolean);
+  const classLines = (data.classRemediation || 'Aucune décision saisie.').split('\n').filter(Boolean);
   classLines.forEach((line) => {
-    const text = line.startsWith('â€¢') || line.startsWith('-') ? line : `â€¢ ${line}`;
+    const text = line.startsWith('•') || line.startsWith('-') ? line : `• ${line}`;
     decisionParagraphs.push(
       new Paragraph({
         spacing: { after: 30 },
@@ -813,7 +813,7 @@ export function generateAssessmentPdfHtml(data: AssessmentExportData): string {
 
       return `
         <td class="col-val col-plus">${isPlus ? '+' : ''}</td>
-        <td class="col-val col-pm">${isPlusMinus ? 'Â±' : ''}</td>
+        <td class="col-val col-pm">${isPlusMinus ? '&plusmn;' : ''}</td>
         <td class="col-val col-minus">${isMinus ? '-' : ''}</td>
       `;
     }).join('');
@@ -836,7 +836,7 @@ export function generateAssessmentPdfHtml(data: AssessmentExportData): string {
 
   const subHeaders = data.objectives.map(() => `
     <th class="th-sub col-plus">+</th>
-    <th class="th-sub col-pm">Â±</th>
+    <th class="th-sub col-pm">&plusmn;</th>
     <th class="th-sub col-minus">-</th>
   `).join('');
 
@@ -846,18 +846,18 @@ export function generateAssessmentPdfHtml(data: AssessmentExportData): string {
     <td class="col-total col-minus">${tot.minus}</td>
   `).join('');
 
-  const indivItems = (data.individualRemediation || 'Aucune dÃ©cision saisie.').split('\n').filter(Boolean)
-    .map(line => `<li>${line.replace(/^[â€¢\-]\s*/, '')}</li>`).join('');
+  const indivItems = (data.individualRemediation || 'Aucune décision saisie.').split('\n').filter(Boolean)
+    .map(line => `<li>${line.replace(/^[•\-]\s*/, '')}</li>`).join('');
 
-  const classItems = (data.classRemediation || 'Aucune dÃ©cision saisie.').split('\n').filter(Boolean)
-    .map(line => `<li>${line.replace(/^[â€¢\-]\s*/, '')}</li>`).join('');
+  const classItems = (data.classRemediation || 'Aucune décision saisie.').split('\n').filter(Boolean)
+    .map(line => `<li>${line.replace(/^[•\-]\s*/, '')}</li>`).join('');
 
   return `
     <!DOCTYPE html>
     <html lang="fr">
     <head>
-      <meta charset="utf-8">
-      <title>Ã‰valuation â€” ${data.className} â€” ${data.assessment.title}</title>
+      <meta charset="UTF-8">
+      <title>Évaluation — ${data.className} — ${data.assessment.title}</title>
       <style>
         @page {
           size: A4 landscape;
@@ -867,7 +867,7 @@ export function generateAssessmentPdfHtml(data: AssessmentExportData): string {
           box-sizing: border-box;
           margin: 0;
           padding: 0;
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+          font-family: "DejaVu Sans", "Noto Sans", "Segoe UI", Arial, sans-serif;
         }
         body {
           padding: 8mm;
@@ -1002,14 +1002,14 @@ export function generateAssessmentPdfHtml(data: AssessmentExportData): string {
           <span>Enseignant(e) : ${data.teacherName || '—'}</span>
         </div>
         <div class="meta-line">
-          <span class="meta-label">CompÃ©tence :</span> ${data.assessment.competency} |
-          <span class="meta-label">Objectif de la sÃ©ance :</span> ${data.assessment.sessionObjectives || 'Objectifs'} |
-          <span class="meta-label">Support :</span> ${data.assessment.support || 'Support pÃ©dagogique'}
+          <span class="meta-label">Compétence :</span> ${data.assessment.competency} |
+          <span class="meta-label">Objectif de la séance :</span> ${data.assessment.sessionObjectives || 'Objectifs'} |
+          <span class="meta-label">Support :</span> ${data.assessment.support || 'Support pédagogique'}
         </div>
       </div>
 
       <div class="objectives-box">
-        <div class="objectives-title">Objectifs dâ€™Ã©valuation (${numObjectives} objectifs) :</div>
+        <div class="objectives-title">Objectifs d’évaluation (${numObjectives} objectifs) :</div>
         <div class="objectives-grid">
           ${data.objectives.map(obj => `
             <div class="objective-item"><strong>${String(obj.order).padStart(2, '0')}.</strong> ${obj.description}</div>
@@ -1017,19 +1017,19 @@ export function generateAssessmentPdfHtml(data: AssessmentExportData): string {
         </div>
       </div>
 
-      <div class="section-title">Grille dâ€™analyse des rÃ©sultats â€” Classe : ${data.className}</div>
+      <div class="section-title">Grille d’analyse des résultats — Classe : ${data.className}</div>
       <table>
         <thead>
           <tr>
-            <th rowspan="2" class="th-num">NÂ°</th>
-            <th rowspan="2" class="th-name">Nom et PrÃ©nom</th>
+            <th rowspan="2" class="th-num">N°</th>
+            <th rowspan="2" class="th-name">Nom et Prénom</th>
             ${objHeaders}
             <th colspan="3" class="th-obj">Total</th>
           </tr>
           <tr>
             ${subHeaders}
             <th class="th-sub col-plus">+</th>
-            <th class="th-sub col-pm">Â±</th>
+            <th class="th-sub col-pm">&plusmn;</th>
             <th class="th-sub col-minus">-</th>
           </tr>
         </thead>
@@ -1047,11 +1047,11 @@ export function generateAssessmentPdfHtml(data: AssessmentExportData): string {
 
       <div class="remediation-box">
         <div class="remed-card">
-          <h4>A) DÃ©cisions au plan individuel :</h4>
+          <h4>A) Décisions au plan individuel :</h4>
           <ul>${indivItems}</ul>
         </div>
         <div class="remed-card">
-          <h4>B) DÃ©cisions au plan de la classe :</h4>
+          <h4>B) Décisions au plan de la classe :</h4>
           <ul>${classItems}</ul>
         </div>
       </div>
