@@ -558,10 +558,10 @@ export default function AssessmentEvaluationScreen() {
 }
 
 const styles = StyleSheet.create({
-  topLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  topLine: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12 },
   savedBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, marginBottom: 10 },
   savedBannerText: { fontSize: 12, fontWeight: '700' },
-  topActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  topActions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, flexShrink: 1 },
   deleteTopBtn: {
     width: 32,
     height: 32,
@@ -569,8 +569,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  metaCard: { flexDirection: 'row', justifyContent: 'space-between', padding: 12, marginBottom: 12 },
-  metaItem: { gap: 3 },
+  metaCard: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 12, padding: 12, marginBottom: 12 },
+  metaItem: { gap: 3, minWidth: 70, flex: 1 },
   metaLabel: { fontSize: 9, letterSpacing: 1, fontWeight: '800' },
   metaValue: { fontSize: 13, fontWeight: '700' },
   gridScroll: { paddingBottom: 24 },
@@ -591,7 +591,7 @@ const styles = StyleSheet.create({
   totalText: { fontSize: 11, fontWeight: '800' },
   mobileContent: { paddingBottom: 30 },
   pupilNavigator: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 15, gap: 8 },
-  navButton: { minHeight: 40, borderWidth: 1, borderRadius: 11, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 3 },
+  navButton: { minHeight: 40, maxWidth: '34%', borderWidth: 1, borderRadius: 11, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 3 },
   navText: { fontSize: 11, fontWeight: '700' },
   pupilHeading: { alignItems: 'center', flex: 1, gap: 3 },
   pupilIndex: { fontSize: 10, fontWeight: '800', letterSpacing: 1 },

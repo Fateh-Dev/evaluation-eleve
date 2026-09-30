@@ -18,7 +18,6 @@ import {
   AssessmentExportData,
   downloadFile,
   exportAssessmentPdf,
-  generateAssessmentDocx,
   generateAssessmentExcel,
 } from '@/services/exportService';
 
@@ -57,7 +56,7 @@ export default function AssessmentDocumentScreen() {
     return data.getRemediationForAssessment(currentAssessment.id);
   }, [data.allRemediations, currentAssessment.id]);
 
-  const [exportingFormat, setExportingFormat] = useState<'excel' | 'docx' | null>(null);
+  const [exportingFormat, setExportingFormat] = useState<'excel' | null>(null);
 
   // Compute column totals for bottom total row
   const objectiveTotals = useMemo(() => {
@@ -148,24 +147,6 @@ export default function AssessmentDocumentScreen() {
     }
   };
 
-  const handleExportWord = async () => {
-    try {
-      setExportingFormat('docx');
-      const blob = await generateAssessmentDocx(exportPayload);
-      const filename = `Evaluation_${currentClass.name.replace(/\s+/g, '_')}_${currentAssessment.competency.replace(/\s+/g, '_')}_${currentAssessment.date.replace(/[/\\:]/g, '-')}.docx`;
-      await downloadFile(
-        blob,
-        filename,
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      );
-    } catch (error) {
-      console.error('Erreur export Word:', error);
-      Alert.alert('Erreur', 'Impossible de générer le document Word.');
-    } finally {
-      setExportingFormat(null);
-    }
-  };
-
   const printReport = async () => {
     try {
       await exportAssessmentPdf(exportPayload);
@@ -201,12 +182,6 @@ export default function AssessmentDocumentScreen() {
             onPress={handleExportExcel}
             disabled={exportingFormat !== null}
           />
-          <Button
-            label={exportingFormat === 'docx' ? 'Génération Word…' : 'Exporter Word (.docx)'}
-            icon={exportingFormat === 'docx' ? 'loader' : 'file'}
-            onPress={handleExportWord}
-            disabled={exportingFormat !== null}
-          />
         </View>
         <View style={styles.secondaryButtons}>
           <Button label="Imprimer / PDF" icon="printer" secondary onPress={printReport} />
@@ -218,7 +193,7 @@ export default function AssessmentDocumentScreen() {
         <Surface style={styles.loadingBanner}>
           <ActivityIndicator size="small" color={colors.primary} />
           <Text style={[styles.loadingText, { color: colors.foreground }]}>
-          Préparation du fichier {exportingFormat === 'excel' ? 'CSV (.csv)' : 'Word (.docx)'} en cours…
+          Préparation du fichier CSV (.csv) en cours…
           </Text>
         </Surface>
       )}

@@ -234,7 +234,7 @@ export default function SettingsScreen() {
         <View style={styles.settingCopy}>
           <Text style={[styles.value, { color: colors.foreground }]}>Format officiel de référence</Text>
           <Text style={[styles.help, { color: colors.mutedForeground }]}>
-            Grille officielle d’évaluation · Algérie (notation_names_11_objectifs.docx)
+            Grille officielle d’évaluation · Algérie
           </Text>
         </View>
         <Text style={[styles.enabled, { color: colors.successForeground }]}>Actif</Text>

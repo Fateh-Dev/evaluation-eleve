@@ -52,7 +52,7 @@ export function Button({ label, onPress, secondary = false, compact = false, ico
   const colors = useColors();
   return (
     <Pressable
-      onPress={disabled ? undefined : onPress}
+      onPress={disabled ? undefined : () => onPress()}
       disabled={disabled}
       accessibilityRole="button"
       style={({ pressed }) => [
