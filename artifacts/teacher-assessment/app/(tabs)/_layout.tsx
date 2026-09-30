@@ -33,6 +33,10 @@ function NativeTabLayout() {
         <NativeTabs.Trigger.Icon sf={{ default: 'person', selected: 'person.fill' }} />
         <NativeTabs.Trigger.Label>Élèves</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="settings">
+        <NativeTabs.Trigger.Icon sf={{ default: 'gearshape', selected: 'gearshape.fill' }} />
+        <NativeTabs.Trigger.Label>Configuration</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
     </NativeTabs>
   );
 }
@@ -98,6 +102,10 @@ function ClassicTabLayout() {
       <Tabs.Screen
         name="pupils"
         options={{ title: 'Élèves', tabBarIcon: ({ color }) => <Feather name="user" size={22} color={color} /> }}
+      />
+      <Tabs.Screen
+        name="settings"
+        options={{ title: 'Configuration', tabBarIcon: ({ color }) => <Feather name="settings" size={22} color={color} /> }}
       />
     </Tabs>
   );

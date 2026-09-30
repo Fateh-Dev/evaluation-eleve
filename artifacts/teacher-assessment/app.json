@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "Teacher Competency Assessment",
-    "slug": "teacher-assessment",
+    "name": "Chaibeddra Evaluation",
+    "slug": "chaibeddra-evaluation",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "teacher-assessment",
+    "scheme": "chaibeddra-evaluation",
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": false

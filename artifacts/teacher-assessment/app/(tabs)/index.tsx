@@ -232,7 +232,7 @@ const styles = StyleSheet.create({
   focusIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   focusPercent: { fontSize: 20, fontWeight: '800' },
   focusFoot: { fontSize: 11, lineHeight: 16 },
-  quickGrid: { flexDirection: 'row', gap: 12, paddingBottom: 16 },
+  quickGrid: { flexDirection: 'row', gap: 12, paddingBottom: 32 },
   quickCard: { flex: 1, minHeight: 110, borderWidth: 1, borderRadius: 16, padding: 15, gap: 6 },
   quickTitle: { fontSize: 14, fontWeight: '700', marginTop: 2 },
   quickText: { fontSize: 12, lineHeight: 16 },

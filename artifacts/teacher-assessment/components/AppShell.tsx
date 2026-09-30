@@ -8,7 +8,7 @@ export function Screen({ children, scroll = true }: PropsWithChildren<{ scroll?:
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const content = (
-    <View style={[styles.screen, { backgroundColor: colors.background, paddingTop: insets.top + 18, paddingBottom: 36 }]}>
+    <View style={[styles.screen, { backgroundColor: colors.background, paddingTop: insets.top + 18, paddingBottom: insets.bottom + 120 }]}>
       {children}
     </View>
   );
