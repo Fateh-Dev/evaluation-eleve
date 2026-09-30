@@ -4,11 +4,13 @@ import React, { useMemo, useState } from 'react';
 import {
   Alert,
   Dimensions,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { AppHeader, Button, Screen, SectionTitle, Surface, SyncPill, ValueMark } from '@/components/AppShell';
@@ -50,6 +52,9 @@ export default function AssessmentEvaluationScreen() {
   }, [data.pupils, data.objectives, data.evaluations, currentAssessment.id]);
 
   const [pupilIndex, setPupilIndex] = useState(0);
+  const [objectivesModalVisible, setObjectivesModalVisible] = useState(false);
+  const [newObjectiveText, setNewObjectiveText] = useState('');
+
   const isDesktop = Platform.OS === 'web' && Dimensions.get('window').width >= 850;
 
   const currentPupil = currentPupils[pupilIndex] ?? currentPupils[0] ?? {
@@ -78,6 +83,48 @@ export default function AssessmentEvaluationScreen() {
     ]);
   };
 
+  const handleDeleteAssessment = () => {
+    Alert.alert(
+      'Supprimer l’évaluation',
+      `Êtes-vous sûr de vouloir supprimer cette évaluation ("${currentAssessment.title}") ?\n\nToutes les notes et objectifs seront définitivement effacés.`,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: () => {
+            data.deleteAssessment(currentAssessment.id);
+            Alert.alert('Évaluation supprimée', 'L’évaluation a été supprimée.');
+            router.replace('/assessments');
+          },
+        },
+      ],
+    );
+  };
+
+  const handleDeleteObjective = (objectiveId: string, order: number, description: string) => {
+    Alert.alert(
+      'Supprimer l’objectif',
+      `Voulez-vous supprimer l'objectif ${order} : "${description}" ?\n\nLes évaluations associées à cet objectif seront effacées.`,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: () => {
+            data.removeObjective(currentAssessment.id, objectiveId);
+          },
+        },
+      ],
+    );
+  };
+
+  const handleAddObjective = () => {
+    if (!newObjectiveText.trim()) return;
+    data.addObjective(currentAssessment.id, newObjectiveText.trim());
+    setNewObjectiveText('');
+  };
+
   const save = () => {
     data.saveDraft();
     const entries = currentPupils.flatMap((pupil) =>
@@ -101,10 +148,28 @@ export default function AssessmentEvaluationScreen() {
     if (Platform.OS !== 'web') Alert.alert('Évaluation enregistrée', 'Le brouillon est disponible hors connexion.');
   };
 
+  if (!currentAssessment || !currentAssessment.id) {
+    return (
+      <Screen>
+        <AppHeader eyebrow="Évaluation" title="Évaluation introuvable" onBack={() => router.back()} />
+        <Surface style={styles.emptyCard}>
+          <Feather name="alert-circle" size={32} color={colors.mutedForeground} />
+          <Text style={[styles.emptyCardTitle, { color: colors.foreground }]}>
+            Cette évaluation n’existe pas
+          </Text>
+          <Text style={[styles.emptyCardText, { color: colors.mutedForeground }]}>
+            Elle a peut-être été supprimée ou n’a pas encore été créée.
+          </Text>
+          <Button label="Retour aux évaluations" icon="arrow-left" onPress={() => router.replace('/assessments')} />
+        </Surface>
+      </Screen>
+    );
+  }
+
   return (
     <Screen scroll={false}>
       <AppHeader
-        eyebrow={`${currentClass.name} · ${currentAssessment.competency}`}
+        eyebrow={`${currentClass.name || 'Classe'} · ${currentAssessment.competency}`}
         title={currentAssessment.title}
         onBack={() => router.back()}
       />
@@ -119,6 +184,13 @@ export default function AssessmentEvaluationScreen() {
             onPress={save}
           />
           <Button
+            label="Objectifs"
+            icon="list"
+            compact
+            secondary
+            onPress={() => setObjectivesModalVisible(true)}
+          />
+          <Button
             label="Analyse"
             icon="bar-chart-2"
             compact
@@ -126,12 +198,19 @@ export default function AssessmentEvaluationScreen() {
             onPress={() => router.push(`/assessments/${currentAssessment.id}/analysis`)}
           />
           <Button
-            label="Document & Export"
+            label="Export"
             icon="file-text"
             compact
             secondary
             onPress={() => router.push(`/assessments/${currentAssessment.id}/document`)}
           />
+          <Pressable
+            onPress={handleDeleteAssessment}
+            hitSlop={8}
+            style={[styles.deleteTopBtn, { backgroundColor: colors.errorSurface }]}
+          >
+            <Feather name="trash-2" size={16} color={colors.errorForeground} />
+          </Pressable>
         </View>
       </View>
 
@@ -156,7 +235,38 @@ export default function AssessmentEvaluationScreen() {
         </View>
       </Surface>
 
-      {isDesktop ? (
+      {/* Empty pupils banner */}
+      {currentPupils.length === 0 ? (
+        <Surface style={styles.emptyCard}>
+          <Feather name="users" size={32} color={colors.mutedForeground} />
+          <Text style={[styles.emptyCardTitle, { color: colors.foreground }]}>
+            Aucun élève dans cette classe
+          </Text>
+          <Text style={[styles.emptyCardText, { color: colors.mutedForeground }]}>
+            Ajoutez des élèves dans la classe {currentClass.name} pour commencer à les évaluer.
+          </Text>
+          <Button
+            label="Gérer les élèves de la classe"
+            icon="user-plus"
+            onPress={() => router.push(`/classes/${currentClass.id}`)}
+          />
+        </Surface>
+      ) : currentObjectives.length === 0 ? (
+        <Surface style={styles.emptyCard}>
+          <Feather name="list" size={32} color={colors.mutedForeground} />
+          <Text style={[styles.emptyCardTitle, { color: colors.foreground }]}>
+            Aucun objectif d'évaluation
+          </Text>
+          <Text style={[styles.emptyCardText, { color: colors.mutedForeground }]}>
+            Ajoutez au moins un objectif pour pouvoir évaluer les compétences.
+          </Text>
+          <Button
+            label="Ajouter un objectif"
+            icon="plus"
+            onPress={() => setObjectivesModalVisible(true)}
+          />
+        </Surface>
+      ) : isDesktop ? (
         <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={styles.gridScroll}>
           <View style={styles.grid}>
             <View style={[styles.gridRow, styles.gridHeader, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
@@ -165,9 +275,17 @@ export default function AssessmentEvaluationScreen() {
               </View>
               {currentObjectives.map((objective) => (
                 <View key={objective.id} style={styles.objectiveCell}>
-                  <Text style={[styles.objectiveNumber, { color: colors.foreground }]}>
-                    {String(objective.order).padStart(2, '0')}
-                  </Text>
+                  <View style={styles.objCellHeader}>
+                    <Text style={[styles.objectiveNumber, { color: colors.foreground }]}>
+                      {String(objective.order).padStart(2, '0')}
+                    </Text>
+                    <Pressable
+                      onPress={() => handleDeleteObjective(objective.id, objective.order, objective.description)}
+                      hitSlop={6}
+                    >
+                      <Feather name="trash-2" size={12} color={colors.destructive} />
+                    </Pressable>
+                  </View>
                   <Pressable onPress={() => confirmMarkAll(objective.id)}>
                     <Text style={[styles.markAll, { color: colors.primary }]}>marquer +</Text>
                   </Pressable>
@@ -187,7 +305,7 @@ export default function AssessmentEvaluationScreen() {
                 ]}
               >
                 <View style={styles.nameCell}>
-                  <Text style={[styles.pupilName, { color: colors.foreground }]} numberOfLines={1}>
+                  <Text style={[styles.pupilName, { color: colors.foreground }]}>
                     {pupil.lastName} {pupil.firstName}
                   </Text>
                   <Text style={[styles.pupilNumber, { color: colors.mutedForeground }]}>
@@ -275,9 +393,18 @@ export default function AssessmentEvaluationScreen() {
               return (
                 <Surface key={objective.id} style={styles.mobileObjective}>
                   <View style={styles.objectiveCopy}>
-                    <Text style={[styles.mobileObjectiveNumber, { color: colors.primary }]}>
-                      OBJECTIF {String(objective.order).padStart(2, '0')}
-                    </Text>
+                    <View style={styles.objectiveHeaderRow}>
+                      <Text style={[styles.mobileObjectiveNumber, { color: colors.primary }]}>
+                        OBJECTIF {String(objective.order).padStart(2, '0')}
+                      </Text>
+                      <Pressable
+                        onPress={() => handleDeleteObjective(objective.id, objective.order, objective.description)}
+                        hitSlop={8}
+                        style={styles.trashObjBtn}
+                      >
+                        <Feather name="trash-2" size={14} color={colors.destructive} />
+                      </Pressable>
+                    </View>
                     <Text style={[styles.mobileObjectiveText, { color: colors.foreground }]}>
                       {objective.description}
                     </Text>
@@ -328,15 +455,102 @@ export default function AssessmentEvaluationScreen() {
           </View>
         </ScrollView>
       )}
+
+      {/* MODAL: MANAGE OBJECTIVES */}
+      <Modal
+        visible={objectivesModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setObjectivesModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Surface style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={[styles.modalTitle, { color: colors.foreground }]}>
+                  Objectifs d'évaluation
+                </Text>
+                <Text style={[styles.modalSubtitle, { color: colors.mutedForeground }]}>
+                  {currentAssessment.competency} ({currentObjectives.length} objectifs)
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => setObjectivesModalVisible(false)}
+                style={[styles.closeBtn, { backgroundColor: colors.secondary }]}
+              >
+                <Feather name="x" size={18} color={colors.foreground} />
+              </Pressable>
+            </View>
+
+            {/* Add New Objective Input */}
+            <View style={styles.addObjBox}>
+              <TextInput
+                placeholder="Nouvel objectif d’évaluation…"
+                placeholderTextColor={colors.mutedForeground}
+                value={newObjectiveText}
+                onChangeText={setNewObjectiveText}
+                style={[
+                  styles.addObjInput,
+                  {
+                    color: colors.foreground,
+                    borderColor: colors.border,
+                    backgroundColor: colors.background,
+                  },
+                ]}
+              />
+              <Button label="Ajouter" icon="plus" compact onPress={handleAddObjective} />
+            </View>
+
+            {/* List of Existing Objectives */}
+            <ScrollView style={styles.objScrollList} showsVerticalScrollIndicator={false}>
+              {currentObjectives.map((obj) => (
+                <View
+                  key={obj.id}
+                  style={[styles.objListItem, { borderBottomColor: colors.border }]}
+                >
+                  <View style={[styles.objOrderBadge, { backgroundColor: colors.secondary }]}>
+                    <Text style={[styles.objOrderText, { color: colors.foreground }]}>
+                      {String(obj.order).padStart(2, '0')}
+                    </Text>
+                  </View>
+                  <Text style={[styles.objListDesc, { color: colors.foreground }]}>
+                    {obj.description}
+                  </Text>
+                  <Pressable
+                    onPress={() => handleDeleteObjective(obj.id, obj.order, obj.description)}
+                    hitSlop={8}
+                    style={styles.trashObjBtn}
+                  >
+                    <Feather name="trash-2" size={16} color={colors.destructive} />
+                  </Pressable>
+                </View>
+              ))}
+            </ScrollView>
+
+            <Button
+              label="Fermer"
+              secondary
+              onPress={() => setObjectivesModalVisible(false)}
+            />
+          </Surface>
+        </View>
+      </Modal>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  topLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 14 },
-  topActions: { flexDirection: 'row', gap: 8 },
-  metaCard: { flexDirection: 'row', gap: 18, marginBottom: 14 },
-  metaItem: { flex: 1, gap: 4 },
+  topLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  topActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  deleteTopBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  metaCard: { flexDirection: 'row', justifyContent: 'space-between', padding: 12, marginBottom: 12 },
+  metaItem: { gap: 3 },
   metaLabel: { fontSize: 9, letterSpacing: 1, fontWeight: '800' },
   metaValue: { fontSize: 13, fontWeight: '700' },
   gridScroll: { paddingBottom: 24 },
@@ -347,6 +561,7 @@ const styles = StyleSheet.create({
   nameCell: { width: 190, paddingHorizontal: 13, justifyContent: 'center' },
   headerText: { fontSize: 13, fontWeight: '800' },
   objectiveCell: { width: 83, alignItems: 'center', justifyContent: 'center', gap: 4 },
+  objCellHeader: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   objectiveNumber: { fontSize: 13, fontWeight: '800' },
   markAll: { fontSize: 9, fontWeight: '700' },
   pupilName: { fontSize: 12, fontWeight: '700' },
@@ -362,12 +577,76 @@ const styles = StyleSheet.create({
   pupilIndex: { fontSize: 10, fontWeight: '800', letterSpacing: 1 },
   mobilePupilName: { fontSize: 17, fontWeight: '700', textAlign: 'center' },
   mobileObjectives: { gap: 10 },
-  mobileObjective: { gap: 13 },
+  mobileObjective: { gap: 13, padding: 14 },
   objectiveCopy: { gap: 5 },
+  objectiveHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  trashObjBtn: { padding: 4 },
   mobileObjectiveNumber: { fontSize: 10, fontWeight: '800', letterSpacing: 1.1 },
   mobileObjectiveText: { fontSize: 14, lineHeight: 19, fontWeight: '600' },
   valueButtons: { flexDirection: 'row', gap: 8 },
   choiceButton: { flex: 1, minHeight: 43, borderWidth: 1, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   choiceText: { fontSize: 19, fontWeight: '800' },
   mobileFooter: { gap: 9, marginTop: 16 },
+  emptyCard: { padding: 24, alignItems: 'center', justifyContent: 'center', gap: 10, borderRadius: 16, marginTop: 20 },
+  emptyCardTitle: { fontSize: 16, fontWeight: '700', marginTop: 4 },
+  emptyCardText: { fontSize: 13, textAlign: 'center', lineHeight: 18, marginBottom: 6 },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 500,
+    maxHeight: '85%',
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 20,
+    gap: 14,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(128, 128, 128, 0.15)',
+    paddingBottom: 10,
+  },
+  modalTitle: { fontSize: 17, fontWeight: '800' },
+  modalSubtitle: { fontSize: 12, marginTop: 2 },
+  closeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addObjBox: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  addObjInput: {
+    flex: 1,
+    height: 40,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    fontSize: 13,
+  },
+  objScrollList: { maxHeight: 300 },
+  objListItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+  },
+  objOrderBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  objOrderText: { fontSize: 12, fontWeight: '800' },
+  objListDesc: { flex: 1, fontSize: 13, lineHeight: 17 },
 });

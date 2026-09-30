@@ -17,6 +17,7 @@ import { useColors } from '@/hooks/useColors';
 import {
   AssessmentExportData,
   downloadFile,
+  exportAssessmentPdf,
   generateAssessmentDocx,
   generateAssessmentExcel,
 } from '@/services/exportService';
@@ -107,6 +108,7 @@ export default function AssessmentDocumentScreen() {
   const exportPayload = useMemo<AssessmentExportData>(() => {
     return {
       school: data.school,
+      teacherName: data.teacherName,
       level: currentClass.level,
       className: currentClass.name,
       academicYear: currentClass.academicYear,
@@ -119,6 +121,7 @@ export default function AssessmentDocumentScreen() {
     };
   }, [
     data.school,
+    data.teacherName,
     currentClass,
     currentAssessment,
     currentObjectives,
@@ -130,19 +133,16 @@ export default function AssessmentDocumentScreen() {
   const handleExportExcel = async () => {
     try {
       setExportingFormat('excel');
-      const buffer = await generateAssessmentExcel(exportPayload);
-      const filename = `Evaluation_${currentClass.name.replace(/\s+/g, '_')}_${currentAssessment.competency.replace(/\s+/g, '_')}_${currentAssessment.date.replace(/[/\\:]/g, '-')}.xlsx`;
-      downloadFile(
-        buffer,
+      const csvData = generateAssessmentExcel(exportPayload);
+      const filename = `Evaluation_${currentClass.name.replace(/\s+/g, '_')}_${currentAssessment.competency.replace(/\s+/g, '_')}_${currentAssessment.date.replace(/[/\\:]/g, '-')}.csv`;
+      await downloadFile(
+        csvData,
         filename,
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'text/csv;charset=utf-8',
       );
-      if (Platform.OS !== 'web') {
-        Alert.alert('Export Excel réussi', `Le fichier ${filename} a été généré.`);
-      }
     } catch (error) {
-      console.error('Erreur export Excel:', error);
-      Alert.alert('Erreur', 'Impossible de générer le fichier Excel.');
+      console.error('Erreur export CSV:', error);
+      Alert.alert('Erreur', 'Impossible de générer le fichier CSV.');
     } finally {
       setExportingFormat(null);
     }
@@ -153,14 +153,11 @@ export default function AssessmentDocumentScreen() {
       setExportingFormat('docx');
       const blob = await generateAssessmentDocx(exportPayload);
       const filename = `Evaluation_${currentClass.name.replace(/\s+/g, '_')}_${currentAssessment.competency.replace(/\s+/g, '_')}_${currentAssessment.date.replace(/[/\\:]/g, '-')}.docx`;
-      downloadFile(
+      await downloadFile(
         blob,
         filename,
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       );
-      if (Platform.OS !== 'web') {
-        Alert.alert('Export Word réussi', `Le document ${filename} a été généré.`);
-      }
     } catch (error) {
       console.error('Erreur export Word:', error);
       Alert.alert('Erreur', 'Impossible de générer le document Word.');
@@ -169,11 +166,12 @@ export default function AssessmentDocumentScreen() {
     }
   };
 
-  const printReport = () => {
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      window.print();
-    } else {
-      shareReport();
+  const printReport = async () => {
+    try {
+      await exportAssessmentPdf(exportPayload);
+    } catch (error) {
+      console.error('Erreur impression/PDF:', error);
+      Alert.alert('Erreur', 'Impossible de générer le document PDF.');
     }
   };
 
@@ -198,7 +196,7 @@ export default function AssessmentDocumentScreen() {
       <View style={styles.actionsBar}>
         <View style={styles.primaryButtons}>
           <Button
-            label={exportingFormat === 'excel' ? 'Génération Excel…' : 'Exporter Excel (.xlsx)'}
+            label={exportingFormat === 'excel' ? 'Génération CSV…' : 'Exporter CSV (.csv)'}
             icon={exportingFormat === 'excel' ? 'loader' : 'file-text'}
             onPress={handleExportExcel}
             disabled={exportingFormat !== null}
@@ -220,7 +218,7 @@ export default function AssessmentDocumentScreen() {
         <Surface style={styles.loadingBanner}>
           <ActivityIndicator size="small" color={colors.primary} />
           <Text style={[styles.loadingText, { color: colors.foreground }]}>
-            Préparation du fichier {exportingFormat === 'excel' ? 'Excel (.xlsx)' : 'Word (.docx)'} en cours…
+          Préparation du fichier {exportingFormat === 'excel' ? 'CSV (.csv)' : 'Word (.docx)'} en cours…
           </Text>
         </Surface>
       )}
@@ -229,8 +227,13 @@ export default function AssessmentDocumentScreen() {
       <Surface style={[styles.sheet, { backgroundColor: '#FFFFFF', borderColor: colors.border }]}>
         {/* Document Header */}
         <Text style={styles.docHeaderLine1}>
-          Établissement : <Text style={styles.bold}>{data.school.name}</Text> | Niveau :{' '}
-          <Text style={styles.bold}>{currentClass.level}</Text>
+          Établissement : <Text style={styles.bold}>{data.school.name || '—'}</Text> | Niveau :{' '}
+          <Text style={styles.bold}>{currentClass.level || '—'}</Text>
+          {data.teacherName ? (
+            <>
+              {' '}| Enseignant(e) : <Text style={styles.bold}>{data.teacherName}</Text>
+            </>
+          ) : null}
         </Text>
 
         <Text style={styles.docHeaderLine2}>

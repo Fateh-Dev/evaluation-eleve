@@ -64,6 +64,7 @@ export type School = {
 
 export type AppState = {
   school: School;
+  teacherName: string;
   academicYear: string;
   classes: ClassItem[];
   activeClassId: string;
@@ -77,6 +78,7 @@ export type AppState = {
 
 export type AppDataContextValue = {
   school: School;
+  teacherName: string;
   academicYear: string;
   classes: ClassItem[];
   activeClassId: string;
@@ -103,6 +105,11 @@ export type AppDataContextValue = {
   classRemediation: string;
   statistics: AssessmentStatistics[];
 
+  // Profile / Settings Actions
+  updateTeacherName: (name: string) => void;
+  updateSchool: (school: Partial<School> & { academicYear?: string }) => void;
+  resetAllData: () => void;
+
   // Class Actions
   createClass: (input: { name: string; level: string; academicYear?: string; competencyIds?: string[] }) => string;
   setActiveClass: (classId: string) => void;
@@ -113,6 +120,7 @@ export type AppDataContextValue = {
     pupils: Array<Pick<Pupil, 'registrationNumber' | 'firstName' | 'lastName' | 'dateOfBirth'>>,
     targetClassId?: string,
   ) => { imported: number; skipped: number };
+  deletePupil: (pupilId: string) => void;
   getPupilsForClass: (classId: string) => Pupil[];
 
   // Assessment / Competency Actions
@@ -168,248 +176,29 @@ export type AppDataContextValue = {
   markSynced: () => void;
 };
 
-const STORAGE_KEY = '@teacher-assessment/app-state-v3';
+const STORAGE_KEY = '@teacher-assessment/app-state-v4';
 
-// 34 Pupils from the official Algerian class reference (notation_names_11_objectifs.docx)
-const seedPupilNames2AS = [
-  ['Aberbed', 'Rami'],
-  ['Idir', 'Maria'],
-  ['Ait Oudia', 'Mohamed Salah Eddine Reda'],
-  ['Bermila', 'Aya'],
-  ['Belaifa', 'Ilhem'],
-  ['Ben Ammar', 'Abdelkader Wassim'],
-  ['Ben Nounas', 'Nedjib'],
-  ['Boulezghar', 'Nourhane'],
-  ['Boudjaddar', 'Achref Abdellah'],
-  ['Tlidjane', 'Salima'],
-  ['Touati', 'El Hadj Faiez'],
-  ['Tounsi', 'Meriem'],
-  ['Hadj Cherif', 'Abdelghani'],
-  ['Haddad', 'Nour'],
-  ['Khecheba', 'Yahia'],
-  ['Khelif', 'Abdelnour'],
-  ['Khoudja', 'Wessam'],
-  ['Reghdoud', 'Aya Zohra'],
-  ['Seri', 'Abdellaslam'],
-  ['Slaimia', 'Yousra'],
-  ['Tadjine', 'Ikram'],
-  ['Tayeb El Rahman', 'Hana'],
-  ['Abron', 'Tasnim'],
-  ['Assous', 'Adhem'],
-  ['Ghendouzi', 'Zineddine'],
-  ['Kehli', 'Somia'],
-  ['Keraz', 'Soheib'],
-  ['Mahamdou', 'Ali Lotfi'],
-  ['Messaoui', 'Omnia'],
-  ['Messaoudane', 'Walid'],
-  ['Helal', 'Aya'],
-  ['Yallaoui Bembina', 'Nour El Houda'],
-  ['Youkhesef', 'Imene'],
-  ['Youssefi', 'Ala'],
-];
-
-const seedPupilNames1AS = [
-  ['Amir', 'Mohamed Mehdi'],
-  ['Amziane', 'Mokhtar'],
-  ['Brahimi', 'Yasser Fadi'],
-  ['Belarbi', 'Iyad Nasrallah'],
-  ['Belkaid', 'Alaa'],
-  ['Ben Amara', 'Bilal'],
-  ['Ben Aïfa', 'Abdelilah Samir'],
-  ['Ben Nâama', 'Hibet Errahmane'],
-  ['Bouzabia', 'Zineb'],
-  ['Bouflouh', 'Ibrahim El Khalil'],
-  ['Toumi', 'Abdelbasset'],
-  ['Harrach', 'Fatima Zahra Meriem'],
-  ['Khemissat', 'Rehab'],
-  ['Khouadji', 'Anis'],
-  ['Drioueb', 'Tayeb El Amine'],
-  ['Douieb', 'Mohamed Wassim'],
-  ['Zebaïri', 'Adlane'],
-  ['Sahli', 'Bachir'],
-  ['Slatni', 'Imad'],
-  ['Smaïli', 'Djamila'],
-];
-
-function createSeedState(): AppState {
-  const class2ASId = 'class-2as-lph2';
-  const class1ASId = 'class-1as-st1';
-
-  const classes: ClassItem[] = [
-    {
-      id: class2ASId,
-      name: '2AS LPH2',
-      level: '2AS LPH',
-      academicYear: '2026-2027',
-      active: true,
-    },
-    {
-      id: class1ASId,
-      name: '1AS ST1',
-      level: '1AS ST',
-      academicYear: '2026-2027',
-      active: false,
-    },
-  ];
-
-  const pupils: Pupil[] = [
-    ...seedPupilNames2AS.map(([lastName, firstName], index) => ({
-      id: `pupil-2as-${String(index + 1).padStart(2, '0')}`,
-      registrationNumber: String(index + 1).padStart(2, '0'),
-      firstName,
-      lastName,
-      classId: class2ASId,
-    })),
-    ...seedPupilNames1AS.map(([lastName, firstName], index) => ({
-      id: `pupil-1as-${String(index + 1).padStart(2, '0')}`,
-      registrationNumber: String(index + 1).padStart(2, '0'),
-      firstName,
-      lastName,
-      classId: class1ASId,
-    })),
-  ];
-
-  // Assessments for 2AS LPH2
-  const assessment2ASEcritId = '55555555-5555-4555-8555-555555555555';
-  const assessment2ASOralId = 'assessment-2as-oral-1';
-  const assessment2ASProdId = 'assessment-2as-prod-1';
-
-  // Assessments for 1AS ST1
-  const assessment1ASEcritId = 'assessment-1as-ecrit-1';
-
-  const assessments: Assessment[] = [
-    {
-      id: assessment2ASEcritId,
-      classId: class2ASId,
-      title: 'Compréhension de l’écrit',
-      date: '28/09/2026',
-      subject: 'Français',
-      level: '2AS LPH',
-      competency: 'Compréhension de l’écrit',
-      support: 'Des extraits écrits',
-      sessionObjectives: 'Comprendre et interpréter des textes écrits en vue',
-      status: 'InProgress',
-    },
-    {
-      id: assessment2ASOralId,
-      classId: class2ASId,
-      title: 'Compréhension de l’oral — Le reportage',
-      date: '05/10/2026',
-      subject: 'Français',
-      level: '2AS LPH',
-      competency: 'Compréhension de l’oral',
-      support: 'Document sonore / audiovisuel',
-      sessionObjectives: 'Écouter et comprendre un document oral en vue de restituer les informations principales',
-      status: 'Draft',
-    },
-    {
-      id: assessment2ASProdId,
-      classId: class2ASId,
-      title: 'Production de l’écrit — Synthèse',
-      date: '12/10/2026',
-      subject: 'Français',
-      level: '2AS LPH',
-      competency: 'Production de l’écrit',
-      support: 'Consigne d’écriture et grille critériée',
-      sessionObjectives: 'Rédiger un texte explicatif structuré',
-      status: 'Draft',
-    },
-    {
-      id: assessment1ASEcritId,
-      classId: class1ASId,
-      title: 'Compréhension de l’écrit — Discours vulgarisé',
-      date: '30/09/2026',
-      subject: 'Français',
-      level: '1AS ST',
-      competency: 'Compréhension de l’écrit',
-      support: 'Articles scientifiques vulgarisés',
-      sessionObjectives: 'Dégager les caractéristiques du texte explicatif',
-      status: 'InProgress',
-    },
-  ];
-
-  // Objectives for each assessment
-  const templateEcrit = COMPETENCY_TEMPLATES.find((t) => t.id === 'comprehension-ecrite')!;
-  const templateOral = COMPETENCY_TEMPLATES.find((t) => t.id === 'comprehension-orale')!;
-  const templateProd = COMPETENCY_TEMPLATES.find((t) => t.id === 'production-ecrite')!;
-
-  const objectives: Record<string, Objective[]> = {
-    [assessment2ASEcritId]: templateEcrit.defaultObjectives.map((desc, idx) => ({
-      id: `obj-2as-ecrit-${idx + 1}`,
-      assessmentId: assessment2ASEcritId,
-      order: idx + 1,
-      description: desc,
-    })),
-    [assessment2ASOralId]: templateOral.defaultObjectives.map((desc, idx) => ({
-      id: `obj-2as-oral-${idx + 1}`,
-      assessmentId: assessment2ASOralId,
-      order: idx + 1,
-      description: desc,
-    })),
-    [assessment2ASProdId]: templateProd.defaultObjectives.map((desc, idx) => ({
-      id: `obj-2as-prod-${idx + 1}`,
-      assessmentId: assessment2ASProdId,
-      order: idx + 1,
-      description: desc,
-    })),
-    [assessment1ASEcritId]: templateEcrit.defaultObjectives.slice(0, 6).map((desc, idx) => ({
-      id: `obj-1as-ecrit-${idx + 1}`,
-      assessmentId: assessment1ASEcritId,
-      order: idx + 1,
-      description: desc,
-    })),
-  };
-
-  // Seed Evaluations for 2AS LPH2 Ecrit
-  const evaluations: AppState['evaluations'] = {
-    [assessment2ASEcritId]: {},
-    [assessment2ASOralId]: {},
-    [assessment2ASProdId]: {},
-    [assessment1ASEcritId]: {},
-  };
-
-  const pupils2AS = pupils.filter((p) => p.classId === class2ASId);
-  pupils2AS.forEach((pupil, pupilIndex) => {
-    evaluations[assessment2ASEcritId][pupil.id] = {};
-    objectives[assessment2ASEcritId].forEach((objective, objectiveIndex) => {
-      const pattern = (pupilIndex * 3 + objectiveIndex) % 9;
-      evaluations[assessment2ASEcritId][pupil.id][objective.id] =
-        pattern < 5 ? 'Acquired' : pattern < 7 ? 'PartiallyAcquired' : pattern < 8 ? 'NotAcquired' : 'NotEvaluated';
-    });
-  });
-
-  const remediations: AppState['remediations'] = {
-    [assessment2ASEcritId]: {
-      individual:
-        '• Encourager les élèves à lire régulièrement des textes à la maison afin de développer leur capacité de compréhension et d’analyse.\n• Aider l’élève à reconnaître les indices d’un texte explicatif/argumentatif/narratif.\n• Proposer des activités de langue pour travailler les procédés explicatifs.',
-      classroom:
-        '• Proposer un ou plusieurs courts extraits, portant sur des modèles discursifs différents.\n• Proposer une fiche d’exploitation ou un questionnaire porté au tableau ciblant des objectifs d’évaluation présélectionnés.',
-    },
-    [assessment2ASOralId]: {
-      individual: '• Proposer des exercices d’écoute sélective avec support audio court.',
-      classroom: '• Travailler la prise de notes lors d’une première écoute collective.',
-    },
-  };
-
+export function createEmptyState(): AppState {
   return {
     school: {
-      name: 'Abdelhamid DOUROUAZ',
-      address: 'Établissement scolaire',
-      wilaya: 'Alger',
+      name: '',
+      address: '',
+      wilaya: '',
     },
+    teacherName: '',
     academicYear: '2026-2027',
-    classes,
-    activeClassId: class2ASId,
-    pupils,
-    assessments,
-    activeAssessmentId: assessment2ASEcritId,
-    objectives,
-    evaluations,
-    remediations,
+    classes: [],
+    activeClassId: '',
+    pupils: [],
+    assessments: [],
+    activeAssessmentId: '',
+    objectives: {},
+    evaluations: {},
+    remediations: {},
   };
 }
 
-const initialState = createSeedState();
+const initialState = createEmptyState();
 
 const AppDataContext = createContext<AppDataContextValue | null>(null);
 
@@ -425,17 +214,24 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         if (stored) {
           try {
             const parsed = JSON.parse(stored) as Partial<AppState>;
-            if (parsed.classes && Array.isArray(parsed.classes) && parsed.classes.length > 0) {
-              setState((prev) => ({
-                ...prev,
-                ...parsed,
-              }));
-            } else {
-              setState(initialState);
-            }
+            setState((prev) => ({
+              ...prev,
+              ...parsed,
+              school: parsed.school ?? prev.school,
+              teacherName: parsed.teacherName ?? prev.teacherName,
+              academicYear: parsed.academicYear ?? prev.academicYear,
+              classes: Array.isArray(parsed.classes) ? parsed.classes : [],
+              pupils: Array.isArray(parsed.pupils) ? parsed.pupils : [],
+              assessments: Array.isArray(parsed.assessments) ? parsed.assessments : [],
+              objectives: parsed.objectives ?? {},
+              evaluations: parsed.evaluations ?? {},
+              remediations: parsed.remediations ?? {},
+            }));
           } catch {
-            setState(initialState);
+            setState(createEmptyState());
           }
+        } else {
+          setState(createEmptyState());
         }
       })
       .finally(() => setHydrated(true));
@@ -447,35 +243,41 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     }
   }, [hydrated, state]);
 
-  // Active class helper
+  // Active class helper (safe fallback when classes are empty)
   const activeClass = useMemo(() => {
-    return state.classes.find((c) => c.id === state.activeClassId) ?? state.classes[0] ?? {
-      id: 'default-class',
-      name: 'Classe',
-      level: 'Niveau',
-      academicYear: state.academicYear,
-    };
+    return (
+      state.classes.find((c) => c.id === state.activeClassId) ??
+      state.classes[0] ?? {
+        id: '',
+        name: 'Aucune classe',
+        level: '—',
+        academicYear: state.academicYear,
+      }
+    );
   }, [state.classes, state.activeClassId, state.academicYear]);
 
-  // Active assessment helper
+  // Active assessment helper (safe fallback when assessments are empty)
   const activeAssessment = useMemo(() => {
     const found = state.assessments.find((a) => a.id === state.activeAssessmentId);
     if (found) return found;
     // Fallback to first assessment of active class
     const classAssessments = state.assessments.filter((a) => a.classId === state.activeClassId);
-    return classAssessments[0] ?? state.assessments[0] ?? {
-      id: 'default-assessment',
-      classId: state.activeClassId,
-      title: 'Nouvelle évaluation',
-      date: new Date().toLocaleDateString('fr-FR'),
-      subject: 'Français',
-      level: activeClass.level,
-      competency: 'Compréhension de l’écrit',
-      support: '',
-      sessionObjectives: '',
-      status: 'Draft',
-    };
-  }, [state.assessments, state.activeAssessmentId, state.activeClassId, activeClass.level]);
+    return (
+      classAssessments[0] ??
+      state.assessments[0] ?? {
+        id: '',
+        classId: activeClass.id,
+        title: 'Aucune évaluation',
+        date: new Date().toLocaleDateString('fr-FR'),
+        subject: 'Français',
+        level: activeClass.level,
+        competency: '—',
+        support: '',
+        sessionObjectives: '',
+        status: 'Draft',
+      }
+    );
+  }, [state.assessments, state.activeAssessmentId, state.activeClassId, activeClass]);
 
   // Active objectives helper
   const activeObjectives = useMemo(() => {
@@ -585,15 +387,82 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     }));
   };
 
+  const updateTeacherName = (name: string) => {
+    setState((prev) => ({
+      ...prev,
+      teacherName: name.trim(),
+    }));
+    setIsDirty(true);
+    setSyncStatus('pending');
+  };
+
+  const updateSchool = (schoolData: Partial<School> & { academicYear?: string }) => {
+    setState((prev) => ({
+      ...prev,
+      school: {
+        ...prev.school,
+        ...(schoolData.name !== undefined ? { name: schoolData.name.trim() } : {}),
+        ...(schoolData.address !== undefined ? { address: schoolData.address.trim() } : {}),
+        ...(schoolData.wilaya !== undefined ? { wilaya: schoolData.wilaya.trim() } : {}),
+      },
+      ...(schoolData.academicYear !== undefined ? { academicYear: schoolData.academicYear.trim() } : {}),
+    }));
+    setIsDirty(true);
+    setSyncStatus('pending');
+  };
+
+  const resetAllData = () => {
+    const empty = createEmptyState();
+    setState(empty);
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(empty)).catch(() => undefined);
+    setIsDirty(false);
+    setSyncStatus('synced');
+  };
+
   const deleteClass = (classId: string) => {
     setState((prev) => {
       const remainingClasses = prev.classes.filter((c) => c.id !== classId);
-      if (remainingClasses.length === 0) return prev;
-      const nextActiveId = remainingClasses[0].id;
+      const nextActiveClassId = remainingClasses[0]?.id ?? '';
+
+      // Cascade delete pupils belonging to this class
+      const remainingPupils = prev.pupils.filter((p) => p.classId !== classId);
+
+      // Find assessments belonging to this class
+      const deletedAssessmentIds = new Set(
+        prev.assessments.filter((a) => a.classId === classId).map((a) => a.id),
+      );
+      const remainingAssessments = prev.assessments.filter((a) => a.classId !== classId);
+
+      // Cascade delete objectives, evaluations, remediations for those assessments
+      const nextObjectives = { ...prev.objectives };
+      const nextEvaluations = { ...prev.evaluations };
+      const nextRemediations = { ...prev.remediations };
+
+      deletedAssessmentIds.forEach((id) => {
+        delete nextObjectives[id];
+        delete nextEvaluations[id];
+        delete nextRemediations[id];
+      });
+
+      // Determine next active assessment
+      let nextActiveAssessmentId = prev.activeAssessmentId;
+      if (deletedAssessmentIds.has(prev.activeAssessmentId) || !nextActiveAssessmentId) {
+        const remainingForNextClass = remainingAssessments.filter(
+          (a) => a.classId === nextActiveClassId,
+        );
+        nextActiveAssessmentId = remainingForNextClass[0]?.id ?? remainingAssessments[0]?.id ?? '';
+      }
+
       return {
         ...prev,
         classes: remainingClasses,
-        activeClassId: prev.activeClassId === classId ? nextActiveId : prev.activeClassId,
+        activeClassId: nextActiveClassId,
+        pupils: remainingPupils,
+        assessments: remainingAssessments,
+        activeAssessmentId: nextActiveAssessmentId,
+        objectives: nextObjectives,
+        evaluations: nextEvaluations,
+        remediations: nextRemediations,
       };
     });
     setIsDirty(true);
@@ -620,13 +489,15 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     const additions: Pupil[] = [];
 
     incoming.forEach((pupil, index) => {
-      const regNo = pupil.registrationNumber.trim();
-      const key = regNo.toLowerCase();
-      if (!regNo || existing.has(key)) {
-        skipped += 1;
-        return;
+      let regNo = pupil.registrationNumber ? pupil.registrationNumber.trim() : '';
+      if (!regNo || existing.has(regNo.toLowerCase())) {
+        let candidate = existing.size + 1;
+        while (existing.has(String(candidate).padStart(2, '0').toLowerCase()) || existing.has(String(candidate).toLowerCase())) {
+          candidate++;
+        }
+        regNo = String(candidate).padStart(2, '0');
       }
-      existing.add(key);
+      existing.add(regNo.toLowerCase());
       additions.push({
         ...pupil,
         id: `pupil-${Date.now()}-${index}`,
@@ -644,6 +515,15 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       setSyncStatus('pending');
     }
     return { imported, skipped };
+  };
+
+  const deletePupil = (pupilId: string) => {
+    setState((prev) => ({
+      ...prev,
+      pupils: prev.pupils.filter((p) => p.id !== pupilId),
+    }));
+    setIsDirty(true);
+    setSyncStatus('pending');
   };
 
   // ASSESSMENT / COMPETENCY ACTIONS
@@ -733,12 +613,28 @@ export function AppDataProvider({ children }: PropsWithChildren) {
   const deleteAssessment = (assessmentId: string) => {
     setState((prev) => {
       const remaining = prev.assessments.filter((a) => a.id !== assessmentId);
-      if (remaining.length === 0) return prev;
+      const nextObjectives = { ...prev.objectives };
+      const nextEvaluations = { ...prev.evaluations };
+      const nextRemediations = { ...prev.remediations };
+
+      delete nextObjectives[assessmentId];
+      delete nextEvaluations[assessmentId];
+      delete nextRemediations[assessmentId];
+
+      let nextActiveAssessmentId = prev.activeAssessmentId;
+      if (prev.activeAssessmentId === assessmentId) {
+        const deletedAssessment = prev.assessments.find((a) => a.id === assessmentId);
+        const sameClassAssessments = remaining.filter((a) => a.classId === deletedAssessment?.classId);
+        nextActiveAssessmentId = sameClassAssessments[0]?.id ?? remaining[0]?.id ?? '';
+      }
+
       return {
         ...prev,
         assessments: remaining,
-        activeAssessmentId:
-          prev.activeAssessmentId === assessmentId ? remaining[0].id : prev.activeAssessmentId,
+        activeAssessmentId: nextActiveAssessmentId,
+        objectives: nextObjectives,
+        evaluations: nextEvaluations,
+        remediations: nextRemediations,
       };
     });
     setIsDirty(true);
@@ -779,11 +675,24 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       const filtered = currentList
         .filter((o) => o.id !== objectiveId)
         .map((o, idx) => ({ ...o, order: idx + 1 }));
+
+      // Clean up evaluations for this specific objective across all pupils
+      const currentAssessEval = prev.evaluations[assessmentId] ?? {};
+      const cleanedAssessEval: Record<string, Record<string, EvaluationValue>> = {};
+      for (const [pupilId, objMap] of Object.entries(currentAssessEval)) {
+        const { [objectiveId]: _, ...rest } = objMap;
+        cleanedAssessEval[pupilId] = rest;
+      }
+
       return {
         ...prev,
         objectives: {
           ...prev.objectives,
           [assessmentId]: filtered,
+        },
+        evaluations: {
+          ...prev.evaluations,
+          [assessmentId]: cleanedAssessEval,
         },
       };
     });
@@ -984,11 +893,17 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       classRemediation: activeRemediation.classroom,
       statistics,
 
+      // Profile / Settings
+      updateTeacherName,
+      updateSchool,
+      resetAllData,
+
       // Methods
       createClass,
       setActiveClass,
       deleteClass,
       addPupils,
+      deletePupil,
       getPupilsForClass,
       createAssessment,
       setActiveAssessment,

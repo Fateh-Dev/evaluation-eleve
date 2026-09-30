@@ -1,7 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AppHeader, Button, Screen, SectionTitle, Surface } from '@/components/AppShell';
 import { useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
@@ -15,149 +15,212 @@ export default function AssessmentsScreen() {
     ? data.assessments
     : data.assessments.filter((a) => a.classId === selectedClassId);
 
+  const handleDeleteAssessment = (assessmentId: string, assessmentTitle: string) => {
+    Alert.alert(
+      'Supprimer la compétence',
+      `Êtes-vous sûr de vouloir supprimer l’évaluation "${assessmentTitle}" ?\n\nToutes les notes et objectifs associés seront définitivement effacés.`,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: () => {
+            data.deleteAssessment(assessmentId);
+            Alert.alert('Compétence supprimée', 'L’évaluation a été supprimée.');
+          },
+        },
+      ],
+    );
+  };
+
   return (
     <Screen>
       <AppHeader eyebrow="Suivi pédagogique" title="Évaluations & Compétences" />
 
       {/* Class Filter Bar */}
-      <View style={styles.filterSection}>
-        <Text style={[styles.filterLabel, { color: colors.mutedForeground }]}>FILTRER PAR CLASSE</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.classChips}>
-          <Pressable
-            onPress={() => setSelectedClassId('all')}
-            style={[
-              styles.chip,
-              {
-                backgroundColor: selectedClassId === 'all' ? colors.primary : colors.card,
-                borderColor: selectedClassId === 'all' ? colors.primary : colors.border,
-              },
-            ]}
-          >
-            <Text
+      {data.classes.length > 0 && (
+        <View style={styles.filterSection}>
+          <Text style={[styles.filterLabel, { color: colors.mutedForeground }]}>FILTRER PAR CLASSE</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.classChips}>
+            <Pressable
+              onPress={() => setSelectedClassId('all')}
               style={[
-                styles.chipText,
-                { color: selectedClassId === 'all' ? colors.primaryForeground : colors.foreground },
+                styles.chip,
+                {
+                  backgroundColor: selectedClassId === 'all' ? colors.primary : colors.card,
+                  borderColor: selectedClassId === 'all' ? colors.primary : colors.border,
+                },
               ]}
             >
-              Toutes ({data.assessments.length})
-            </Text>
-          </Pressable>
-
-          {data.classes.map((cls) => {
-            const count = data.getAssessmentsForClass(cls.id).length;
-            const isSelected = selectedClassId === cls.id;
-            return (
-              <Pressable
-                key={cls.id}
-                onPress={() => setSelectedClassId(cls.id)}
+              <Text
                 style={[
-                  styles.chip,
-                  {
-                    backgroundColor: isSelected ? colors.primary : colors.card,
-                    borderColor: isSelected ? colors.primary : colors.border,
-                  },
+                  styles.chipText,
+                  { color: selectedClassId === 'all' ? colors.primaryForeground : colors.foreground },
                 ]}
               >
-                <Text
+                Toutes ({data.assessments.length})
+              </Text>
+            </Pressable>
+
+            {data.classes.map((cls) => {
+              const count = data.getAssessmentsForClass(cls.id).length;
+              const isSelected = selectedClassId === cls.id;
+              return (
+                <Pressable
+                  key={cls.id}
+                  onPress={() => setSelectedClassId(cls.id)}
                   style={[
-                    styles.chipText,
-                    { color: isSelected ? colors.primaryForeground : colors.foreground },
+                    styles.chip,
+                    {
+                      backgroundColor: isSelected ? colors.primary : colors.card,
+                      borderColor: isSelected ? colors.primary : colors.border,
+                    },
                   ]}
                 >
-                  {cls.name} ({count})
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-      </View>
+                  <Text
+                    style={[
+                      styles.chipText,
+                      { color: isSelected ? colors.primaryForeground : colors.foreground },
+                    ]}
+                  >
+                    {cls.name} ({count})
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
 
-      <Button
-        label="Nouvelle compétence / évaluation"
-        icon="plus"
-        onPress={() => router.push('/assessments/new')}
-      />
+      {data.classes.length > 0 && (
+        <Button
+          label="Nouvelle compétence / évaluation"
+          icon="plus"
+          onPress={() => router.push('/assessments/new')}
+        />
+      )}
 
       <SectionTitle
         title={`Compétences (${filteredAssessments.length})`}
-        action="+ Ajouter"
+        action={data.classes.length > 0 ? '+ Ajouter' : undefined}
         onAction={() => router.push('/assessments/new')}
       />
 
-      {/* List of Assessments / Competencies */}
-      <View style={styles.assessmentsList}>
-        {filteredAssessments.map((item) => {
-          const itemClass = data.classes.find((c) => c.id === item.classId);
-          const objList = data.getObjectivesForAssessment(item.id);
-          const classPupils = data.getPupilsForClass(item.classId);
-          const stats = data.getStatisticsForAssessment(item.id);
-          const evaluatedTotal = stats.reduce((sum, s) => sum + s.evaluated, 0);
-          const totalPossible = Math.max(classPupils.length * objList.length, 1);
-          const progressPercent = Math.round((evaluatedTotal / totalPossible) * 100);
+      {/* List of Assessments / Competencies / Empty State */}
+      {data.classes.length === 0 ? (
+        <Surface style={styles.emptyContainer}>
+          <Feather name="layers" size={32} color={colors.mutedForeground} />
+          <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
+            Aucune classe disponible
+          </Text>
+          <Text style={[styles.emptySubtitle, { color: colors.mutedForeground }]}>
+            Vous devez d’abord créer au moins une classe pour pouvoir y ajouter des compétences et évaluations.
+          </Text>
+          <Button
+            label="Créer une classe"
+            icon="plus"
+            onPress={() => router.push('/classes')}
+          />
+        </Surface>
+      ) : filteredAssessments.length === 0 ? (
+        <Surface style={styles.emptyContainer}>
+          <Feather name="award" size={32} color={colors.mutedForeground} />
+          <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
+            Aucune compétence enregistrée
+          </Text>
+          <Text style={[styles.emptySubtitle, { color: colors.mutedForeground }]}>
+            {selectedClassId === 'all'
+              ? 'Créez votre première compétence d’évaluation pour commencer à noter vos élèves.'
+              : 'Aucune compétence pour cette classe. Cliquez sur "+ Ajouter" pour en créer une.'}
+          </Text>
+          <Button
+            label="Créer une compétence"
+            icon="plus"
+            onPress={() => router.push(`/assessments/new${selectedClassId !== 'all' ? `?classId=${selectedClassId}` : ''}`)}
+          />
+        </Surface>
+      ) : (
+        <View style={styles.assessmentsList}>
+          {filteredAssessments.map((item) => {
+            const itemClass = data.classes.find((c) => c.id === item.classId);
+            const objList = data.getObjectivesForAssessment(item.id);
+            const classPupils = data.getPupilsForClass(item.classId);
+            const stats = data.getStatisticsForAssessment(item.id);
+            const evaluatedTotal = stats.reduce((sum, s) => sum + s.evaluated, 0);
+            const totalPossible = Math.max(classPupils.length * objList.length, 1);
+            const progressPercent = Math.round((evaluatedTotal / totalPossible) * 100);
 
-          return (
-            <Surface key={item.id} style={styles.assessmentCard}>
-              <View style={styles.cardTop}>
-                <View style={styles.badgeRow}>
-                  <View style={[styles.classPill, { backgroundColor: colors.secondary }]}>
-                    <Text style={[styles.classPillText, { color: colors.foreground }]}>
-                      {itemClass?.name ?? item.level}
-                    </Text>
+            return (
+              <Surface key={item.id} style={styles.assessmentCard}>
+                <View style={styles.cardTop}>
+                  <View style={styles.badgeRow}>
+                    <View style={[styles.classPill, { backgroundColor: colors.secondary }]}>
+                      <Text style={[styles.classPillText, { color: colors.foreground }]}>
+                        {itemClass?.name ?? item.level}
+                      </Text>
+                    </View>
+                    <View style={[styles.compPill, { backgroundColor: colors.accent }]}>
+                      <Text style={[styles.compPillText, { color: colors.accentForeground }]}>
+                        {item.competency}
+                      </Text>
+                    </View>
                   </View>
-                  <View style={[styles.compPill, { backgroundColor: colors.accent }]}>
-                    <Text style={[styles.compPillText, { color: colors.accentForeground }]}>
-                      {item.competency}
-                    </Text>
-                  </View>
+                  <Text style={[styles.progressNumber, { color: colors.primary }]}>
+                    {progressPercent}%
+                  </Text>
                 </View>
-                <Text style={[styles.progressNumber, { color: colors.primary }]}>
-                  {progressPercent}%
-                </Text>
-              </View>
 
-              <Text style={[styles.assessmentTitle, { color: colors.foreground }]}>
-                {item.title}
-              </Text>
+                <Text style={[styles.assessmentTitle, { color: colors.foreground }]}>
+                  {item.title}
+                </Text>
 
-              <View style={styles.metaRow}>
-                <Text style={[styles.metaText, { color: colors.mutedForeground }]}>
-                  {objList.length} objectifs
-                </Text>
-                <Text style={[styles.metaDot, { color: colors.mutedForeground }]}>•</Text>
-                <Text style={[styles.metaText, { color: colors.mutedForeground }]}>
-                  {classPupils.length} élèves
-                </Text>
-                <Text style={[styles.metaDot, { color: colors.mutedForeground }]}>•</Text>
-                <Text style={[styles.metaText, { color: colors.mutedForeground }]}>
-                  {item.date}
-                </Text>
-              </View>
+                <View style={styles.metaRow}>
+                  <Text style={[styles.metaText, { color: colors.mutedForeground }]}>
+                    {objList.length} objectifs
+                  </Text>
+                  <Text style={[styles.metaDot, { color: colors.mutedForeground }]}>•</Text>
+                  <Text style={[styles.metaText, { color: colors.mutedForeground }]}>
+                    {classPupils.length} élèves
+                  </Text>
+                  <Text style={[styles.metaDot, { color: colors.mutedForeground }]}>•</Text>
+                  <Text style={[styles.metaText, { color: colors.mutedForeground }]}>
+                    {item.date}
+                  </Text>
+                </View>
 
-              <View style={styles.cardActions}>
-                <Button
-                  label="Évaluer"
-                  icon="check-square"
-                  compact
-                  onPress={() => {
-                    data.setActiveAssessment(item.id);
-                    router.push(`/assessments/${item.id}`);
-                  }}
-                />
-                <Button
-                  label="Document & Export"
-                  icon="file-text"
-                  compact
-                  secondary
-                  onPress={() => {
-                    data.setActiveAssessment(item.id);
-                    router.push(`/assessments/${item.id}/document`);
-                  }}
-                />
-              </View>
-            </Surface>
-          );
-        })}
-      </View>
+                <View style={styles.cardActions}>
+                  <Button
+                    label="Évaluer"
+                    icon="check-square"
+                    compact
+                    onPress={() => {
+                      data.setActiveAssessment(item.id);
+                      router.push(`/assessments/${item.id}`);
+                    }}
+                  />
+                  <Button
+                    label="Document & Export"
+                    icon="file-text"
+                    compact
+                    secondary
+                    onPress={() => {
+                      data.setActiveAssessment(item.id);
+                      router.push(`/assessments/${item.id}/document`);
+                    }}
+                  />
+                  <Pressable
+                    onPress={() => handleDeleteAssessment(item.id, item.title)}
+                    hitSlop={8}
+                    style={[styles.deleteBtn, { backgroundColor: colors.errorSurface }]}
+                  >
+                    <Feather name="trash-2" size={15} color={colors.errorForeground} />
+                  </Pressable>
+                </View>
+              </Surface>
+            );
+          })}
+        </View>
+      )}
     </Screen>
   );
 }
@@ -245,7 +308,34 @@ const styles = StyleSheet.create({
   },
   cardActions: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
     marginTop: 4,
+  },
+  deleteBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyContainer: {
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    borderRadius: 16,
+    marginTop: 10,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  emptySubtitle: {
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 6,
   },
 });

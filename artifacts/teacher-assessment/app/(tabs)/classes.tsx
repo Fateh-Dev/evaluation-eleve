@@ -60,9 +60,22 @@ export default function ClassesScreen() {
     router.push(`/classes/${createdId}`);
   };
 
-  const handleSelectClass = (classId: string) => {
-    data.setActiveClass(classId);
-    router.push(`/classes/${classId}`);
+  const handleDeleteClass = (classId: string, className: string) => {
+    Alert.alert(
+      'Supprimer la classe',
+      `Êtes-vous sûr de vouloir supprimer la classe "${className}" ?\n\nAttention : Tous les élèves, évaluations et notes de cette classe seront définitivement supprimés.`,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: () => {
+            data.deleteClass(classId);
+            Alert.alert('Classe supprimée', `La classe ${className} a été supprimée.`);
+          },
+        },
+      ],
+    );
   };
 
   return (
@@ -75,7 +88,7 @@ export default function ClassesScreen() {
           <Text style={[styles.summaryLabel, { color: colors.mutedForeground }]}>ANNÉE EN COURS</Text>
           <Text style={[styles.summaryTitle, { color: colors.foreground }]}>{data.academicYear}</Text>
           <Text style={[styles.summaryNote, { color: colors.mutedForeground }]}>
-            {data.classes.length} classes enregistrées
+            {data.classes.length} classe{data.classes.length > 1 ? 's' : ''} enregistrée{data.classes.length > 1 ? 's' : ''}
           </Text>
         </View>
         <View style={[styles.summaryIcon, { backgroundColor: colors.accent }]}>
@@ -90,82 +103,113 @@ export default function ClassesScreen() {
         onAction={() => setModalVisible(true)}
       />
 
-      {/* Classes List */}
-      <View style={styles.classesList}>
-        {data.classes.map((cls) => {
-          const classPupils = data.getPupilsForClass(cls.id);
-          const classAssessments = data.getAssessmentsForClass(cls.id);
-          const isActive = cls.id === data.activeClassId;
+      {/* Classes List / Empty State */}
+      {data.classes.length === 0 ? (
+        <Surface style={styles.emptyContainer}>
+          <Feather name="layers" size={32} color={colors.mutedForeground} />
+          <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
+            Aucune classe enregistrée
+          </Text>
+          <Text style={[styles.emptySubtitle, { color: colors.mutedForeground }]}>
+            Créez votre première classe (ex: 2AS LPH, 1AS ST) pour commencer à gérer vos élèves et leurs compétences.
+          </Text>
+          <Button
+            label="Créer ma première classe"
+            icon="plus"
+            onPress={() => setModalVisible(true)}
+          />
+        </Surface>
+      ) : (
+        <View style={styles.classesList}>
+          {data.classes.map((cls) => {
+            const classPupils = data.getPupilsForClass(cls.id);
+            const classAssessments = data.getAssessmentsForClass(cls.id);
+            const isActive = cls.id === data.activeClassId;
 
-          return (
-            <Pressable
-              key={cls.id}
-              onPress={() => handleSelectClass(cls.id)}
-              style={({ pressed }) => [
-                styles.classCard,
-                {
-                  backgroundColor: colors.card,
-                  borderColor: isActive ? colors.primary : colors.border,
-                  borderWidth: isActive ? 2 : 1,
-                  opacity: pressed ? 0.85 : 1,
-                },
-              ]}
-            >
-              <View
-                style={[
-                  styles.classIcon,
-                  { backgroundColor: isActive ? colors.accent : colors.secondary },
+            return (
+              <Pressable
+                key={cls.id}
+                onPress={() => handleSelectClass(cls.id)}
+                style={({ pressed }) => [
+                  styles.classCard,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: isActive ? colors.primary : colors.border,
+                    borderWidth: isActive ? 2 : 1,
+                    opacity: pressed ? 0.85 : 1,
+                  },
                 ]}
               >
-                <Text style={[styles.classLevel, { color: isActive ? colors.primary : colors.foreground }]}>
-                  {cls.level}
-                </Text>
-              </View>
-
-              <View style={styles.classCopy}>
-                <View style={styles.classNameRow}>
-                  <Text style={[styles.className, { color: colors.foreground }]}>{cls.name}</Text>
-                  {isActive && (
-                    <View style={[styles.activePill, { backgroundColor: colors.accent }]}>
-                      <Text style={[styles.activeText, { color: colors.accentForeground }]}>Active</Text>
-                    </View>
-                  )}
+                <View
+                  style={[
+                    styles.classIcon,
+                    { backgroundColor: isActive ? colors.accent : colors.secondary },
+                  ]}
+                >
+                  <Text style={[styles.classLevel, { color: isActive ? colors.primary : colors.foreground }]}>
+                    {cls.level}
+                  </Text>
                 </View>
 
-                <Text style={[styles.classMeta, { color: colors.mutedForeground }]}>
-                  {classPupils.length} élèves · {classAssessments.length} compétence{classAssessments.length > 1 ? 's' : ''}
-                </Text>
+                <View style={styles.classCopy}>
+                  <View style={styles.classNameRow}>
+                    <Text style={[styles.className, { color: colors.foreground }]}>{cls.name}</Text>
+                    {isActive && (
+                      <View style={[styles.activePill, { backgroundColor: colors.accent }]}>
+                        <Text style={[styles.activeText, { color: colors.accentForeground }]}>Active</Text>
+                      </View>
+                    )}
+                  </View>
 
-                <View style={styles.competenciesPreview}>
-                  {classAssessments.slice(0, 3).map((a) => (
-                    <View
-                      key={a.id}
-                      style={[styles.competencyTag, { backgroundColor: colors.secondary }]}
-                    >
-                      <Text style={[styles.competencyTagText, { color: colors.foreground }]} numberOfLines={1}>
-                        {a.competency}
+                  <Text style={[styles.classMeta, { color: colors.mutedForeground }]}>
+                    {classPupils.length} élève{classPupils.length > 1 ? 's' : ''} · {classAssessments.length} compétence{classAssessments.length > 1 ? 's' : ''}
+                  </Text>
+
+                  <View style={styles.competenciesPreview}>
+                    {classAssessments.slice(0, 3).map((a) => (
+                      <View
+                        key={a.id}
+                        style={[styles.competencyTag, { backgroundColor: colors.secondary }]}
+                      >
+                        <Text style={[styles.competencyTagText, { color: colors.foreground }]} numberOfLines={1}>
+                          {a.competency}
+                        </Text>
+                      </View>
+                    ))}
+                    {classAssessments.length > 3 && (
+                      <Text style={[styles.moreCount, { color: colors.mutedForeground }]}>
+                        +{classAssessments.length - 3}
                       </Text>
-                    </View>
-                  ))}
-                  {classAssessments.length > 3 && (
-                    <Text style={[styles.moreCount, { color: colors.mutedForeground }]}>
-                      +{classAssessments.length - 3}
-                    </Text>
-                  )}
+                    )}
+                  </View>
                 </View>
-              </View>
 
-              <Feather name="chevron-right" size={20} color={colors.mutedForeground} />
-            </Pressable>
-          );
-        })}
-      </View>
+                <View style={styles.cardActionsRow}>
+                  <Pressable
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      handleDeleteClass(cls.id, cls.name);
+                    }}
+                    hitSlop={8}
+                    style={[styles.deleteButton, { backgroundColor: colors.errorSurface }]}
+                  >
+                    <Feather name="trash-2" size={16} color={colors.errorForeground} />
+                  </Pressable>
+                  <Feather name="chevron-right" size={20} color={colors.mutedForeground} />
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
 
-      <Button
-        label="Créer une nouvelle classe"
-        icon="plus"
-        onPress={() => setModalVisible(true)}
-      />
+      {data.classes.length > 0 && (
+        <Button
+          label="Créer une nouvelle classe"
+          icon="plus"
+          onPress={() => setModalVisible(true)}
+        />
+      )}
 
       {/* Creation Modal */}
       <Modal visible={modalVisible} transparent animationType="slide">
@@ -564,5 +608,36 @@ const styles = StyleSheet.create({
   objectivePreview: {
     fontSize: 10.5,
     lineHeight: 15,
+  },
+  cardActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  deleteButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyContainer: {
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    borderRadius: 16,
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  emptySubtitle: {
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 6,
   },
 });

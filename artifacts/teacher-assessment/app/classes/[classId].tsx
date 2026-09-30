@@ -1,7 +1,16 @@
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  Alert,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { AppHeader, Button, Screen, SectionTitle, Surface } from '@/components/AppShell';
 import { useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
@@ -25,6 +34,116 @@ export default function ClassDetailScreen() {
   }, [data.assessments, currentClass.id]);
 
   const [activeTab, setActiveTab] = useState<'competencies' | 'pupils'>('competencies');
+
+  // Add Pupil Modal State
+  const [pupilModalVisible, setPupilModalVisible] = useState(false);
+  const [newPupilLastName, setNewPupilLastName] = useState('');
+  const [newPupilFirstName, setNewPupilFirstName] = useState('');
+  const [newPupilRegNo, setNewPupilRegNo] = useState('');
+  const [newPupilDob, setNewPupilDob] = useState('');
+
+  const openAddPupilModal = () => {
+    const nextNum = String(classPupils.length + 1).padStart(2, '0');
+    setNewPupilRegNo(nextNum);
+    setNewPupilLastName('');
+    setNewPupilFirstName('');
+    setNewPupilDob('');
+    setPupilModalVisible(true);
+  };
+
+  const handleAddPupil = () => {
+    if (!newPupilLastName.trim() || !newPupilFirstName.trim()) {
+      Alert.alert('Champs obligatoires', 'Veuillez saisir le nom et le prénom de l’élève.');
+      return;
+    }
+    const result = data.addPupils(
+      [
+        {
+          lastName: newPupilLastName.trim(),
+          firstName: newPupilFirstName.trim(),
+          registrationNumber: newPupilRegNo.trim() || String(classPupils.length + 1).padStart(2, '0'),
+          dateOfBirth: newPupilDob.trim() || undefined,
+        },
+      ],
+      currentClass.id,
+    );
+    if (result.imported > 0) {
+      setPupilModalVisible(false);
+      Alert.alert('Élève ajouté', `${newPupilLastName.trim()} ${newPupilFirstName.trim()} a été ajouté(e) avec succès.`);
+    } else {
+      Alert.alert('Attention', 'Impossible d’ajouter cet élève.');
+    }
+  };
+
+  const handleDeletePupil = (pupilId: string, pupilName: string) => {
+    Alert.alert(
+      'Supprimer l’élève',
+      `Êtes-vous sûr de vouloir retirer ${pupilName} de la classe ${currentClass.name} ?`,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: () => {
+            data.deletePupil(pupilId);
+          },
+        },
+      ],
+    );
+  };
+
+  const handleDeleteClass = () => {
+    Alert.alert(
+      'Supprimer la classe',
+      `Êtes-vous sûr de vouloir supprimer définitivement la classe "${currentClass.name}" ?\n\nTous les élèves, évaluations et notes de cette classe seront effacés.`,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: () => {
+            data.deleteClass(currentClass.id);
+            Alert.alert('Classe supprimée', `La classe ${currentClass.name} a été supprimée.`);
+            router.replace('/classes');
+          },
+        },
+      ],
+    );
+  };
+
+  const handleDeleteAssessment = (assessmentId: string, assessmentTitle: string) => {
+    Alert.alert(
+      'Supprimer la compétence',
+      `Êtes-vous sûr de vouloir supprimer l’évaluation "${assessmentTitle}" ?\n\nToutes les notes et objectifs associés seront définitivement effacés.`,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: () => {
+            data.deleteAssessment(assessmentId);
+            Alert.alert('Compétence supprimée', 'L’évaluation a été supprimée.');
+          },
+        },
+      ],
+    );
+  };
+
+  if (!currentClass || !currentClass.id) {
+    return (
+      <Screen>
+        <AppHeader eyebrow="Classes" title="Classe introuvable" onBack={() => router.back()} />
+        <Surface style={styles.emptyCard}>
+          <Feather name="alert-circle" size={32} color={colors.mutedForeground} />
+          <Text style={[styles.emptyTitle, { color: colors.foreground }]}>Cette classe n’existe pas</Text>
+          <Text style={[styles.emptySubtitle, { color: colors.mutedForeground }]}>
+            Elle a peut-être été supprimée ou n’a pas encore été créée.
+          </Text>
+          <Button label="Retour aux classes" icon="arrow-left" onPress={() => router.replace('/classes')} />
+        </Surface>
+      </Screen>
+    );
+  }
 
   return (
     <Screen>
@@ -112,78 +231,104 @@ export default function ClassDetailScreen() {
             onAction={() => router.push(`/assessments/new?classId=${currentClass.id}`)}
           />
 
-          <View style={styles.assessmentList}>
-            {classAssessments.map((item) => {
-              const objList = data.getObjectivesForAssessment(item.id);
-              const stats = data.getStatisticsForAssessment(item.id);
-              const evaluatedTotal = stats.reduce((sum, s) => sum + s.evaluated, 0);
-              const totalPossible = Math.max(classPupils.length * objList.length, 1);
-              const progressPercent = Math.round((evaluatedTotal / totalPossible) * 100);
+          {classAssessments.length === 0 ? (
+            <Surface style={styles.emptyCard}>
+              <Feather name="award" size={28} color={colors.mutedForeground} />
+              <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
+                Aucune compétence pour cette classe
+              </Text>
+              <Text style={[styles.emptySubtitle, { color: colors.mutedForeground }]}>
+                Ajoutez une première compétence pour commencer l’évaluation des élèves de {currentClass.name}.
+              </Text>
+              <Button
+                label="Ajouter une compétence"
+                icon="plus"
+                onPress={() => router.push(`/assessments/new?classId=${currentClass.id}`)}
+              />
+            </Surface>
+          ) : (
+            <View style={styles.assessmentList}>
+              {classAssessments.map((item) => {
+                const objList = data.getObjectivesForAssessment(item.id);
+                const stats = data.getStatisticsForAssessment(item.id);
+                const evaluatedTotal = stats.reduce((sum, s) => sum + s.evaluated, 0);
+                const totalPossible = Math.max(classPupils.length * objList.length, 1);
+                const progressPercent = Math.round((evaluatedTotal / totalPossible) * 100);
 
-              return (
-                <Surface key={item.id} style={styles.assessmentCard}>
-                  <View style={styles.assessmentCardHeader}>
-                    <View style={styles.headerLeft}>
-                      <View style={[styles.competencyBadge, { backgroundColor: colors.accent }]}>
-                        <Text style={[styles.competencyBadgeText, { color: colors.accentForeground }]}>
-                          {item.competency}
+                return (
+                  <Surface key={item.id} style={styles.assessmentCard}>
+                    <View style={styles.assessmentCardHeader}>
+                      <View style={styles.headerLeft}>
+                        <View style={[styles.competencyBadge, { backgroundColor: colors.accent }]}>
+                          <Text style={[styles.competencyBadgeText, { color: colors.accentForeground }]}>
+                            {item.competency}
+                          </Text>
+                        </View>
+                        <Text style={[styles.assessmentTitle, { color: colors.foreground }]}>
+                          {item.title}
                         </Text>
                       </View>
-                      <Text style={[styles.assessmentTitle, { color: colors.foreground }]}>
-                        {item.title}
+                      <Text style={[styles.progressNumber, { color: colors.primary }]}>
+                        {progressPercent}%
                       </Text>
                     </View>
-                    <Text style={[styles.progressNumber, { color: colors.primary }]}>
-                      {progressPercent}%
-                    </Text>
-                  </View>
 
-                  <View style={styles.metaRow}>
-                    <Text style={[styles.metaText, { color: colors.mutedForeground }]}>
-                      {objList.length} objectifs
-                    </Text>
-                    <Text style={[styles.metaDot, { color: colors.mutedForeground }]}>•</Text>
-                    <Text style={[styles.metaText, { color: colors.mutedForeground }]}>
-                      {item.support || 'Support standard'}
-                    </Text>
-                    <Text style={[styles.metaDot, { color: colors.mutedForeground }]}>•</Text>
-                    <Text style={[styles.metaText, { color: colors.mutedForeground }]}>
-                      {item.date}
-                    </Text>
-                  </View>
+                    <View style={styles.metaRow}>
+                      <Text style={[styles.metaText, { color: colors.mutedForeground }]}>
+                        {objList.length} objectifs
+                      </Text>
+                      <Text style={[styles.metaDot, { color: colors.mutedForeground }]}>•</Text>
+                      <Text style={[styles.metaText, { color: colors.mutedForeground }]}>
+                        {item.support || 'Support standard'}
+                      </Text>
+                      <Text style={[styles.metaDot, { color: colors.mutedForeground }]}>•</Text>
+                      <Text style={[styles.metaText, { color: colors.mutedForeground }]}>
+                        {item.date}
+                      </Text>
+                    </View>
 
-                  <View style={styles.cardActions}>
-                    <Button
-                      label="Évaluer"
-                      icon="check-square"
-                      compact
-                      onPress={() => {
-                        data.setActiveAssessment(item.id);
-                        router.push(`/assessments/${item.id}`);
-                      }}
-                    />
-                    <Button
-                      label="Exporter"
-                      icon="file-text"
-                      compact
-                      secondary
-                      onPress={() => {
-                        data.setActiveAssessment(item.id);
-                        router.push(`/assessments/${item.id}/document`);
-                      }}
-                    />
-                  </View>
-                </Surface>
-              );
-            })}
-          </View>
+                    <View style={styles.cardActions}>
+                      <Button
+                        label="Évaluer"
+                        icon="check-square"
+                        compact
+                        onPress={() => {
+                          data.setActiveAssessment(item.id);
+                          router.push(`/assessments/${item.id}`);
+                        }}
+                      />
+                      <Button
+                        label="Exporter"
+                        icon="file-text"
+                        compact
+                        secondary
+                        onPress={() => {
+                          data.setActiveAssessment(item.id);
+                          router.push(`/assessments/${item.id}/document`);
+                        }}
+                      />
+                      <Pressable
+                        onPress={() => handleDeleteAssessment(item.id, item.title)}
+                        hitSlop={8}
+                        style={[styles.deleteAssessBtn, { backgroundColor: colors.errorSurface }]}
+                      >
+                        <Feather name="trash-2" size={15} color={colors.errorForeground} />
+                      </Pressable>
+                    </View>
+                  </Surface>
+                );
+              })}
+            </View>
+          )}
 
-          <Button
-            label="Ajouter une compétence pour cette classe"
-            icon="plus"
-            secondary
-            onPress={() => router.push(`/assessments/new?classId=${currentClass.id}`)}
-          />
+          {classAssessments.length > 0 && (
+            <Button
+              label="Ajouter une compétence pour cette classe"
+              icon="plus"
+              secondary
+              onPress={() => router.push(`/assessments/new?classId=${currentClass.id}`)}
+            />
+          )}
         </View>
       )}
 
@@ -192,42 +337,69 @@ export default function ClassDetailScreen() {
         <View style={styles.tabContent}>
           <SectionTitle
             title="Élèves de la classe"
-            action="Importer"
-            onAction={() => router.push(`/classes/${currentClass.id}/import`)}
+            action="+ Ajouter un élève"
+            onAction={openAddPupilModal}
           />
 
           <View style={styles.pupilList}>
-            {classPupils.map((pupil, index) => (
-              <Pressable
-                key={pupil.id}
-                onPress={() => router.push(`/pupils/${pupil.id}`)}
-                style={[styles.pupilRow, { borderBottomColor: colors.border }]}
-              >
-                <View
-                  style={[
-                    styles.avatar,
-                    { backgroundColor: index % 2 ? colors.accent : colors.secondary },
-                  ]}
+            {classPupils.length === 0 ? (
+              <Surface style={styles.emptyPupils}>
+                <Feather name="users" size={28} color={colors.mutedForeground} />
+                <Text style={[styles.emptyTitle, { color: colors.foreground }]}>Aucun élève dans cette classe</Text>
+                <Text style={[styles.emptySubtitle, { color: colors.mutedForeground }]}>
+                  Ajoutez un premier élève ou importez la liste complète de la classe.
+                </Text>
+              </Surface>
+            ) : (
+              classPupils.map((pupil, index) => (
+                <Pressable
+                  key={pupil.id}
+                  onPress={() => router.push(`/pupils/${pupil.id}`)}
+                  style={[styles.pupilRow, { borderBottomColor: colors.border }]}
                 >
-                  <Text style={[styles.avatarText, { color: colors.foreground }]}>
-                    {pupil.lastName.charAt(0)}
-                    {pupil.firstName.charAt(0)}
-                  </Text>
-                </View>
-                <View style={styles.pupilCopy}>
-                  <Text style={[styles.pupilName, { color: colors.foreground }]}>
-                    {pupil.lastName} {pupil.firstName}
-                  </Text>
-                  <Text style={[styles.pupilMeta, { color: colors.mutedForeground }]}>
-                    N° {pupil.registrationNumber}
-                  </Text>
-                </View>
-                <Feather name="chevron-right" size={17} color={colors.mutedForeground} />
-              </Pressable>
-            ))}
+                  <View
+                    style={[
+                      styles.avatar,
+                      { backgroundColor: index % 2 ? colors.accent : colors.secondary },
+                    ]}
+                  >
+                    <Text style={[styles.avatarText, { color: colors.foreground }]}>
+                      {pupil.lastName.charAt(0)}
+                      {pupil.firstName.charAt(0)}
+                    </Text>
+                  </View>
+                  <View style={styles.pupilCopy}>
+                    <Text style={[styles.pupilName, { color: colors.foreground }]}>
+                      {pupil.lastName} {pupil.firstName}
+                    </Text>
+                    <Text style={[styles.pupilMeta, { color: colors.mutedForeground }]}>
+                      N° {pupil.registrationNumber} {pupil.dateOfBirth ? `· Né(e) le ${pupil.dateOfBirth}` : ''}
+                    </Text>
+                  </View>
+                  <View style={styles.rowRight}>
+                    <Pressable
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        handleDeletePupil(pupil.id, `${pupil.lastName} ${pupil.firstName}`);
+                      }}
+                      style={styles.deletePupilBtn}
+                      hitSlop={10}
+                    >
+                      <Feather name="trash-2" size={16} color={colors.destructive} />
+                    </Pressable>
+                    <Feather name="chevron-right" size={17} color={colors.mutedForeground} />
+                  </View>
+                </Pressable>
+              ))
+            )}
           </View>
 
           <View style={styles.pupilActions}>
+            <Button
+              label="+ Ajouter un élève"
+              icon="user-plus"
+              onPress={openAddPupilModal}
+            />
             <Button
               label="Importer des élèves (CSV/Texte)"
               icon="upload"
@@ -237,6 +409,125 @@ export default function ClassDetailScreen() {
           </View>
         </View>
       )}
+
+      {/* Delete Class Section */}
+      <View style={styles.deleteClassSection}>
+        <Button
+          label="Supprimer cette classe"
+          icon="trash-2"
+          secondary
+          onPress={handleDeleteClass}
+        />
+      </View>
+
+      {/* Modal: Ajouter un élève */}
+      <Modal
+        visible={pupilModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setPupilModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Surface style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={[styles.modalTitle, { color: colors.foreground }]}>
+                  Ajouter un élève
+                </Text>
+                <Text style={[styles.modalSubtitle, { color: colors.mutedForeground }]}>
+                  Classe : {currentClass.name} ({currentClass.level})
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => setPupilModalVisible(false)}
+                style={[styles.closeBtn, { backgroundColor: colors.secondary }]}
+              >
+                <Feather name="x" size={18} color={colors.foreground} />
+              </Pressable>
+            </View>
+
+            <ScrollView contentContainerStyle={styles.modalForm} showsVerticalScrollIndicator={false}>
+              <View style={styles.fieldGroup}>
+                <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>
+                  NOM DE FAMILLE *
+                </Text>
+                <TextInput
+                  placeholder="Ex. Benali"
+                  placeholderTextColor={colors.mutedForeground}
+                  value={newPupilLastName}
+                  onChangeText={setNewPupilLastName}
+                  style={[
+                    styles.textInput,
+                    { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background },
+                  ]}
+                />
+              </View>
+
+              <View style={styles.fieldGroup}>
+                <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>
+                  PRÉNOM *
+                </Text>
+                <TextInput
+                  placeholder="Ex. Amina"
+                  placeholderTextColor={colors.mutedForeground}
+                  value={newPupilFirstName}
+                  onChangeText={setNewPupilFirstName}
+                  style={[
+                    styles.textInput,
+                    { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background },
+                  ]}
+                />
+              </View>
+
+              <View style={styles.fieldGroup}>
+                <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>
+                  N° D’ORDRE / IMMATRICULATION
+                </Text>
+                <TextInput
+                  placeholder="Ex. 01"
+                  placeholderTextColor={colors.mutedForeground}
+                  value={newPupilRegNo}
+                  onChangeText={setNewPupilRegNo}
+                  keyboardType="numeric"
+                  style={[
+                    styles.textInput,
+                    { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background },
+                  ]}
+                />
+              </View>
+
+              <View style={styles.fieldGroup}>
+                <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>
+                  DATE DE NAISSANCE (FACULTATIF)
+                </Text>
+                <TextInput
+                  placeholder="Ex. 15/04/2009"
+                  placeholderTextColor={colors.mutedForeground}
+                  value={newPupilDob}
+                  onChangeText={setNewPupilDob}
+                  style={[
+                    styles.textInput,
+                    { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background },
+                  ]}
+                />
+              </View>
+
+              <View style={styles.modalButtons}>
+                <Button
+                  label="Annuler"
+                  secondary
+                  onPress={() => setPupilModalVisible(false)}
+                />
+                <Button
+                  label="Enregistrer l’élève"
+                  icon="check"
+                  onPress={handleAddPupil}
+                />
+              </View>
+            </ScrollView>
+          </Surface>
+        </View>
+      </Modal>
     </Screen>
   );
 }
@@ -374,5 +665,120 @@ const styles = StyleSheet.create({
   },
   pupilActions: {
     marginTop: 10,
+    gap: 8,
+  },
+  rowRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  deletePupilBtn: {
+    padding: 6,
+    borderRadius: 8,
+  },
+  emptyPupils: {
+    padding: 24,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginVertical: 10,
+  },
+  emptyTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  emptySubtitle: {
+    fontSize: 12.5,
+    textAlign: 'center',
+    maxWidth: 280,
+    lineHeight: 18,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 480,
+    maxHeight: '90%',
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 20,
+    gap: 16,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(128, 128, 128, 0.15)',
+    paddingBottom: 12,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  modalSubtitle: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  closeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalForm: {
+    gap: 14,
+    paddingBottom: 10,
+  },
+  fieldGroup: {
+    gap: 6,
+  },
+  inputLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  textInput: {
+    height: 44,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    fontSize: 14,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 8,
+    justifyContent: 'flex-end',
+  },
+  deleteAssessBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteClassSection: {
+    marginTop: 24,
+    marginBottom: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(128, 128, 128, 0.2)',
+  },
+  emptyCard: {
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    borderRadius: 16,
+    marginBottom: 16,
   },
 });

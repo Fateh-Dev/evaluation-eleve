@@ -1,3 +1,5 @@
+import { File as ExpoFile, Paths } from 'expo-file-system';
+import * as LegacyFS from 'expo-file-system/legacy';
 import {
   AlignmentType,
   BorderStyle,
@@ -14,8 +16,9 @@ import {
   VerticalAlign,
   WidthType,
 } from 'docx';
-import ExcelJS from 'exceljs';
-// Pure isomorphic export service (runs in Web, Mobile, and Node)
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
+import { Alert, Platform } from 'react-native';
 
 export type AssessmentExportData = {
   school: {
@@ -23,6 +26,7 @@ export type AssessmentExportData = {
     address: string;
     wilaya: string;
   };
+  teacherName?: string;
   level: string;
   className: string;
   academicYear?: string;
@@ -59,346 +63,125 @@ const COLOR_TR_ALT_BG = 'F8FAFC'; // Very soft zebra row
 const COLOR_BORDER = '7F7F7F'; // Crisp border gray
 
 /**
- * Generates an Excel (.xlsx) file matching the exact format in the reference image.
+ * Generates a CSV file compatible with Excel, matching the assessment grid format.
+ * Uses UTF-8 BOM so Excel on Windows correctly interprets accented characters.
  */
-export async function generateAssessmentExcel(data: AssessmentExportData): Promise<ArrayBuffer> {
-  const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'Teacher Competency Assessment';
-  workbook.lastModifiedBy = 'Teacher Competency Assessment';
-  workbook.created = new Date();
-  workbook.modified = new Date();
+export function generateAssessmentExcel(data: AssessmentExportData): Uint8Array {
+  const rows: string[][] = [];
 
-  const sheetName = (data.className || 'Évaluation').replace(/[:\\/?*[\]]/g, '-').slice(0, 31);
-  const ws = workbook.addWorksheet(sheetName, {
-    pageSetup: {
-      orientation: 'landscape',
-      paperSize: 9, // A4
-      fitToPage: true,
-      fitToWidth: 1,
-      fitToHeight: 0,
-      showGridLines: true,
-      margins: {
-        left: 0.4,
-        right: 0.4,
-        top: 0.5,
-        bottom: 0.5,
-        header: 0.3,
-        footer: 0.3,
-      },
-    },
-    views: [{ showGridLines: true }],
-  });
-
-  const numObjectives = data.objectives.length;
-  const totalCols = 2 + numObjectives * 3 + 3; // N°, Nom, [3 cols per obj], [3 cols for Total]
-
-  // Configure Column Widths
-  const columns: Partial<ExcelJS.Column>[] = [
-    { key: 'num', width: 6 }, // N°
-    { key: 'name', width: 30 }, // Nom et Prénom
-  ];
-  for (let i = 0; i < numObjectives; i++) {
-    columns.push({ width: 4 }); // +
-    columns.push({ width: 4 }); // ±
-    columns.push({ width: 4 }); // -
-  }
-  // Total 3 columns
-  columns.push({ width: 5 }); // Total +
-  columns.push({ width: 5 }); // Total ±
-  columns.push({ width: 5 }); // Total -
-  ws.columns = columns as ExcelJS.Column[];
-
-  let currentRow = 1;
-
-  // 1. Header Metadata: Établissement & Niveau
-  const row1 = ws.getRow(currentRow++);
-  row1.height = 24;
-  row1.getCell(1).value = `Établissement : ${data.school.name || ''}   |   Niveau : ${data.level || ''}`;
-  row1.getCell(1).font = { name: 'Calibri', size: 11, bold: true, color: { argb: `FF${COLOR_PRIMARY_HEX}` } };
-  row1.getCell(1).alignment = { vertical: 'middle', horizontal: 'left' };
-  ws.mergeCells(row1.number, 1, row1.number, totalCols);
-
-  // 2. Header Metadata: Compétence, Objectif de la séance, Support
-  const row2 = ws.getRow(currentRow++);
-  row2.height = 20;
-  row2.getCell(1).value = `Compétence : ${data.assessment.competency || ''}   |   Objectif de la séance : ${data.assessment.sessionObjectives || ''}   |   Support : ${data.assessment.support || ''}`;
-  row2.getCell(1).font = { name: 'Calibri', size: 9.5 };
-  row2.getCell(1).alignment = { vertical: 'middle', horizontal: 'left' };
-  ws.mergeCells(row2.number, 1, row2.number, totalCols);
-
-  // 3. Objectifs d'évaluation Title
-  const row3 = ws.getRow(currentRow++);
-  row3.height = 20;
-  row3.getCell(1).value = `Objectifs d’évaluation (${numObjectives} Objectifs) :`;
-  row3.getCell(1).font = { name: 'Calibri', size: 10, bold: true, color: { argb: `FF${COLOR_PRIMARY_HEX}` } };
-  row3.getCell(1).alignment = { vertical: 'middle', horizontal: 'left' };
-  ws.mergeCells(row3.number, 1, row3.number, totalCols);
-
-  // 4. Objectifs Descriptions list
+  // Header metadata
+  rows.push([
+    `Établissement : ${data.school.name || ''}`,
+    `Niveau : ${data.level || ''}`,
+    `Enseignant(e) : ${data.teacherName || ''}`,
+  ]);
+  rows.push([
+    `CompÃ©tence : ${data.assessment.competency || ''}`,
+    `Objectif de la sÃ©ance : ${data.assessment.sessionObjectives || ''}`,
+    `Support : ${data.assessment.support || ''}`,
+  ]);
+  rows.push([`Objectifs d'Ã©valuation (${data.objectives.length} Objectifs) :`]);
   data.objectives.forEach((obj, idx) => {
-    const objRow = ws.getRow(currentRow++);
-    objRow.height = 17;
-    const numStr = String(obj.order || idx + 1).padStart(2, '0');
-    objRow.getCell(1).value = `${numStr}. ${obj.description}`;
-    objRow.getCell(1).font = { name: 'Calibri', size: 9 };
-    objRow.getCell(1).alignment = { vertical: 'middle', horizontal: 'left' };
-    ws.mergeCells(objRow.number, 1, objRow.number, totalCols);
+    const num = String(obj.order || idx + 1).padStart(2, '0');
+    rows.push([`${num}. ${obj.description}`]);
   });
+  rows.push([]); // spacer
 
-  // Empty spacer
-  currentRow++;
+  // â”€â”€ Grid title â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  rows.push([`Grille d'analyse des rÃ©sultats â€” Classe : ${data.className || ''}`]);
 
-  // 5. Grid Title: Grille d’analyse des résultats — Classe : ...
-  const gridTitleRow = ws.getRow(currentRow++);
-  gridTitleRow.height = 24;
-  gridTitleRow.getCell(1).value = `Grille d’analyse des résultats — Classe : ${data.className || ''}`;
-  gridTitleRow.getCell(1).font = { name: 'Calibri', size: 11, bold: true, color: { argb: `FF${COLOR_PRIMARY_HEX}` } };
-  gridTitleRow.getCell(1).alignment = { vertical: 'middle', horizontal: 'left' };
-  ws.mergeCells(gridTitleRow.number, 1, gridTitleRow.number, totalCols);
-
-  // TABLE HEADERS (3 rows)
-  const tblHeaderR1 = currentRow++;
-  const tblHeaderR2 = currentRow++;
-  const tblHeaderR3 = currentRow++;
-
-  const r1 = ws.getRow(tblHeaderR1);
-  const r2 = ws.getRow(tblHeaderR2);
-  const r3 = ws.getRow(tblHeaderR3);
-
-  r1.height = 22;
-  r2.height = 20;
-  r3.height = 18;
-
-  const thinBorder: Partial<ExcelJS.Borders> = {
-    top: { style: 'thin', color: { argb: 'FF000000' } },
-    left: { style: 'thin', color: { argb: 'FF000000' } },
-    bottom: { style: 'thin', color: { argb: 'FF000000' } },
-    right: { style: 'thin', color: { argb: 'FF000000' } },
-  };
-
-  // Header 1: N° (Merged across R1, R2, R3)
-  r1.getCell(1).value = 'N°';
-  ws.mergeCells(tblHeaderR1, 1, tblHeaderR3, 1);
-
-  // Header 2: Nom et Prénom (Merged across R1, R2, R3)
-  r1.getCell(2).value = 'Nom et Prénom';
-  ws.mergeCells(tblHeaderR1, 2, tblHeaderR3, 2);
-
-  // Header 3: Objectifs d’évaluation (Merged across all objective columns)
-  const objStartCol = 3;
-  const objEndCol = objStartCol + numObjectives * 3 - 1;
-  r1.getCell(objStartCol).value = 'Objectifs d’évaluation';
-  ws.mergeCells(tblHeaderR1, objStartCol, tblHeaderR1, objEndCol);
-
-  // Header 4: Total (Merged across 3 total columns in R1 & R2)
-  const totalStartCol = objEndCol + 1;
-  const totalEndCol = totalStartCol + 2;
-  r1.getCell(totalStartCol).value = 'Total';
-  ws.mergeCells(tblHeaderR1, totalStartCol, tblHeaderR2, totalEndCol);
-
-  // Row 2: Objective numbers (01, 02, ..., 11)
+  // â”€â”€ Table header row 1 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const objHeaders: string[] = [];
   data.objectives.forEach((obj, idx) => {
-    const colIdx = objStartCol + idx * 3;
-    const numLabel = String(obj.order || idx + 1).padStart(2, '0');
-    r2.getCell(colIdx).value = numLabel;
-    ws.mergeCells(tblHeaderR2, colIdx, tblHeaderR2, colIdx + 2);
+    const num = String(obj.order || idx + 1).padStart(2, '0');
+    objHeaders.push(`Obj ${num} (+)`, `Obj ${num} (Â±)`, `Obj ${num} (-)`);
   });
+  rows.push(['NÂ°', 'Nom et PrÃ©nom', ...objHeaders, 'Total (+)', 'Total (Â±)', 'Total (-)']);
 
-  // Row 3: Sub-headers (+, ±, -) for each objective and for Total
-  for (let idx = 0; idx < numObjectives; idx++) {
-    const colIdx = objStartCol + idx * 3;
-    r3.getCell(colIdx).value = '+';
-    r3.getCell(colIdx + 1).value = '±';
-    r3.getCell(colIdx + 2).value = '-';
-  }
-  r3.getCell(totalStartCol).value = '+';
-  r3.getCell(totalStartCol + 1).value = '±';
-  r3.getCell(totalStartCol + 2).value = '-';
+  // â”€â”€ Pupil data rows â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const objectiveTotals = data.objectives.map(() => ({ plus: 0, pm: 0, minus: 0 }));
+  let grandPlus = 0;
+  let grandPm = 0;
+  let grandMinus = 0;
 
-  // Apply styling to Table Headers
-  for (let r = tblHeaderR1; r <= tblHeaderR3; r++) {
-    const row = ws.getRow(r);
-    for (let c = 1; c <= totalCols; c++) {
-      const cell = row.getCell(c);
-      cell.border = thinBorder;
-      cell.alignment = { vertical: 'middle', horizontal: 'center' };
-      cell.font = { name: 'Calibri', size: 9, bold: true };
-      if (r === tblHeaderR1 && c >= objStartCol && c <= objEndCol) {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${COLOR_HEADER_BG}` } };
-      } else if (r === tblHeaderR1 && c >= totalStartCol) {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${COLOR_HEADER_BG}` } };
-      } else {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${COLOR_SUBHEADER_BG}` } };
-      }
-    }
-  }
-
-  // PUPIL DATA ROWS
-  const firstDataRow = currentRow;
-  data.pupils.forEach((pupil, pupilIdx) => {
-    const pRow = ws.getRow(currentRow++);
-    pRow.height = 19;
-    const isAlt = pupilIdx % 2 === 1;
-
-    const regNo = pupil.registrationNumber || String(pupilIdx + 1).padStart(2, '0');
+  data.pupils.forEach((pupil, pIdx) => {
+    const regNo = pupil.registrationNumber || String(pIdx + 1).padStart(2, '0');
     const fullName = `${pupil.lastName || ''} ${pupil.firstName || ''}`.trim();
+    let pPlus = 0;
+    let pPm = 0;
+    let pMinus = 0;
 
-    pRow.getCell(1).value = regNo;
-    pRow.getCell(1).alignment = { vertical: 'middle', horizontal: 'center' };
-
-    pRow.getCell(2).value = fullName;
-    pRow.getCell(2).alignment = { vertical: 'middle', horizontal: 'left' };
-
-    let pupilPlusCount = 0;
-    let pupilPlusMinusCount = 0;
-    let pupilMinusCount = 0;
-
-    data.objectives.forEach((obj, objIdx) => {
-      const colIdx = objStartCol + objIdx * 3;
-      const evalVal = data.evaluations[pupil.id]?.[obj.id] ?? 'NotEvaluated';
-
-      const cellPlus = pRow.getCell(colIdx);
-      const cellPlusMinus = pRow.getCell(colIdx + 1);
-      const cellMinus = pRow.getCell(colIdx + 2);
-
-      if (evalVal === 'Acquired') {
-        cellPlus.value = '+';
-        pupilPlusCount++;
-      } else if (evalVal === 'PartiallyAcquired') {
-        cellPlusMinus.value = '±';
-        pupilPlusMinusCount++;
-      } else if (evalVal === 'NotAcquired') {
-        cellMinus.value = '-';
-        pupilMinusCount++;
+    const evalCells: string[] = [];
+    data.objectives.forEach((obj, oIdx) => {
+      const val = data.evaluations[pupil.id]?.[obj.id] ?? 'NotEvaluated';
+      if (val === 'Acquired') {
+        evalCells.push('+', '', '');
+        pPlus++;
+        objectiveTotals[oIdx].plus++;
+      } else if (val === 'PartiallyAcquired') {
+        evalCells.push('', 'Â±', '');
+        pPm++;
+        objectiveTotals[oIdx].pm++;
+      } else if (val === 'NotAcquired') {
+        evalCells.push('', '', '-');
+        pMinus++;
+        objectiveTotals[oIdx].minus++;
+      } else {
+        evalCells.push('', '', '');
       }
     });
 
-    // Total columns for this pupil (using Excel formulas with static count fallback)
-    const plusColLetterStart = ws.getColumn(objStartCol).letter;
-    const minusColLetterEnd = ws.getColumn(objEndCol).letter;
-    const rowNum = pRow.number;
+    grandPlus += pPlus;
+    grandPm += pPm;
+    grandMinus += pMinus;
 
-    pRow.getCell(totalStartCol).value = {
-      formula: `COUNTIF(${plusColLetterStart}${rowNum}:${minusColLetterEnd}${rowNum}, "+")`,
-      result: pupilPlusCount,
-    };
-    pRow.getCell(totalStartCol + 1).value = {
-      formula: `COUNTIF(${plusColLetterStart}${rowNum}:${minusColLetterEnd}${rowNum}, "±")`,
-      result: pupilPlusMinusCount,
-    };
-    pRow.getCell(totalStartCol + 2).value = {
-      formula: `COUNTIF(${plusColLetterStart}${rowNum}:${minusColLetterEnd}${rowNum}, "-")`,
-      result: pupilMinusCount,
-    };
-
-    // Format all cells in this pupil row
-    for (let c = 1; c <= totalCols; c++) {
-      const cell = pRow.getCell(c);
-      cell.border = thinBorder;
-      cell.font = { name: 'Calibri', size: 9, bold: c > objEndCol };
-      if (c !== 2) {
-        cell.alignment = { vertical: 'middle', horizontal: 'center' };
-      }
-      if (isAlt) {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${COLOR_TR_ALT_BG}` } };
-      }
-    }
+    rows.push([regNo, fullName, ...evalCells, String(pPlus), String(pPm), String(pMinus)]);
   });
 
-  const lastDataRow = currentRow - 1;
+  // â”€â”€ Bottom total row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const totalCells: string[] = [];
+  objectiveTotals.forEach((t) => {
+    totalCells.push(String(t.plus), String(t.pm), String(t.minus));
+  });
+  rows.push(['Total', '', ...totalCells, String(grandPlus), String(grandPm), String(grandMinus)]);
 
-  // BOTTOM TOTAL ROW
-  const totalRow = ws.getRow(currentRow++);
-  totalRow.height = 22;
-  totalRow.getCell(1).value = 'Total';
-  ws.mergeCells(totalRow.number, 1, totalRow.number, 2);
+  rows.push([]); // spacer
 
-  // Column totals using formulas
-  for (let c = objStartCol; c <= totalCols; c++) {
-    const colLetter = ws.getColumn(c).letter;
-    const cell = totalRow.getCell(c);
-
-    if (c <= objEndCol) {
-      // Find symbol for this subcol
-      const subIdx = (c - objStartCol) % 3;
-      const symbol = subIdx === 0 ? '+' : subIdx === 1 ? '±' : '-';
-      cell.value = {
-        formula: `COUNTIF(${colLetter}${firstDataRow}:${colLetter}${lastDataRow}, "${symbol}")`,
-      };
-    } else {
-      // Sum the pupil totals
-      cell.value = {
-        formula: `SUM(${colLetter}${firstDataRow}:${colLetter}${lastDataRow})`,
-      };
-    }
-  }
-
-  // Format Bottom Total Row
-  for (let c = 1; c <= totalCols; c++) {
-    const cell = totalRow.getCell(c);
-    cell.border = thinBorder;
-    cell.font = { name: 'Calibri', size: 9, bold: true };
-    cell.alignment = { vertical: 'middle', horizontal: 'center' };
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${COLOR_HEADER_BG}` } };
-  }
-
-  // Spacer
-  currentRow++;
-
-  // 6. Remediation Decisions Section
-  const decHeaderRow = ws.getRow(currentRow++);
-  decHeaderRow.height = 20;
-  decHeaderRow.getCell(1).value = 'Décisions à prendre :';
-  decHeaderRow.getCell(1).font = { name: 'Calibri', size: 10, bold: true, color: { argb: `FF${COLOR_PRIMARY_HEX}` } };
-  ws.mergeCells(decHeaderRow.number, 1, decHeaderRow.number, totalCols);
-
-  const decIndivTitle = ws.getRow(currentRow++);
-  decIndivTitle.height = 18;
-  decIndivTitle.getCell(1).value = 'A) Au plan individuel :';
-  decIndivTitle.getCell(1).font = { name: 'Calibri', size: 9.5, bold: true };
-  ws.mergeCells(decIndivTitle.number, 1, decIndivTitle.number, totalCols);
-
-  const indivLines = (data.individualRemediation || 'Aucune décision saisie.').split('\n').filter(Boolean);
-  indivLines.forEach((line) => {
-    const r = ws.getRow(currentRow++);
-    r.height = 18;
-    const text = line.startsWith('•') || line.startsWith('-') ? line : `• ${line}`;
-    r.getCell(1).value = `   ${text}`;
-    r.getCell(1).font = { name: 'Calibri', size: 9 };
-    ws.mergeCells(r.number, 1, r.number, totalCols);
+  // â”€â”€ Remediation decisions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  rows.push(['DÃ©cisions Ã  prendre :']);
+  rows.push(['A) Au plan individuel :']);
+  (data.individualRemediation || 'Aucune dÃ©cision saisie.').split('\n').filter(Boolean).forEach((line) => {
+    rows.push([`   ${line.startsWith('â€¢') || line.startsWith('-') ? line : `â€¢ ${line}`}`]);
+  });
+  rows.push(['B) Au plan de la classe :']);
+  (data.classRemediation || 'Aucune dÃ©cision saisie.').split('\n').filter(Boolean).forEach((line) => {
+    rows.push([`   ${line.startsWith('â€¢') || line.startsWith('-') ? line : `â€¢ ${line}`}`]);
   });
 
-  const decClassTitle = ws.getRow(currentRow++);
-  decClassTitle.height = 18;
-  decClassTitle.getCell(1).value = 'B) Au plan de la classe :';
-  decClassTitle.getCell(1).font = { name: 'Calibri', size: 9.5, bold: true };
-  ws.mergeCells(decClassTitle.number, 1, decClassTitle.number, totalCols);
+  // â”€â”€ Encode to CSV bytes with UTF-8 BOM â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const csvString = rows
+    .map((row) =>
+      row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','),
+    )
+    .join('\r\n');
 
-  const classLines = (data.classRemediation || 'Aucune décision saisie.').split('\n').filter(Boolean);
-  classLines.forEach((line) => {
-    const r = ws.getRow(currentRow++);
-    r.height = 18;
-    const text = line.startsWith('•') || line.startsWith('-') ? line : `• ${line}`;
-    r.getCell(1).value = `   ${text}`;
-    r.getCell(1).font = { name: 'Calibri', size: 9 };
-    ws.mergeCells(r.number, 1, r.number, totalCols);
-  });
-
-  const buffer = await workbook.xlsx.writeBuffer();
-  return buffer;
+  // UTF-8 BOM so Excel on Windows auto-detects encoding
+  const bom = '\uFEFF';
+  const encoded = new TextEncoder().encode(bom + csvString);
+  return encoded;
 }
 
 /**
  * Generates a Word (.docx) document matching the exact format in the reference image and notation document.
  */
-export async function generateAssessmentDocx(data: AssessmentExportData): Promise<Blob> {
+export async function generateAssessmentDocx(data: AssessmentExportData): Promise<Uint8Array<ArrayBuffer>> {
   const numObjectives = data.objectives.length;
 
   // Column width calculations (landscape 15840 twips - 1440 twips margins = 14400 twips available)
-  const colWNum = 440; // N°
-  const colWName = 2560; // Nom et Prénom
-  const colWObj = 320; // Each objective subcol (+, ±, -)
-  const colWTotal = 360; // Each total subcol (+, ±, -)
+  const colWNum = 440; // NÂ°
+  const colWName = 2560; // Nom et PrÃ©nom
+  const colWObj = 320; // Each objective subcol (+, Â±, -)
+  const colWTotal = 360; // Each total subcol (+, Â±, -)
 
   const borderSingle = { style: BorderStyle.SINGLE, size: 4, color: COLOR_BORDER };
   const cellBorders = {
@@ -411,9 +194,9 @@ export async function generateAssessmentDocx(data: AssessmentExportData): Promis
   const tableRows: TableRow[] = [];
 
   // ROW 1:
-  // - N° (rowSpan 3)
-  // - Nom et Prénom (rowSpan 3)
-  // - Objectifs d’évaluation (columnSpan: numObjectives * 3)
+  // - NÂ° (rowSpan 3)
+  // - Nom et PrÃ©nom (rowSpan 3)
+  // - Objectifs dâ€™Ã©valuation (columnSpan: numObjectives * 3)
   // - Total (columnSpan: 3, rowSpan: 2)
   tableRows.push(
     new TableRow({
@@ -429,7 +212,7 @@ export async function generateAssessmentDocx(data: AssessmentExportData): Promis
           children: [
             new Paragraph({
               alignment: AlignmentType.CENTER,
-              children: [new TextRun({ text: 'N°', bold: true, size: 16, font: 'Calibri' })],
+              children: [new TextRun({ text: 'NÂ°', bold: true, size: 16, font: 'Calibri' })],
             }),
           ],
         }),
@@ -442,7 +225,7 @@ export async function generateAssessmentDocx(data: AssessmentExportData): Promis
           children: [
             new Paragraph({
               alignment: AlignmentType.CENTER,
-              children: [new TextRun({ text: 'Nom et Prénom', bold: true, size: 16, font: 'Calibri' })],
+              children: [new TextRun({ text: 'Nom et PrÃ©nom', bold: true, size: 16, font: 'Calibri' })],
             }),
           ],
         }),
@@ -454,7 +237,7 @@ export async function generateAssessmentDocx(data: AssessmentExportData): Promis
           children: [
             new Paragraph({
               alignment: AlignmentType.CENTER,
-              children: [new TextRun({ text: 'Objectifs d’évaluation', bold: true, size: 17, font: 'Calibri' })],
+              children: [new TextRun({ text: 'Objectifs dâ€™Ã©valuation', bold: true, size: 17, font: 'Calibri' })],
             }),
           ],
         }),
@@ -506,11 +289,11 @@ export async function generateAssessmentDocx(data: AssessmentExportData): Promis
   );
 
   // ROW 3:
-  // - (+, ±, -) for each objective
-  // - (+, ±, -) for Total
+  // - (+, Â±, -) for each objective
+  // - (+, Â±, -) for Total
   const r3SubCells: TableCell[] = [];
   for (let idx = 0; idx < numObjectives; idx++) {
-    ['+', '±', '-'].forEach((mark) => {
+    ['+', 'Â±', '-'].forEach((mark) => {
       r3SubCells.push(
         new TableCell({
           width: { size: colWObj, type: WidthType.DXA },
@@ -528,7 +311,7 @@ export async function generateAssessmentDocx(data: AssessmentExportData): Promis
     });
   }
   // Total subcols
-  ['+', '±', '-'].forEach((mark) => {
+  ['+', 'Â±', '-'].forEach((mark) => {
     r3SubCells.push(
       new TableCell({
         width: { size: colWTotal, type: WidthType.DXA },
@@ -611,7 +394,7 @@ export async function generateAssessmentDocx(data: AssessmentExportData): Promis
         pPlus++;
         objectiveTotals[objIdx].plus++;
       } else if (evalVal === 'PartiallyAcquired') {
-        valPlusMinus = '±';
+        valPlusMinus = 'Â±';
         pPlusMinus++;
         objectiveTotals[objIdx].plusMinus++;
       } else if (evalVal === 'NotAcquired') {
@@ -732,13 +515,13 @@ export async function generateAssessmentDocx(data: AssessmentExportData): Promis
   // Document Paragraphs
   const paragraphs: Paragraph[] = [];
 
-  // Line 1: Établissement & Niveau
+  // Line 1: Établissement, Niveau & Enseignant
   paragraphs.push(
     new Paragraph({
       spacing: { after: 70 },
       children: [
         new TextRun({
-          text: `Établissement : ${data.school.name || ''} | Niveau : ${data.level || ''}`,
+          text: `Établissement : ${data.school.name || ''} | Niveau : ${data.level || ''}${data.teacherName ? ` | Enseignant(e) : ${data.teacherName}` : ''}`,
           bold: true,
           size: 22, // 11pt
           color: COLOR_PRIMARY_HEX,
@@ -748,14 +531,14 @@ export async function generateAssessmentDocx(data: AssessmentExportData): Promis
     }),
   );
 
-  // Line 2: Compétence | Objectif | Support
+  // Line 2: CompÃ©tence | Objectif | Support
   paragraphs.push(
     new Paragraph({
       spacing: { after: 120 },
       children: [
-        new TextRun({ text: 'Compétence : ', bold: true, size: 19, font: 'Calibri' }),
+        new TextRun({ text: 'CompÃ©tence : ', bold: true, size: 19, font: 'Calibri' }),
         new TextRun({ text: `${data.assessment.competency || ''}   |   `, size: 19, font: 'Calibri' }),
-        new TextRun({ text: 'Objectif de la séance : ', bold: true, size: 19, font: 'Calibri' }),
+        new TextRun({ text: 'Objectif de la sÃ©ance : ', bold: true, size: 19, font: 'Calibri' }),
         new TextRun({ text: `${data.assessment.sessionObjectives || ''}   |   `, size: 19, font: 'Calibri' }),
         new TextRun({ text: 'Support : ', bold: true, size: 19, font: 'Calibri' }),
         new TextRun({ text: `${data.assessment.support || ''}`, size: 19, font: 'Calibri' }),
@@ -763,13 +546,13 @@ export async function generateAssessmentDocx(data: AssessmentExportData): Promis
     }),
   );
 
-  // Line 3: Objectifs d’évaluation Title
+  // Line 3: Objectifs dâ€™Ã©valuation Title
   paragraphs.push(
     new Paragraph({
       spacing: { after: 50 },
       children: [
         new TextRun({
-          text: `Objectifs d’évaluation (${numObjectives} Objectifs) :`,
+          text: `Objectifs dâ€™Ã©valuation (${numObjectives} Objectifs) :`,
           bold: true,
           size: 20,
           color: COLOR_PRIMARY_HEX,
@@ -794,13 +577,13 @@ export async function generateAssessmentDocx(data: AssessmentExportData): Promis
     );
   });
 
-  // Table Title: Grille d’analyse des résultats
+  // Table Title: Grille dâ€™analyse des rÃ©sultats
   paragraphs.push(
     new Paragraph({
       spacing: { before: 140, after: 80 },
       children: [
         new TextRun({
-          text: `Grille d’analyse des résultats — Classe : ${data.className || ''}`,
+          text: `Grille dâ€™analyse des rÃ©sultats â€” Classe : ${data.className || ''}`,
           bold: true,
           size: 22,
           color: COLOR_PRIMARY_HEX,
@@ -822,7 +605,7 @@ export async function generateAssessmentDocx(data: AssessmentExportData): Promis
       spacing: { before: 180, after: 70 },
       children: [
         new TextRun({
-          text: 'Décisions à prendre :',
+          text: 'DÃ©cisions Ã  prendre :',
           bold: true,
           size: 20,
           color: COLOR_PRIMARY_HEX,
@@ -843,9 +626,9 @@ export async function generateAssessmentDocx(data: AssessmentExportData): Promis
     }),
   ];
 
-  const indivLines = (data.individualRemediation || 'Aucune décision saisie.').split('\n').filter(Boolean);
+  const indivLines = (data.individualRemediation || 'Aucune dÃ©cision saisie.').split('\n').filter(Boolean);
   indivLines.forEach((line) => {
-    const text = line.startsWith('•') || line.startsWith('-') ? line : `• ${line}`;
+    const text = line.startsWith('â€¢') || line.startsWith('-') ? line : `â€¢ ${line}`;
     decisionParagraphs.push(
       new Paragraph({
         spacing: { after: 30 },
@@ -869,9 +652,9 @@ export async function generateAssessmentDocx(data: AssessmentExportData): Promis
     }),
   );
 
-  const classLines = (data.classRemediation || 'Aucune décision saisie.').split('\n').filter(Boolean);
+  const classLines = (data.classRemediation || 'Aucune dÃ©cision saisie.').split('\n').filter(Boolean);
   classLines.forEach((line) => {
-    const text = line.startsWith('•') || line.startsWith('-') ? line : `• ${line}`;
+    const text = line.startsWith('â€¢') || line.startsWith('-') ? line : `â€¢ ${line}`;
     decisionParagraphs.push(
       new Paragraph({
         spacing: { after: 30 },
@@ -904,19 +687,43 @@ export async function generateAssessmentDocx(data: AssessmentExportData): Promis
     ],
   });
 
-  return await Packer.toBlob(doc);
+  const buffer = await Packer.toBuffer(doc);
+  // Copy into a plain ArrayBuffer so TypeScript is happy (no SharedArrayBuffer)
+  const plain = new ArrayBuffer(buffer.byteLength);
+  new Uint8Array(plain).set(new Uint8Array(buffer));
+  return new Uint8Array(plain);
+}
+
+
+/**
+ * Converts any supported content type to a Uint8Array.
+ */
+async function toUint8Array(content: Blob | ArrayBuffer | Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
+  if (content instanceof Uint8Array) {
+    // Ensure the underlying buffer is a plain ArrayBuffer (not SharedArrayBuffer)
+    const buf = new ArrayBuffer(content.byteLength);
+    new Uint8Array(buf).set(content);
+    return new Uint8Array(buf);
+  }
+  if (content instanceof ArrayBuffer) {
+    return new Uint8Array(content);
+  }
+  // Blob
+  const ab = await content.arrayBuffer();
+  return new Uint8Array(ab);
 }
 
 /**
- * Triggers a browser download for the generated blob or arraybuffer.
+ * Triggers a browser download (on web) or saves and opens native sharing (on mobile).
  */
-export function downloadFile(
+export async function downloadFile(
   content: Blob | ArrayBuffer | Uint8Array,
   filename: string,
   mimeType: string,
-) {
-  if (typeof window !== 'undefined' && typeof document !== 'undefined') {
-    const blob = content instanceof Blob ? content : new Blob([content as any], { type: mimeType });
+): Promise<void> {
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof document !== 'undefined') {
+    const bytes = await toUint8Array(content);
+    const blob = new Blob([bytes], { type: mimeType });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -925,8 +732,366 @@ export function downloadFile(
     link.click();
     document.body.removeChild(link);
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-  } else {
-    // If running inside React Native native app, we can use Share or FileSystem
-    console.log(`Download triggered for ${filename} (${mimeType})`);
+    return;
+  }
+
+  // Native Mobile (Android & iOS) — use legacy writeAsStringAsync (base64) which is proven stable
+  try {
+    const bytes = await toUint8Array(content);
+    // Convert bytes to base64 string in chunks to avoid call stack overflow
+    let binary = '';
+    const chunkSize = 8192;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+    }
+    const base64 = btoa(binary);
+
+    const cacheDir = LegacyFS.cacheDirectory ?? Paths.cache.uri;
+    const fileUri = `${cacheDir}${filename}`;
+    await LegacyFS.writeAsStringAsync(fileUri, base64, {
+      encoding: LegacyFS.EncodingType.Base64,
+    });
+
+    const isAvailable = await Sharing.isAvailableAsync();
+    if (isAvailable) {
+      await Sharing.shareAsync(fileUri, {
+        mimeType,
+        dialogTitle: `Enregistrer ou partager ${filename}`,
+        UTI: filename.endsWith('.docx')
+          ? 'com.microsoft.word.doc'
+          : filename.endsWith('.csv')
+          ? 'public.comma-separated-values-text'
+          : 'public.data',
+      });
+    } else {
+      Alert.alert('Fichier généré', `Le document a été créé : ${filename}`);
+    }
+  } catch (error) {
+    console.error('Erreur téléchargement mobile:', error);
+    Alert.alert('Erreur', "Impossible d'enregistrer le fichier sur cet appareil.");
   }
 }
+
+/**
+ * Generates formatted HTML for PDF printing and exporting.
+ */
+export function generateAssessmentPdfHtml(data: AssessmentExportData): string {
+  const numObjectives = data.objectives.length;
+
+  // Compute totals
+  const objTotals = data.objectives.map((obj) => {
+    let plus = 0;
+    let plusMinus = 0;
+    let minus = 0;
+    data.pupils.forEach((pupil) => {
+      const val = data.evaluations[pupil.id]?.[obj.id];
+      if (val === 'Acquired') plus++;
+      else if (val === 'PartiallyAcquired') plusMinus++;
+      else if (val === 'NotAcquired') minus++;
+    });
+    return { plus, plusMinus, minus };
+  });
+
+  let grandPlus = 0;
+  let grandPlusMinus = 0;
+  let grandMinus = 0;
+
+  const pupilRows = data.pupils.map((pupil, pIndex) => {
+    let pPlus = 0;
+    let pPlusMinus = 0;
+    let pMinus = 0;
+
+    const objCells = data.objectives.map((obj) => {
+      const val = data.evaluations[pupil.id]?.[obj.id];
+      const isPlus = val === 'Acquired';
+      const isPlusMinus = val === 'PartiallyAcquired';
+      const isMinus = val === 'NotAcquired';
+
+      if (isPlus) { pPlus++; grandPlus++; }
+      if (isPlusMinus) { pPlusMinus++; grandPlusMinus++; }
+      if (isMinus) { pMinus++; grandMinus++; }
+
+      return `
+        <td class="col-val col-plus">${isPlus ? '+' : ''}</td>
+        <td class="col-val col-pm">${isPlusMinus ? 'Â±' : ''}</td>
+        <td class="col-val col-minus">${isMinus ? '-' : ''}</td>
+      `;
+    }).join('');
+
+    return `
+      <tr>
+        <td class="col-num">${pupil.registrationNumber || pIndex + 1}</td>
+        <td class="col-name">${pupil.lastName} ${pupil.firstName}</td>
+        ${objCells}
+        <td class="col-total col-plus">${pPlus}</td>
+        <td class="col-total col-pm">${pPlusMinus}</td>
+        <td class="col-total col-minus">${pMinus}</td>
+      </tr>
+    `;
+  }).join('');
+
+  const objHeaders = data.objectives.map((obj) => `
+    <th colspan="3" class="th-obj">Obj ${String(obj.order).padStart(2, '0')}</th>
+  `).join('');
+
+  const subHeaders = data.objectives.map(() => `
+    <th class="th-sub col-plus">+</th>
+    <th class="th-sub col-pm">Â±</th>
+    <th class="th-sub col-minus">-</th>
+  `).join('');
+
+  const totalCells = objTotals.map((tot) => `
+    <td class="col-total col-plus">${tot.plus}</td>
+    <td class="col-total col-pm">${tot.plusMinus}</td>
+    <td class="col-total col-minus">${tot.minus}</td>
+  `).join('');
+
+  const indivItems = (data.individualRemediation || 'Aucune dÃ©cision saisie.').split('\n').filter(Boolean)
+    .map(line => `<li>${line.replace(/^[â€¢\-]\s*/, '')}</li>`).join('');
+
+  const classItems = (data.classRemediation || 'Aucune dÃ©cision saisie.').split('\n').filter(Boolean)
+    .map(line => `<li>${line.replace(/^[â€¢\-]\s*/, '')}</li>`).join('');
+
+  return `
+    <!DOCTYPE html>
+    <html lang="fr">
+    <head>
+      <meta charset="utf-8">
+      <title>Ã‰valuation â€” ${data.className} â€” ${data.assessment.title}</title>
+      <style>
+        @page {
+          size: A4 landscape;
+          margin: 8mm;
+        }
+        * {
+          box-sizing: border-box;
+          margin: 0;
+          padding: 0;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+        }
+        body {
+          padding: 8mm;
+          color: #1a202c;
+          background: #ffffff;
+          font-size: 11px;
+          line-height: 1.3;
+        }
+        .header-box {
+          border: 1px solid #1f4e78;
+          background: #f0f4f8;
+          padding: 8px 12px;
+          border-radius: 4px;
+          margin-bottom: 8px;
+        }
+        .header-top {
+          display: flex;
+          justify-content: space-between;
+          font-size: 12px;
+          margin-bottom: 4px;
+          font-weight: 600;
+          color: #1f4e78;
+        }
+        .meta-line {
+          font-size: 11px;
+          margin-top: 3px;
+        }
+        .meta-label {
+          font-weight: 700;
+          color: #2d3748;
+        }
+        .objectives-box {
+          background: #ffffff;
+          border: 1px solid #e2e8f0;
+          padding: 6px 10px;
+          border-radius: 4px;
+          margin-bottom: 10px;
+        }
+        .objectives-title {
+          font-weight: 700;
+          color: #1f4e78;
+          margin-bottom: 4px;
+          font-size: 11px;
+        }
+        .objectives-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 2px 14px;
+        }
+        .objective-item {
+          font-size: 10px;
+          color: #4a5568;
+        }
+        .section-title {
+          font-size: 13px;
+          font-weight: 800;
+          color: #1f4e78;
+          margin-bottom: 6px;
+        }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-bottom: 12px;
+          table-layout: fixed;
+        }
+        th, td {
+          border: 1px solid #718096;
+          padding: 3px 2px;
+          text-align: center;
+          font-size: 9.5px;
+        }
+        th {
+          background-color: #d9e1f2;
+          color: #1f4e78;
+          font-weight: 700;
+        }
+        .th-num { width: 32px; }
+        .th-name { width: 140px; text-align: left; padding-left: 6px; }
+        .col-num { font-weight: 600; color: #4a5568; }
+        .col-name { text-align: left; padding-left: 6px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .th-obj { font-size: 9px; }
+        .th-sub { width: 18px; font-size: 9px; background-color: #e9eef4; }
+        .col-val { font-weight: 800; font-size: 10px; }
+        .col-plus { color: #166534; }
+        .col-pm { color: #b45309; }
+        .col-minus { color: #b91c1c; }
+        .col-total { font-weight: 800; background-color: #f8fafc; }
+        .total-row {
+          background-color: #e2e8f0;
+          font-weight: 800;
+        }
+        .remediation-box {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+          margin-top: 8px;
+          page-break-inside: avoid;
+        }
+        .remed-card {
+          border: 1px solid #cbd5e1;
+          border-radius: 4px;
+          padding: 8px 10px;
+          background: #f8fafc;
+        }
+        .remed-card h4 {
+          font-size: 11px;
+          color: #1f4e78;
+          margin-bottom: 4px;
+          border-bottom: 1px solid #e2e8f0;
+          padding-bottom: 3px;
+        }
+        .remed-card ul {
+          padding-left: 14px;
+          font-size: 10px;
+          color: #334155;
+        }
+        .remed-card li {
+          margin-bottom: 2px;
+        }
+        @media print {
+          body { padding: 0; }
+          .header-box { border-color: #333; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="header-box">
+        <div class="header-top">
+          <span>Établissement : ${data.school.name || 'Établissement scolaire'}</span>
+          <span>Niveau : ${data.level || '—'}</span>
+          <span>Année scolaire : ${data.academicYear || '2026-2027'}</span>
+          <span>Enseignant(e) : ${data.teacherName || '—'}</span>
+        </div>
+        <div class="meta-line">
+          <span class="meta-label">CompÃ©tence :</span> ${data.assessment.competency} |
+          <span class="meta-label">Objectif de la sÃ©ance :</span> ${data.assessment.sessionObjectives || 'Objectifs'} |
+          <span class="meta-label">Support :</span> ${data.assessment.support || 'Support pÃ©dagogique'}
+        </div>
+      </div>
+
+      <div class="objectives-box">
+        <div class="objectives-title">Objectifs dâ€™Ã©valuation (${numObjectives} objectifs) :</div>
+        <div class="objectives-grid">
+          ${data.objectives.map(obj => `
+            <div class="objective-item"><strong>${String(obj.order).padStart(2, '0')}.</strong> ${obj.description}</div>
+          `).join('')}
+        </div>
+      </div>
+
+      <div class="section-title">Grille dâ€™analyse des rÃ©sultats â€” Classe : ${data.className}</div>
+      <table>
+        <thead>
+          <tr>
+            <th rowspan="2" class="th-num">NÂ°</th>
+            <th rowspan="2" class="th-name">Nom et PrÃ©nom</th>
+            ${objHeaders}
+            <th colspan="3" class="th-obj">Total</th>
+          </tr>
+          <tr>
+            ${subHeaders}
+            <th class="th-sub col-plus">+</th>
+            <th class="th-sub col-pm">Â±</th>
+            <th class="th-sub col-minus">-</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${pupilRows}
+          <tr class="total-row">
+            <td colspan="2" style="text-align: right; padding-right: 8px; font-weight: 800;">TOTAL CLASSE :</td>
+            ${totalCells}
+            <td class="col-total col-plus">${grandPlus}</td>
+            <td class="col-total col-pm">${grandPlusMinus}</td>
+            <td class="col-total col-minus">${grandMinus}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="remediation-box">
+        <div class="remed-card">
+          <h4>A) DÃ©cisions au plan individuel :</h4>
+          <ul>${indivItems}</ul>
+        </div>
+        <div class="remed-card">
+          <h4>B) DÃ©cisions au plan de la classe :</h4>
+          <ul>${classItems}</ul>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+}
+
+/**
+ * Directly prints or exports PDF for the assessment.
+ */
+export async function exportAssessmentPdf(data: AssessmentExportData): Promise<void> {
+  const html = generateAssessmentPdfHtml(data);
+  if (Platform.OS === 'web') {
+    await Print.printAsync({ html });
+    return;
+  }
+  try {
+    // printToFileAsync writes to a system temp URI that expo-sharing cannot read.
+    // Copy it into the app cache dir which is always accessible to sharing.
+    const { uri: tempUri } = await Print.printToFileAsync({ html });
+    const filename = `Evaluation_${(data.className || 'Classe').replace(/\s+/g, '_')}_${(data.assessment?.title || 'Evaluation').replace(/\s+/g, '_')}.pdf`;
+    const cacheDir = LegacyFS.cacheDirectory ?? Paths.cache.uri;
+    const destUri = `${cacheDir}${filename}`;
+
+    await LegacyFS.copyAsync({ from: tempUri, to: destUri });
+
+    const isAvailable = await Sharing.isAvailableAsync();
+    if (isAvailable) {
+      await Sharing.shareAsync(destUri, {
+        mimeType: 'application/pdf',
+        dialogTitle: `Enregistrer ${filename}`,
+        UTI: 'com.adobe.pdf',
+      });
+    } else {
+      Alert.alert('PDF généré', `Le PDF a été créé : ${filename}`);
+    }
+  } catch (error) {
+    console.error('Erreur génération PDF:', error);
+    Alert.alert('Erreur', 'Impossible de générer le fichier PDF.');
+  }
+}
+
