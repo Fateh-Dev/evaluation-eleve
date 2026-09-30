@@ -58,6 +58,7 @@ export default function AssessmentEvaluationScreen() {
   const [objectivesModalVisible, setObjectivesModalVisible] = useState(false);
   const [newObjectiveText, setNewObjectiveText] = useState('');
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const [hasScrolled, setHasScrolled] = useState(false);
   const mobileScrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
@@ -187,15 +188,21 @@ export default function AssessmentEvaluationScreen() {
   }
 
   return (
-    <Screen scroll={false}>
+    <Screen scroll={false} bottomPadding={20}>
       <AppHeader
-        eyebrow={`${currentClass.name || 'Classe'} · ${currentAssessment.competency}`}
+        eyebrow={hasScrolled ? undefined : `${currentClass.name || 'Classe'} · ${currentAssessment.competency}`}
         title={currentAssessment.title}
+        compact={hasScrolled}
         onBack={() => router.back()}
       />
 
+      {!hasScrolled && (
+        <View style={styles.syncRow}>
+          <SyncPill status={data.isDirty || saveMutation.isPending ? 'pending' : data.syncStatus} />
+        </View>
+      )}
+
       <View style={styles.topLine}>
-        <SyncPill status={data.isDirty || saveMutation.isPending ? 'pending' : data.syncStatus} />
         <View style={styles.topActions}>
           <Button
             label={saveMutation.isPending ? 'Envoi…' : 'Enregistrer'}
@@ -240,26 +247,28 @@ export default function AssessmentEvaluationScreen() {
         </View>
       ) : null}
 
-      <Surface style={styles.metaCard}>
-        <View style={styles.metaItem}>
-          <Text style={[styles.metaLabel, { color: colors.mutedForeground }]}>CLASSE</Text>
-          <Text style={[styles.metaValue, { color: colors.foreground }]}>{currentClass.name}</Text>
-        </View>
-        <View style={styles.metaItem}>
-          <Text style={[styles.metaLabel, { color: colors.mutedForeground }]}>COMPÉTENCE</Text>
-          <Text style={[styles.metaValue, { color: colors.foreground }]}>{currentAssessment.competency}</Text>
-        </View>
-        <View style={styles.metaItem}>
-          <Text style={[styles.metaLabel, { color: colors.mutedForeground }]}>OBJECTIFS</Text>
-          <Text style={[styles.metaValue, { color: colors.foreground }]}>{currentObjectives.length}</Text>
-        </View>
-        <View style={styles.metaItem}>
-          <Text style={[styles.metaLabel, { color: colors.mutedForeground }]}>PROGRESSION</Text>
-          <Text style={[styles.metaValue, { color: colors.primary }]}>
-            {Math.round((evaluatedTotal / total) * 100)}%
-          </Text>
-        </View>
-      </Surface>
+      {!hasScrolled && (
+        <Surface style={styles.metaCard}>
+          <View style={styles.metaItem}>
+            <Text style={[styles.metaLabel, { color: colors.mutedForeground }]}>CLASSE</Text>
+            <Text style={[styles.metaValue, { color: colors.foreground }]}>{currentClass.name}</Text>
+          </View>
+          <View style={styles.metaItem}>
+            <Text style={[styles.metaLabel, { color: colors.mutedForeground }]}>COMPÉTENCE</Text>
+            <Text style={[styles.metaValue, { color: colors.foreground }]}>{currentAssessment.competency}</Text>
+          </View>
+          <View style={styles.metaItem}>
+            <Text style={[styles.metaLabel, { color: colors.mutedForeground }]}>OBJECTIFS</Text>
+            <Text style={[styles.metaValue, { color: colors.foreground }]}>{currentObjectives.length}</Text>
+          </View>
+          <View style={styles.metaItem}>
+            <Text style={[styles.metaLabel, { color: colors.mutedForeground }]}>PROGRESSION</Text>
+            <Text style={[styles.metaValue, { color: colors.primary }]}>
+              {Math.round((evaluatedTotal / total) * 100)}%
+            </Text>
+          </View>
+        </Surface>
+      )}
 
       {/* Empty pupils banner */}
       {currentPupils.length === 0 ? (
@@ -369,7 +378,13 @@ export default function AssessmentEvaluationScreen() {
           </View>
         </ScrollView>
       ) : (
-        <ScrollView ref={mobileScrollRef} showsVerticalScrollIndicator={false} contentContainerStyle={styles.mobileContent}>
+          <ScrollView
+            ref={mobileScrollRef}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.mobileContent}
+            onScroll={(event) => setHasScrolled(event.nativeEvent.contentOffset.y > 12)}
+            scrollEventThrottle={16}
+          >
           <View style={styles.pupilNavigator}>
             <Pressable
               disabled={pupilIndex === 0}
@@ -559,6 +574,7 @@ export default function AssessmentEvaluationScreen() {
 
 const styles = StyleSheet.create({
   topLine: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12 },
+  syncRow: { marginBottom: 10 },
   savedBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, marginBottom: 10 },
   savedBannerText: { fontSize: 12, fontWeight: '700' },
   topActions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, flexShrink: 1 },

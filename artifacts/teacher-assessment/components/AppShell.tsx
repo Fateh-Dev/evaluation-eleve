@@ -4,11 +4,11 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 
-export function Screen({ children, scroll = true }: PropsWithChildren<{ scroll?: boolean }>) {
+export function Screen({ children, scroll = true, bottomPadding }: PropsWithChildren<{ scroll?: boolean; bottomPadding?: number }>) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const content = (
-    <View style={[styles.screen, { backgroundColor: colors.background, paddingTop: insets.top + 18, paddingBottom: insets.bottom + 120 }]}>
+    <View style={[styles.screen, { backgroundColor: colors.background, paddingTop: insets.top + 18, paddingBottom: insets.bottom + (bottomPadding ?? 120) }]}>
       {children}
     </View>
   );
@@ -16,13 +16,13 @@ export function Screen({ children, scroll = true }: PropsWithChildren<{ scroll?:
   return <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>{content}</ScrollView>;
 }
 
-export function AppHeader({ eyebrow, title, onBack }: { eyebrow?: string; title: string; onBack?: () => void }) {
+export function AppHeader({ eyebrow, title, onBack, compact = false }: { eyebrow?: string; title: string; onBack?: () => void; compact?: boolean }) {
   const colors = useColors();
   return (
-    <View style={styles.header}>
+    <View style={[styles.header, compact && styles.compactHeader]}>
       <View style={styles.headerText}>
         {eyebrow ? <Text style={[styles.eyebrow, { color: colors.primary }]}>{eyebrow.toUpperCase()}</Text> : null}
-        <Text style={[styles.title, { color: colors.foreground }]}>{title}</Text>
+        <Text style={[styles.title, compact && styles.compactTitle, { color: colors.foreground }]}>{title}</Text>
       </View>
       {onBack ? (
         <Pressable onPress={onBack} accessibilityRole="button" style={[styles.iconButton, { borderColor: colors.border, backgroundColor: colors.card }]}>
@@ -102,9 +102,11 @@ const styles = StyleSheet.create({
   screen: { flex: 1, width: '100%', maxWidth: 1180, alignSelf: 'center', paddingHorizontal: 20 },
   scrollContent: { flexGrow: 1 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 },
+  compactHeader: { marginBottom: 10 },
   headerText: { flex: 1 },
   eyebrow: { fontSize: 11, fontWeight: '700', letterSpacing: 1.6, marginBottom: 7 },
   title: { fontSize: 28, lineHeight: 34, fontWeight: '700', letterSpacing: -0.5 },
+  compactTitle: { fontSize: 20, lineHeight: 25 },
   iconButton: { width: 42, height: 42, borderRadius: 21, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   syncPill: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 11, paddingVertical: 8, borderRadius: 20 },
   syncDot: { width: 7, height: 7, borderRadius: 4 },
