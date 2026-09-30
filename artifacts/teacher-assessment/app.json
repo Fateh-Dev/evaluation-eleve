@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Chaibeddra Evaluation",
-    "slug": "chaibeddra-evaluation",
+    "slug": "teacher-assessment",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
