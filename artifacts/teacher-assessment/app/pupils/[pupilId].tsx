@@ -2,7 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { AppHeader, Screen, SectionTitle, Surface, ValueMark } from '@/components/AppShell';
+import { AppHeader, Button, Screen, SectionTitle, Surface, ValueMark } from '@/components/AppShell';
 import { useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
 
@@ -10,11 +10,15 @@ export default function PupilDetailScreen() {
   const colors = useColors();
   const { pupilId } = useLocalSearchParams<{ pupilId: string }>();
   const data = useAppData();
-  const pupil = data.pupils.find((item) => item.id === pupilId) ?? data.pupils[0];
+  const pupil = data.pupils.find((item) => item.id === pupilId);
+  if (!pupil) {
+    return <Screen><AppHeader title="Élève introuvable" onBack={() => router.back()} /><Button label="Retour aux élèves" icon="arrow-left" onPress={() => router.back()} /></Screen>;
+  }
   return (
     <Screen>
       <AppHeader eyebrow={`Élève · N° ${pupil.registrationNumber}`} title={`${pupil.firstName} ${pupil.lastName}`} onBack={() => router.back()} />
       <Surface style={styles.profile}><View style={[styles.avatar, { backgroundColor: colors.accent }]}><Text style={[styles.avatarText, { color: colors.foreground }]}>{pupil.firstName.charAt(0)}{pupil.lastName.charAt(0)}</Text></View><View><Text style={[styles.profileName, { color: colors.foreground }]}>{pupil.firstName} {pupil.lastName}</Text><Text style={[styles.profileMeta, { color: colors.mutedForeground }]}>{data.className} · {data.academicYear}</Text></View></Surface>
+      <Button label="Évaluer cet élève" icon="check-square" onPress={() => router.push(`/assessments/${data.assessment.id}?pupilId=${pupil.id}`)} />
       <SectionTitle title="Historique d’évaluation" />
       <Surface style={styles.historyCard}>
         <View style={styles.historyHeader}><View style={styles.historyHeading}><Text style={[styles.subject, { color: colors.primary }]}>{data.assessment.competency}</Text><Text style={[styles.historyTitle, { color: colors.foreground }]}>{data.assessment.date}</Text></View><View style={[styles.status, { backgroundColor: colors.accent }]}><Text style={[styles.statusText, { color: colors.accentForeground }]}>En cours</Text></View></View>

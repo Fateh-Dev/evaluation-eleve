@@ -78,6 +78,11 @@ export default function ClassesScreen() {
     );
   };
 
+  const handleSelectClass = (classId: string) => {
+    data.setActiveClass(classId);
+    router.push(`/classes/${classId}`);
+  };
+
   return (
     <Screen>
       <AppHeader eyebrow="Organisation pédagogique" title="Mes Classes" />

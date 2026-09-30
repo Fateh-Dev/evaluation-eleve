@@ -25,7 +25,7 @@ function displayValue(value: EvaluationValue) {
 export default function AssessmentEvaluationScreen() {
   const colors = useColors();
   const data = useAppData();
-  const { assessmentId } = useLocalSearchParams<{ assessmentId: string }>();
+  const { assessmentId, pupilId } = useLocalSearchParams<{ assessmentId: string; pupilId?: string }>();
 
   const currentAssessment = useMemo(() => {
     return (assessmentId ? data.getAssessment(assessmentId) : null) ?? data.assessment;
@@ -51,7 +51,10 @@ export default function AssessmentEvaluationScreen() {
     return data.getStatisticsForAssessment(currentAssessment.id);
   }, [data.pupils, data.objectives, data.evaluations, currentAssessment.id]);
 
-  const [pupilIndex, setPupilIndex] = useState(0);
+  const [pupilIndex, setPupilIndex] = useState(() => {
+    const index = currentPupils.findIndex((pupil) => pupil.id === pupilId);
+    return index >= 0 ? index : 0;
+  });
   const [objectivesModalVisible, setObjectivesModalVisible] = useState(false);
   const [newObjectiveText, setNewObjectiveText] = useState('');
 
