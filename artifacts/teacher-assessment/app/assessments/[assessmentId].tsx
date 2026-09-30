@@ -1,7 +1,16 @@
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useMemo, useState } from 'react';
-import { Alert, Dimensions, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Alert,
+  Dimensions,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { AppHeader, Button, Screen, SectionTitle, Surface, SyncPill, ValueMark } from '@/components/AppShell';
 import { EvaluationValue, useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
@@ -14,60 +23,309 @@ function displayValue(value: EvaluationValue) {
 export default function AssessmentEvaluationScreen() {
   const colors = useColors();
   const data = useAppData();
-  useLocalSearchParams();
+  const { assessmentId } = useLocalSearchParams<{ assessmentId: string }>();
+
+  const currentAssessment = useMemo(() => {
+    return (assessmentId ? data.getAssessment(assessmentId) : null) ?? data.assessment;
+  }, [assessmentId, data.assessments, data.assessment]);
+
+  const currentClass = useMemo(() => {
+    return data.classes.find((c) => c.id === currentAssessment.classId) ?? data.activeClass;
+  }, [data.classes, currentAssessment.classId, data.activeClass]);
+
+  const currentPupils = useMemo(() => {
+    return data.getPupilsForClass(currentAssessment.classId);
+  }, [data.pupils, currentAssessment.classId]);
+
+  const currentObjectives = useMemo(() => {
+    return data.getObjectivesForAssessment(currentAssessment.id);
+  }, [data.objectives, currentAssessment.id]);
+
+  const currentEvaluations = useMemo(() => {
+    return data.getEvaluationsForAssessment(currentAssessment.id);
+  }, [data.evaluations, currentAssessment.id]);
+
+  const currentStatistics = useMemo(() => {
+    return data.getStatisticsForAssessment(currentAssessment.id);
+  }, [data.pupils, data.objectives, data.evaluations, currentAssessment.id]);
+
   const [pupilIndex, setPupilIndex] = useState(0);
   const isDesktop = Platform.OS === 'web' && Dimensions.get('window').width >= 850;
-  const currentPupil = data.pupils[pupilIndex];
+
+  const currentPupil = currentPupils[pupilIndex] ?? currentPupils[0] ?? {
+    id: 'unknown',
+    registrationNumber: '01',
+    firstName: 'Élève',
+    lastName: '',
+    classId: currentClass.id,
+  };
+
   const saveMutation = useSaveBulkEvaluations();
-  const evaluatedTotal = data.statistics.reduce((sum, stat) => sum + stat.evaluated, 0);
-  const total = data.pupils.length * data.objectives.length;
-  const currentValues = useMemo(() => data.evaluations[currentPupil.id] ?? {}, [data.evaluations, currentPupil.id]);
+  const evaluatedTotal = currentStatistics.reduce((sum, stat) => sum + stat.evaluated, 0);
+  const total = Math.max(currentPupils.length * currentObjectives.length, 1);
+  const currentValues = useMemo(
+    () => currentEvaluations[currentPupil.id] ?? {},
+    [currentEvaluations, currentPupil.id],
+  );
 
   const confirmMarkAll = (objectiveId: string) => {
     Alert.alert('Marquer tous les élèves', 'Cette action remplacera les valeurs de la colonne sélectionnée.', [
       { text: 'Annuler', style: 'cancel' },
-      { text: 'Marquer +', onPress: () => data.setAllForObjective(objectiveId, 'Acquired') },
+      {
+        text: 'Marquer +',
+        onPress: () => data.setAllForObjective(objectiveId, 'Acquired', currentAssessment.id),
+      },
     ]);
   };
 
   const save = () => {
     data.saveDraft();
-    const entries = data.pupils.flatMap((pupil) =>
-      data.objectives.map((objective) => ({
+    const entries = currentPupils.flatMap((pupil) =>
+      currentObjectives.map((objective) => ({
         pupilId: pupil.id,
         objectiveId: objective.id,
-        value: data.evaluations[pupil.id]?.[objective.id] ?? 'NotEvaluated',
+        value: currentEvaluations[pupil.id]?.[objective.id] ?? 'NotEvaluated',
       })),
     );
-    saveMutation.mutate({ assessmentId: data.assessment.id, data: entries }, {
-      onSuccess: () => data.markSynced(),
-      onError: () => {
-        if (Platform.OS !== 'web') {
-          Alert.alert('Enregistrement local', 'Le serveur est indisponible. Votre brouillon reste disponible hors connexion.');
-        }
+    saveMutation.mutate(
+      { assessmentId: currentAssessment.id, data: entries },
+      {
+        onSuccess: () => data.markSynced(),
+        onError: () => {
+          if (Platform.OS !== 'web') {
+            Alert.alert('Enregistrement local', 'Le serveur est indisponible. Votre brouillon reste disponible hors connexion.');
+          }
+        },
       },
-    });
+    );
     if (Platform.OS !== 'web') Alert.alert('Évaluation enregistrée', 'Le brouillon est disponible hors connexion.');
   };
 
   return (
     <Screen scroll={false}>
-      <AppHeader eyebrow={`${data.assessment.subject} · ${data.className}`} title="Évaluation" onBack={() => router.back()} />
-      <View style={styles.topLine}><SyncPill status={data.isDirty || saveMutation.isPending ? 'pending' : data.syncStatus} /><View style={styles.topActions}><Button label={saveMutation.isPending ? 'Envoi…' : 'Enregistrer'} icon="save" compact onPress={save} /><Button label="Analyse" icon="bar-chart-2" compact secondary onPress={() => router.push(`/assessments/${data.assessment.id}/analysis`)} /></View></View>
-      <Surface style={styles.metaCard}><View style={styles.metaItem}><Text style={[styles.metaLabel, { color: colors.mutedForeground }]}>COMPÉTENCE</Text><Text style={[styles.metaValue, { color: colors.foreground }]}>{data.assessment.competency}</Text></View><View style={styles.metaItem}><Text style={[styles.metaLabel, { color: colors.mutedForeground }]}>OBJECTIFS</Text><Text style={[styles.metaValue, { color: colors.foreground }]}>{data.objectives.length}</Text></View><View style={styles.metaItem}><Text style={[styles.metaLabel, { color: colors.mutedForeground }]}>PROGRESSION</Text><Text style={[styles.metaValue, { color: colors.primary }]}>{Math.round((evaluatedTotal / total) * 100)}%</Text></View></Surface>
+      <AppHeader
+        eyebrow={`${currentClass.name} · ${currentAssessment.competency}`}
+        title={currentAssessment.title}
+        onBack={() => router.back()}
+      />
+
+      <View style={styles.topLine}>
+        <SyncPill status={data.isDirty || saveMutation.isPending ? 'pending' : data.syncStatus} />
+        <View style={styles.topActions}>
+          <Button
+            label={saveMutation.isPending ? 'Envoi…' : 'Enregistrer'}
+            icon="save"
+            compact
+            onPress={save}
+          />
+          <Button
+            label="Analyse"
+            icon="bar-chart-2"
+            compact
+            secondary
+            onPress={() => router.push(`/assessments/${currentAssessment.id}/analysis`)}
+          />
+          <Button
+            label="Document & Export"
+            icon="file-text"
+            compact
+            secondary
+            onPress={() => router.push(`/assessments/${currentAssessment.id}/document`)}
+          />
+        </View>
+      </View>
+
+      <Surface style={styles.metaCard}>
+        <View style={styles.metaItem}>
+          <Text style={[styles.metaLabel, { color: colors.mutedForeground }]}>CLASSE</Text>
+          <Text style={[styles.metaValue, { color: colors.foreground }]}>{currentClass.name}</Text>
+        </View>
+        <View style={styles.metaItem}>
+          <Text style={[styles.metaLabel, { color: colors.mutedForeground }]}>COMPÉTENCE</Text>
+          <Text style={[styles.metaValue, { color: colors.foreground }]}>{currentAssessment.competency}</Text>
+        </View>
+        <View style={styles.metaItem}>
+          <Text style={[styles.metaLabel, { color: colors.mutedForeground }]}>OBJECTIFS</Text>
+          <Text style={[styles.metaValue, { color: colors.foreground }]}>{currentObjectives.length}</Text>
+        </View>
+        <View style={styles.metaItem}>
+          <Text style={[styles.metaLabel, { color: colors.mutedForeground }]}>PROGRESSION</Text>
+          <Text style={[styles.metaValue, { color: colors.primary }]}>
+            {Math.round((evaluatedTotal / total) * 100)}%
+          </Text>
+        </View>
+      </Surface>
+
       {isDesktop ? (
         <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={styles.gridScroll}>
           <View style={styles.grid}>
-            <View style={[styles.gridRow, styles.gridHeader, { backgroundColor: colors.secondary, borderColor: colors.border }]}><View style={[styles.nameCell, styles.headerCell]}><Text style={[styles.headerText, { color: colors.foreground }]}>Élève</Text></View>{data.objectives.map((objective) => <View key={objective.id} style={styles.objectiveCell}><Text style={[styles.objectiveNumber, { color: colors.foreground }]}>{String(objective.order).padStart(2, '0')}</Text><Pressable onPress={() => confirmMarkAll(objective.id)}><Text style={[styles.markAll, { color: colors.primary }]}>marquer +</Text></Pressable></View>)}</View>
-            {data.pupils.map((pupil, rowIndex) => <View key={pupil.id} style={[styles.gridRow, { borderBottomColor: colors.border, backgroundColor: rowIndex % 2 ? colors.card : colors.background }]}><View style={styles.nameCell}><Text style={[styles.pupilName, { color: colors.foreground }]} numberOfLines={1}>{pupil.firstName} {pupil.lastName}</Text><Text style={[styles.pupilNumber, { color: colors.mutedForeground }]}>N° {pupil.registrationNumber}</Text></View>{data.objectives.map((objective) => { const value = data.evaluations[pupil.id]?.[objective.id] ?? 'NotEvaluated'; return <Pressable key={objective.id} onPress={() => data.cycleEvaluation(pupil.id, objective.id)} style={styles.cell}><ValueMark value={value} size="small" /></Pressable>; })}</View>)}
-            <View style={[styles.totalRow, { backgroundColor: colors.secondary }]}><View style={styles.nameCell}><Text style={[styles.headerText, { color: colors.foreground }]}>Total</Text></View>{data.statistics.map((stat) => <View key={stat.objectiveId} style={styles.cell}><Text style={[styles.totalText, { color: colors.primary }]}>{stat.acquiredPercent}%</Text></View>)}</View>
+            <View style={[styles.gridRow, styles.gridHeader, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
+              <View style={[styles.nameCell, styles.headerCell]}>
+                <Text style={[styles.headerText, { color: colors.foreground }]}>Élève</Text>
+              </View>
+              {currentObjectives.map((objective) => (
+                <View key={objective.id} style={styles.objectiveCell}>
+                  <Text style={[styles.objectiveNumber, { color: colors.foreground }]}>
+                    {String(objective.order).padStart(2, '0')}
+                  </Text>
+                  <Pressable onPress={() => confirmMarkAll(objective.id)}>
+                    <Text style={[styles.markAll, { color: colors.primary }]}>marquer +</Text>
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+
+            {currentPupils.map((pupil, rowIndex) => (
+              <View
+                key={pupil.id}
+                style={[
+                  styles.gridRow,
+                  {
+                    borderBottomColor: colors.border,
+                    backgroundColor: rowIndex % 2 ? colors.card : colors.background,
+                  },
+                ]}
+              >
+                <View style={styles.nameCell}>
+                  <Text style={[styles.pupilName, { color: colors.foreground }]} numberOfLines={1}>
+                    {pupil.lastName} {pupil.firstName}
+                  </Text>
+                  <Text style={[styles.pupilNumber, { color: colors.mutedForeground }]}>
+                    N° {pupil.registrationNumber}
+                  </Text>
+                </View>
+
+                {currentObjectives.map((objective) => {
+                  const value = currentEvaluations[pupil.id]?.[objective.id] ?? 'NotEvaluated';
+                  return (
+                    <Pressable
+                      key={objective.id}
+                      onPress={() => data.cycleEvaluation(pupil.id, objective.id, currentAssessment.id)}
+                      style={styles.cell}
+                    >
+                      <ValueMark value={value} size="small" />
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ))}
+
+            <View style={[styles.totalRow, { backgroundColor: colors.secondary }]}>
+              <View style={styles.nameCell}>
+                <Text style={[styles.headerText, { color: colors.foreground }]}>Total</Text>
+              </View>
+              {currentStatistics.map((stat) => (
+                <View key={stat.objectiveId} style={styles.cell}>
+                  <Text style={[styles.totalText, { color: colors.primary }]}>
+                    {stat.acquiredPercent}%
+                  </Text>
+                </View>
+              ))}
+            </View>
           </View>
         </ScrollView>
       ) : (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.mobileContent}>
-          <View style={styles.pupilNavigator}><Pressable disabled={pupilIndex === 0} onPress={() => setPupilIndex((value) => Math.max(0, value - 1))} style={[styles.navButton, { backgroundColor: colors.card, borderColor: colors.border, opacity: pupilIndex === 0 ? 0.4 : 1 }]}><Feather name="chevron-left" size={18} color={colors.foreground} /><Text style={[styles.navText, { color: colors.foreground }]}>Précédent</Text></Pressable><View style={styles.pupilHeading}><Text style={[styles.pupilIndex, { color: colors.primary }]}>{String(pupilIndex + 1).padStart(2, '0')} / {data.pupils.length}</Text><Text style={[styles.mobilePupilName, { color: colors.foreground }]}>{currentPupil.firstName} {currentPupil.lastName}</Text></View><Pressable disabled={pupilIndex === data.pupils.length - 1} onPress={() => setPupilIndex((value) => Math.min(data.pupils.length - 1, value + 1))} style={[styles.navButton, { backgroundColor: colors.card, borderColor: colors.border, opacity: pupilIndex === data.pupils.length - 1 ? 0.4 : 1 }]}><Text style={[styles.navText, { color: colors.foreground }]}>Suivant</Text><Feather name="chevron-right" size={18} color={colors.foreground} /></Pressable></View>
-          <View style={styles.mobileObjectives}>{data.objectives.map((objective) => { const value = currentValues[objective.id] ?? 'NotEvaluated'; return <Surface key={objective.id} style={styles.mobileObjective}><View style={styles.objectiveCopy}><Text style={[styles.mobileObjectiveNumber, { color: colors.primary }]}>OBJECTIF {String(objective.order).padStart(2, '0')}</Text><Text style={[styles.mobileObjectiveText, { color: colors.foreground }]}>{objective.description}</Text></View><View style={styles.valueButtons}>{(['Acquired', 'PartiallyAcquired', 'NotAcquired'] as EvaluationValue[]).map((choice) => <Pressable key={choice} onPress={() => data.setEvaluation(currentPupil.id, objective.id, choice)} style={[styles.choiceButton, { backgroundColor: value === choice ? colors.primary : colors.secondary, borderColor: value === choice ? colors.primary : colors.border }]}><Text style={[styles.choiceText, { color: value === choice ? colors.primaryForeground : colors.foreground }]}>{displayValue(choice)}</Text></Pressable>)}</View></Surface>; })}</View>
-          <View style={styles.mobileFooter}><Button label="Enregistrer" icon="save" onPress={save} /><Button label={pupilIndex === data.pupils.length - 1 ? 'Terminer' : 'Enregistrer et suivant'} icon="arrow-right" secondary onPress={() => { save(); setPupilIndex((value) => Math.min(data.pupils.length - 1, value + 1)); }} /></View>
+          <View style={styles.pupilNavigator}>
+            <Pressable
+              disabled={pupilIndex === 0}
+              onPress={() => setPupilIndex((value) => Math.max(0, value - 1))}
+              style={[
+                styles.navButton,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  opacity: pupilIndex === 0 ? 0.4 : 1,
+                },
+              ]}
+            >
+              <Feather name="chevron-left" size={18} color={colors.foreground} />
+              <Text style={[styles.navText, { color: colors.foreground }]}>Précédent</Text>
+            </Pressable>
+
+            <View style={styles.pupilHeading}>
+              <Text style={[styles.pupilIndex, { color: colors.primary }]}>
+                {String(pupilIndex + 1).padStart(2, '0')} / {currentPupils.length}
+              </Text>
+              <Text style={[styles.mobilePupilName, { color: colors.foreground }]}>
+                {currentPupil.lastName} {currentPupil.firstName}
+              </Text>
+            </View>
+
+            <Pressable
+              disabled={pupilIndex === currentPupils.length - 1}
+              onPress={() => setPupilIndex((value) => Math.min(currentPupils.length - 1, value + 1))}
+              style={[
+                styles.navButton,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  opacity: pupilIndex === currentPupils.length - 1 ? 0.4 : 1,
+                },
+              ]}
+            >
+              <Text style={[styles.navText, { color: colors.foreground }]}>Suivant</Text>
+              <Feather name="chevron-right" size={18} color={colors.foreground} />
+            </Pressable>
+          </View>
+
+          <View style={styles.mobileObjectives}>
+            {currentObjectives.map((objective) => {
+              const value = currentValues[objective.id] ?? 'NotEvaluated';
+              return (
+                <Surface key={objective.id} style={styles.mobileObjective}>
+                  <View style={styles.objectiveCopy}>
+                    <Text style={[styles.mobileObjectiveNumber, { color: colors.primary }]}>
+                      OBJECTIF {String(objective.order).padStart(2, '0')}
+                    </Text>
+                    <Text style={[styles.mobileObjectiveText, { color: colors.foreground }]}>
+                      {objective.description}
+                    </Text>
+                  </View>
+
+                  <View style={styles.valueButtons}>
+                    {(['Acquired', 'PartiallyAcquired', 'NotAcquired'] as EvaluationValue[]).map((choice) => (
+                      <Pressable
+                        key={choice}
+                        onPress={() =>
+                          data.setEvaluation(currentPupil.id, objective.id, choice, currentAssessment.id)
+                        }
+                        style={[
+                          styles.choiceButton,
+                          {
+                            backgroundColor: value === choice ? colors.primary : colors.secondary,
+                            borderColor: value === choice ? colors.primary : colors.border,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.choiceText,
+                            { color: value === choice ? colors.primaryForeground : colors.foreground },
+                          ]}
+                        >
+                          {displayValue(choice)}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </Surface>
+              );
+            })}
+          </View>
+
+          <View style={styles.mobileFooter}>
+            <Button label="Enregistrer" icon="save" onPress={save} />
+            <Button
+              label={pupilIndex === currentPupils.length - 1 ? 'Terminer' : 'Enregistrer et suivant'}
+              icon="arrow-right"
+              secondary
+              onPress={() => {
+                save();
+                setPupilIndex((value) => Math.min(currentPupils.length - 1, value + 1));
+              }}
+            />
+          </View>
         </ScrollView>
       )}
     </Screen>

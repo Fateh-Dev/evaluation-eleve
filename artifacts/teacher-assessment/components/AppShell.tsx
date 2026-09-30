@@ -46,18 +46,23 @@ export function SyncPill({ status }: { status: 'synced' | 'pending' }) {
   );
 }
 
-export function Button({ label, onPress, secondary = false, compact = false, icon }: {
-  label: string; onPress: () => void; secondary?: boolean; compact?: boolean; icon?: keyof typeof Feather.glyphMap;
+export function Button({ label, onPress, secondary = false, compact = false, icon, disabled = false }: {
+  label: string; onPress: () => void; secondary?: boolean; compact?: boolean; icon?: keyof typeof Feather.glyphMap; disabled?: boolean;
 }) {
   const colors = useColors();
   return (
     <Pressable
-      onPress={onPress}
+      onPress={disabled ? undefined : onPress}
+      disabled={disabled}
       accessibilityRole="button"
       style={({ pressed }) => [
         styles.button,
         compact && styles.buttonCompact,
-        { backgroundColor: secondary ? colors.card : colors.primary, borderColor: secondary ? colors.border : colors.primary, opacity: pressed ? 0.82 : 1 },
+        {
+          backgroundColor: secondary ? colors.card : colors.primary,
+          borderColor: secondary ? colors.border : colors.primary,
+          opacity: disabled ? 0.45 : pressed ? 0.82 : 1,
+        },
       ]}
     >
       {icon ? <Feather name={icon} size={compact ? 15 : 17} color={secondary ? colors.foreground : colors.primaryForeground} /> : null}
