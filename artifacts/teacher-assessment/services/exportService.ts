@@ -528,18 +528,12 @@ export async function exportAssessmentPdf(data: AssessmentExportData): Promise<v
     return;
   }
   try {
-    // printToFileAsync writes to a system temp URI that expo-sharing cannot read.
-    // Copy it into the app cache dir which is always accessible to sharing.
-    const { uri: tempUri } = await Print.printToFileAsync({ html });
+    const { uri: pdfUri } = await Print.printToFileAsync({ html });
     const filename = `Evaluation_${(data.className || 'Classe').replace(/\s+/g, '_')}_${(data.assessment?.title || 'Evaluation').replace(/\s+/g, '_')}.pdf`;
-    const cacheDir = LegacyFS.cacheDirectory ?? Paths.cache.uri;
-    const destUri = `${cacheDir}${filename}`;
-
-    await LegacyFS.copyAsync({ from: tempUri, to: destUri });
 
     const isAvailable = await Sharing.isAvailableAsync();
     if (isAvailable) {
-      await Sharing.shareAsync(destUri, {
+      await Sharing.shareAsync(pdfUri, {
         mimeType: 'application/pdf',
         dialogTitle: `Enregistrer ${filename}`,
         UTI: 'com.adobe.pdf',
