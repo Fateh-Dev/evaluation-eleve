@@ -1,17 +1,34 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { createContext, PropsWithChildren, useContext, useEffect, useMemo, useState } from 'react';
+import React, {
+  createContext,
+  PropsWithChildren,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import { COMPETENCY_TEMPLATES } from '@/constants/competencies';
+import {
+  cloneSchoolYearConfiguration,
+  createConfigId,
+  createDefaultSchoolYearConfiguration,
+  getObjectivesForPair,
+  migrateSchoolYearConfigurations,
+  normalizeLabel,
+  type ConfiguredObjective,
+  type SchoolCompetency,
+  type SchoolLevel,
+  type SchoolYearConfiguration,
+} from '@/services/pedagogicalConfiguration';
 
 export type EvaluationValue =
-  | 'NotEvaluated'
-  | 'Acquired'
-  | 'PartiallyAcquired'
-  | 'NotAcquired';
+  'NotEvaluated' | 'Acquired' | 'PartiallyAcquired' | 'NotAcquired';
 
 export type ClassItem = {
   id: string;
   name: string;
   level: string;
+  levelId?: string;
   academicYear: string;
   active?: boolean;
 };
@@ -41,6 +58,7 @@ export type Assessment = {
   subject: string;
   level: string;
   competency: string;
+  competencyId?: string;
   support: string;
   sessionObjectives: string;
   status: 'Draft' | 'InProgress' | 'Completed' | 'Archived';
@@ -66,6 +84,7 @@ export type AppState = {
   school: School;
   teacherName: string;
   academicYear: string;
+  schoolYearConfigurations: SchoolYearConfiguration[];
   classes: ClassItem[];
   activeClassId: string;
   pupils: Pupil[];
@@ -80,14 +99,18 @@ export type AppDataContextValue = {
   school: School;
   teacherName: string;
   academicYear: string;
+  schoolYearConfigurations: SchoolYearConfiguration[];
   classes: ClassItem[];
   activeClassId: string;
   pupils: Pupil[];
   assessments: Assessment[];
   activeAssessmentId: string;
-  allObjectives: Record<string, Objective[]>;  // alias for objectives (all assessments)
-  allEvaluations: Record<string, Record<string, Record<string, EvaluationValue>>>;  // alias
-  allRemediations: Record<string, { individual: string; classroom: string }>;  // alias
+  allObjectives: Record<string, Objective[]>; // alias for objectives (all assessments)
+  allEvaluations: Record<
+    string,
+    Record<string, Record<string, EvaluationValue>>
+  >; // alias
+  allRemediations: Record<string, { individual: string; classroom: string }>; // alias
 
   hydrated: boolean;
   isDirty: boolean;
@@ -108,16 +131,69 @@ export type AppDataContextValue = {
   // Profile / Settings Actions
   updateTeacherName: (name: string) => void;
   updateSchool: (school: Partial<School> & { academicYear?: string }) => void;
+  setActiveAcademicYear: (year: string) => void;
+  createAcademicYear: (year: string, copyFromYear?: string) => boolean;
+  addSchoolLevel: (year: string, name: string) => string | undefined;
+  addOrAssociateCompetency: (
+    year: string,
+    levelId: string,
+    name: string,
+  ) => string | undefined;
+  setCompetencyAssociation: (
+    year: string,
+    levelId: string,
+    competencyId: string,
+    associated: boolean,
+  ) => void;
+  setConfiguredObjectives: (
+    year: string,
+    levelId: string,
+    competencyId: string,
+    descriptions: string[],
+  ) => void;
+  getSchoolYearConfiguration: (
+    year?: string,
+  ) => SchoolYearConfiguration | undefined;
+  getLevelIdForYear: (
+    year: string,
+    levelId?: string,
+    levelName?: string,
+  ) => string;
+  getCompetenciesForLevel: (
+    year: string,
+    levelId?: string,
+    levelName?: string,
+  ) => SchoolCompetency[];
+  getObjectivesForLevelCompetency: (
+    year: string,
+    levelId: string,
+    competencyId: string,
+  ) => ConfiguredObjective[];
   resetAllData: () => void;
 
   // Class Actions
-  createClass: (input: { name: string; level: string; academicYear?: string; competencyIds?: string[] }) => string;
+  createClass: (input: {
+    name: string;
+    level: string;
+    levelId?: string;
+    academicYear?: string;
+    competencyIds?: string[];
+    competencySelections?: Array<{
+      competencyId: string;
+      objectives?: string[];
+    }>;
+  }) => string;
   setActiveClass: (classId: string) => void;
   deleteClass: (classId: string) => void;
 
   // Pupil Actions
   addPupils: (
-    pupils: Array<Pick<Pupil, 'registrationNumber' | 'firstName' | 'lastName' | 'dateOfBirth'>>,
+    pupils: Array<
+      Pick<
+        Pupil,
+        'registrationNumber' | 'firstName' | 'lastName' | 'dateOfBirth'
+      >
+    >,
     targetClassId?: string,
   ) => { imported: number; skipped: number };
   deletePupil: (pupilId: string) => void;
@@ -127,6 +203,7 @@ export type AppDataContextValue = {
   createAssessment: (input: {
     classId: string;
     competency: string;
+    competencyId?: string;
     title: string;
     subject?: string;
     level?: string;
@@ -143,7 +220,11 @@ export type AppDataContextValue = {
   // Objective Actions
   addObjective: (assessmentId: string, description: string) => string;
   removeObjective: (assessmentId: string, objectiveId: string) => void;
-  updateObjective: (assessmentId: string, objectiveId: string, description: string) => void;
+  updateObjective: (
+    assessmentId: string,
+    objectiveId: string,
+    description: string,
+  ) => void;
   getObjectivesForAssessment: (assessmentId: string) => Objective[];
 
   // Evaluation Actions
@@ -153,7 +234,11 @@ export type AppDataContextValue = {
     value: EvaluationValue,
     assessmentId?: string,
   ) => void;
-  cycleEvaluation: (pupilId: string, objectiveId: string, assessmentId?: string) => void;
+  cycleEvaluation: (
+    pupilId: string,
+    objectiveId: string,
+    assessmentId?: string,
+  ) => void;
   setAllForObjective: (
     objectiveId: string,
     value: EvaluationValue,
@@ -165,10 +250,15 @@ export type AppDataContextValue = {
   getStatisticsForAssessment: (assessmentId: string) => AssessmentStatistics[];
 
   // Remediation Actions
-  updateRemediation: (individual: string, classroom: string, assessmentId?: string) => void;
-  getRemediationForAssessment: (
-    assessmentId: string,
-  ) => { individual: string; classroom: string };
+  updateRemediation: (
+    individual: string,
+    classroom: string,
+    assessmentId?: string,
+  ) => void;
+  getRemediationForAssessment: (assessmentId: string) => {
+    individual: string;
+    classroom: string;
+  };
 
   // Utilities
   clearAssessment: (assessmentId?: string) => void;
@@ -187,6 +277,9 @@ export function createEmptyState(): AppState {
     },
     teacherName: '',
     academicYear: '2026-2027',
+    schoolYearConfigurations: [
+      createDefaultSchoolYearConfiguration('2026-2027'),
+    ],
     classes: [],
     activeClassId: '',
     pupils: [],
@@ -214,16 +307,29 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         if (stored) {
           try {
             const parsed = JSON.parse(stored) as Partial<AppState>;
+            const academicYear = parsed.academicYear ?? '2026-2027';
+            const classes = Array.isArray(parsed.classes) ? parsed.classes : [];
+            const assessments = Array.isArray(parsed.assessments)
+              ? parsed.assessments
+              : [];
+            const objectives = parsed.objectives ?? {};
             setState((prev) => ({
               ...prev,
               ...parsed,
               school: parsed.school ?? prev.school,
               teacherName: parsed.teacherName ?? prev.teacherName,
-              academicYear: parsed.academicYear ?? prev.academicYear,
-              classes: Array.isArray(parsed.classes) ? parsed.classes : [],
+              academicYear,
+              schoolYearConfigurations: migrateSchoolYearConfigurations(
+                parsed.schoolYearConfigurations,
+                academicYear,
+                classes,
+                assessments,
+                objectives,
+              ),
+              classes,
               pupils: Array.isArray(parsed.pupils) ? parsed.pupils : [],
-              assessments: Array.isArray(parsed.assessments) ? parsed.assessments : [],
-              objectives: parsed.objectives ?? {},
+              assessments,
+              objectives,
               evaluations: parsed.evaluations ?? {},
               remediations: parsed.remediations ?? {},
             }));
@@ -239,7 +345,9 @@ export function AppDataProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     if (hydrated) {
-      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state)).catch(() => undefined);
+      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state)).catch(
+        () => undefined,
+      );
     }
   }, [hydrated, state]);
 
@@ -258,10 +366,14 @@ export function AppDataProvider({ children }: PropsWithChildren) {
 
   // Active assessment helper (safe fallback when assessments are empty)
   const activeAssessment = useMemo(() => {
-    const found = state.assessments.find((a) => a.id === state.activeAssessmentId);
+    const found = state.assessments.find(
+      (a) => a.id === state.activeAssessmentId,
+    );
     if (found) return found;
     // Fallback to first assessment of active class
-    const classAssessments = state.assessments.filter((a) => a.classId === state.activeClassId);
+    const classAssessments = state.assessments.filter(
+      (a) => a.classId === state.activeClassId,
+    );
     return (
       classAssessments[0] ??
       state.assessments[0] ?? {
@@ -277,7 +389,12 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         status: 'Draft',
       }
     );
-  }, [state.assessments, state.activeAssessmentId, state.activeClassId, activeClass]);
+  }, [
+    state.assessments,
+    state.activeAssessmentId,
+    state.activeClassId,
+    activeClass,
+  ]);
 
   // Active objectives helper
   const activeObjectives = useMemo(() => {
@@ -296,76 +413,231 @@ export function AppDataProvider({ children }: PropsWithChildren) {
 
   // Active remediations helper
   const activeRemediation = useMemo(() => {
-    return state.remediations[activeAssessment.id] ?? { individual: '', classroom: '' };
+    return (
+      state.remediations[activeAssessment.id] ?? {
+        individual: '',
+        classroom: '',
+      }
+    );
   }, [state.remediations, activeAssessment.id]);
 
+  const getSchoolYearConfiguration = (year = state.academicYear) =>
+    state.schoolYearConfigurations.find(
+      (item) => normalizeLabel(item.year) === normalizeLabel(year),
+    );
+
+  const getLevelIdForYear = (
+    year: string,
+    levelId?: string,
+    levelName?: string,
+  ) => {
+    const configuration = getSchoolYearConfiguration(year);
+    const level =
+      (levelId
+        ? configuration?.levels.find((item) => item.id === levelId)
+        : undefined) ||
+      (levelName
+        ? configuration?.levels.find(
+            (item) => normalizeLabel(item.name) === normalizeLabel(levelName),
+          )
+        : undefined);
+    return level?.id ?? '';
+  };
+
+  const getCompetenciesForLevel = (
+    year: string,
+    levelId?: string,
+    levelName?: string,
+  ) => {
+    const configuration = getSchoolYearConfiguration(year);
+    const resolvedLevelId = getLevelIdForYear(year, levelId, levelName);
+    if (!configuration || !resolvedLevelId) return [];
+    const linkedIds = new Set(
+      configuration.associations
+        .filter((association) => association.levelId === resolvedLevelId)
+        .map((association) => association.competencyId),
+    );
+    return configuration.competencies.filter((competency) =>
+      linkedIds.has(competency.id),
+    );
+  };
+
+  const getObjectivesForLevelCompetency = (
+    year: string,
+    levelId: string,
+    competencyId: string,
+  ) =>
+    getObjectivesForPair(
+      getSchoolYearConfiguration(year),
+      levelId,
+      competencyId,
+    );
+
   // CLASS ACTIONS
-  const createClass = (input: { name: string; level: string; academicYear?: string; competencyIds?: string[] }) => {
-    const newId = `class-${Date.now()}`;
+  const createClass = (input: {
+    name: string;
+    level: string;
+    levelId?: string;
+    academicYear?: string;
+    competencyIds?: string[];
+    competencySelections?: Array<{
+      competencyId: string;
+      objectives?: string[];
+    }>;
+  }) => {
+    const newId = createConfigId('class');
+    const academicYear = (input.academicYear ?? state.academicYear).trim();
+    let configuration =
+      getSchoolYearConfiguration(academicYear) ??
+      createDefaultSchoolYearConfiguration(academicYear, [input.level]);
+    let level =
+      (input.levelId
+        ? configuration.levels.find((item) => item.id === input.levelId)
+        : undefined) ||
+      configuration.levels.find(
+        (item) => normalizeLabel(item.name) === normalizeLabel(input.level),
+      );
+    if (!level) {
+      level = { id: createConfigId('level'), name: input.level.trim() };
+      configuration = {
+        ...configuration,
+        levels: [...configuration.levels, level],
+      };
+    }
     const newClass: ClassItem = {
       id: newId,
       name: input.name.trim(),
-      level: input.level.trim(),
-      academicYear: (input.academicYear ?? state.academicYear).trim(),
+      level: level.name,
+      levelId: level.id,
+      academicYear,
       active: true,
     };
 
-    // Determine which templates to create assessments for
-    const selectedTemplates =
-      input.competencyIds && input.competencyIds.length > 0
-        ? COMPETENCY_TEMPLATES.filter((t) => input.competencyIds!.includes(t.id))
-        : [COMPETENCY_TEMPLATES[0]];
+    const requestedSelections: Array<{
+      competencyId: string;
+      objectives?: string[];
+    }> =
+      input.competencySelections ??
+      (input.competencyIds ?? []).map((competencyId) => ({ competencyId }));
+    const availableCompetencies = configuration.competencies.filter(
+      (competency) =>
+        configuration.associations.some(
+          (association) =>
+            association.levelId === level!.id &&
+            association.competencyId === competency.id,
+        ),
+    );
+    const selectionsForClass: Array<{
+      competencyId: string;
+      objectives?: string[];
+    }> = requestedSelections.length
+      ? requestedSelections
+      : availableCompetencies
+          .slice(0, 1)
+          .map((competency) => ({ competencyId: competency.id }));
+    const selectedCompetencies = selectionsForClass.flatMap((selection) => {
+      const competency = configuration.competencies.find(
+        (item) => item.id === selection.competencyId,
+      );
+      const linked = configuration.associations.some(
+        (association) =>
+          association.levelId === level!.id &&
+          association.competencyId === selection.competencyId,
+      );
+      return competency && linked
+        ? [{ competency, objectives: selection.objectives }]
+        : [];
+    });
 
     const newAssessments: Assessment[] = [];
     const newObjectivesMap: Record<string, Objective[]> = {};
-    const newEvaluationsMap: Record<string, Record<string, Record<string, EvaluationValue>>> = {};
-    const newRemediationsMap: Record<string, { individual: string; classroom: string }> = {};
+    const newEvaluationsMap: Record<
+      string,
+      Record<string, Record<string, EvaluationValue>>
+    > = {};
+    const newRemediationsMap: Record<
+      string,
+      { individual: string; classroom: string }
+    > = {};
 
-    selectedTemplates.forEach((tmpl, tmplIdx) => {
-      const newAssessmentId = `assessment-${Date.now()}-${tmplIdx}`;
+    selectedCompetencies.forEach(({ competency, objectives }) => {
+      const template = COMPETENCY_TEMPLATES.find(
+        (item) =>
+          item.id === competency.templateId ||
+          normalizeLabel(item.name) === normalizeLabel(competency.name),
+      );
+      const configuredDescriptions = getObjectivesForPair(
+        configuration,
+        level!.id,
+        competency.id,
+      ).map((item) => item.description);
+      const selectedDescriptions = (objectives ?? []).filter((item) =>
+        item.trim(),
+      );
+      const objectiveDescriptions = selectedDescriptions.length
+        ? selectedDescriptions
+        : configuredDescriptions.length
+          ? configuredDescriptions
+          : (template?.defaultObjectives ?? ['Objectif 1']);
+      const newAssessmentId = createConfigId('assessment');
       newAssessments.push({
         id: newAssessmentId,
         classId: newId,
-        title: tmpl.defaultTitle,
+        title: template?.defaultTitle ?? competency.name,
         date: new Date().toLocaleDateString('fr-FR'),
         subject: 'Français',
         level: newClass.level,
-        competency: tmpl.name,
-        support: tmpl.defaultSupport,
-        sessionObjectives: tmpl.defaultSessionObjectives,
+        competency: competency.name,
+        competencyId: competency.id,
+        support: template?.defaultSupport ?? '',
+        sessionObjectives: template?.defaultSessionObjectives ?? '',
         status: 'Draft',
       });
-      newObjectivesMap[newAssessmentId] = tmpl.defaultObjectives.map((desc, idx) => ({
-        id: `obj-${newAssessmentId}-${idx + 1}`,
-        assessmentId: newAssessmentId,
-        order: idx + 1,
-        description: desc,
-      }));
+      newObjectivesMap[newAssessmentId] = objectiveDescriptions.map(
+        (desc, idx) => ({
+          id: `obj-${newAssessmentId}-${idx + 1}`,
+          assessmentId: newAssessmentId,
+          order: idx + 1,
+          description: desc,
+        }),
+      );
       newEvaluationsMap[newAssessmentId] = {};
       newRemediationsMap[newAssessmentId] = { individual: '', classroom: '' };
     });
 
     const firstAssessmentId = newAssessments[0]?.id ?? '';
 
-    setState((prev) => ({
-      ...prev,
-      classes: [...prev.classes, newClass],
-      activeClassId: newId,
-      assessments: [...prev.assessments, ...newAssessments],
-      activeAssessmentId: firstAssessmentId,
-      objectives: {
-        ...prev.objectives,
-        ...newObjectivesMap,
-      },
-      evaluations: {
-        ...prev.evaluations,
-        ...newEvaluationsMap,
-      },
-      remediations: {
-        ...prev.remediations,
-        ...newRemediationsMap,
-      },
-    }));
+    setState((prev) => {
+      const hasConfiguration = prev.schoolYearConfigurations.some(
+        (item) => normalizeLabel(item.year) === normalizeLabel(academicYear),
+      );
+      return {
+        ...prev,
+        schoolYearConfigurations: hasConfiguration
+          ? prev.schoolYearConfigurations.map((item) =>
+              normalizeLabel(item.year) === normalizeLabel(academicYear)
+                ? configuration
+                : item,
+            )
+          : [...prev.schoolYearConfigurations, configuration],
+        classes: [...prev.classes, newClass],
+        activeClassId: newId,
+        assessments: [...prev.assessments, ...newAssessments],
+        activeAssessmentId: firstAssessmentId,
+        objectives: {
+          ...prev.objectives,
+          ...newObjectivesMap,
+        },
+        evaluations: {
+          ...prev.evaluations,
+          ...newEvaluationsMap,
+        },
+        remediations: {
+          ...prev.remediations,
+          ...newRemediationsMap,
+        },
+      };
+    });
 
     setIsDirty(true);
     setSyncStatus('pending');
@@ -377,8 +649,11 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     if (!foundClass) return;
 
     // Find first assessment of this class to set as active
-    const classAssessments = state.assessments.filter((a) => a.classId === classId);
-    const nextAssessmentId = classAssessments[0]?.id ?? state.activeAssessmentId;
+    const classAssessments = state.assessments.filter(
+      (a) => a.classId === classId,
+    );
+    const nextAssessmentId =
+      classAssessments[0]?.id ?? state.activeAssessmentId;
 
     setState((prev) => ({
       ...prev,
@@ -396,16 +671,317 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     setSyncStatus('pending');
   };
 
-  const updateSchool = (schoolData: Partial<School> & { academicYear?: string }) => {
+  const updateSchool = (
+    schoolData: Partial<School> & { academicYear?: string },
+  ) => {
+    setState((prev) => {
+      const requestedYear = schoolData.academicYear?.trim();
+      const existingYear = requestedYear
+        ? prev.schoolYearConfigurations.find(
+            (item) =>
+              normalizeLabel(item.year) === normalizeLabel(requestedYear),
+          )
+        : undefined;
+      const academicYear =
+        existingYear?.year ?? requestedYear ?? prev.academicYear;
+      const schoolYearConfigurations =
+        requestedYear && !existingYear
+          ? [
+              ...prev.schoolYearConfigurations,
+              createDefaultSchoolYearConfiguration(academicYear),
+            ]
+          : prev.schoolYearConfigurations;
+      return {
+        ...prev,
+        school: {
+          ...prev.school,
+          ...(schoolData.name !== undefined
+            ? { name: schoolData.name.trim() }
+            : {}),
+          ...(schoolData.address !== undefined
+            ? { address: schoolData.address.trim() }
+            : {}),
+          ...(schoolData.wilaya !== undefined
+            ? { wilaya: schoolData.wilaya.trim() }
+            : {}),
+        },
+        academicYear,
+        schoolYearConfigurations,
+      };
+    });
+    setIsDirty(true);
+    setSyncStatus('pending');
+  };
+
+  const setActiveAcademicYear = (year: string) => {
+    const requestedYear = year.trim();
+    if (!requestedYear) return;
+    setState((prev) => {
+      const existing = prev.schoolYearConfigurations.find(
+        (item) => normalizeLabel(item.year) === normalizeLabel(requestedYear),
+      );
+      return {
+        ...prev,
+        academicYear: existing?.year ?? requestedYear,
+        schoolYearConfigurations: existing
+          ? prev.schoolYearConfigurations
+          : [
+              ...prev.schoolYearConfigurations,
+              createDefaultSchoolYearConfiguration(requestedYear),
+            ],
+      };
+    });
+    setIsDirty(true);
+    setSyncStatus('pending');
+  };
+
+  const createAcademicYear = (year: string, copyFromYear?: string) => {
+    const requestedYear = year.trim();
+    if (
+      !requestedYear ||
+      state.schoolYearConfigurations.some(
+        (item) => normalizeLabel(item.year) === normalizeLabel(requestedYear),
+      )
+    )
+      return false;
+
+    const source = copyFromYear
+      ? getSchoolYearConfiguration(copyFromYear)
+      : undefined;
+    const configuration = source
+      ? cloneSchoolYearConfiguration(source, requestedYear)
+      : createDefaultSchoolYearConfiguration(requestedYear);
     setState((prev) => ({
       ...prev,
-      school: {
-        ...prev.school,
-        ...(schoolData.name !== undefined ? { name: schoolData.name.trim() } : {}),
-        ...(schoolData.address !== undefined ? { address: schoolData.address.trim() } : {}),
-        ...(schoolData.wilaya !== undefined ? { wilaya: schoolData.wilaya.trim() } : {}),
-      },
-      ...(schoolData.academicYear !== undefined ? { academicYear: schoolData.academicYear.trim() } : {}),
+      academicYear: requestedYear,
+      schoolYearConfigurations: [
+        ...prev.schoolYearConfigurations,
+        configuration,
+      ],
+    }));
+    setIsDirty(true);
+    setSyncStatus('pending');
+    return true;
+  };
+
+  const addSchoolLevel = (year: string, name: string) => {
+    const cleanName = name.trim();
+    if (!cleanName) return undefined;
+    const existingConfiguration = getSchoolYearConfiguration(year);
+    const configuration =
+      existingConfiguration ??
+      createDefaultSchoolYearConfiguration(year.trim());
+    const existingLevel = configuration.levels.find(
+      (item) => normalizeLabel(item.name) === normalizeLabel(cleanName),
+    );
+    if (existingLevel) return existingLevel.id;
+
+    const level: SchoolLevel = { id: createConfigId('level'), name: cleanName };
+    const updatedConfiguration = {
+      ...configuration,
+      levels: [...configuration.levels, level],
+    };
+    setState((prev) => {
+      const alreadyExists = prev.schoolYearConfigurations.some(
+        (item) => normalizeLabel(item.year) === normalizeLabel(year),
+      );
+      return {
+        ...prev,
+        schoolYearConfigurations: alreadyExists
+          ? prev.schoolYearConfigurations.map((item) =>
+              normalizeLabel(item.year) === normalizeLabel(year)
+                ? updatedConfiguration
+                : item,
+            )
+          : [...prev.schoolYearConfigurations, updatedConfiguration],
+      };
+    });
+    setIsDirty(true);
+    setSyncStatus('pending');
+    return level.id;
+  };
+
+  const addOrAssociateCompetency = (
+    year: string,
+    levelId: string,
+    name: string,
+  ) => {
+    const cleanName = name.trim();
+    if (!cleanName) return undefined;
+    const existingConfiguration = getSchoolYearConfiguration(year);
+    const configuration =
+      existingConfiguration ??
+      createDefaultSchoolYearConfiguration(year.trim());
+    if (!configuration.levels.some((item) => item.id === levelId))
+      return undefined;
+
+    const template = COMPETENCY_TEMPLATES.find(
+      (item) => normalizeLabel(item.name) === normalizeLabel(cleanName),
+    );
+    const existingCompetency = configuration.competencies.find(
+      (item) => normalizeLabel(item.name) === normalizeLabel(cleanName),
+    );
+    const competency: SchoolCompetency = existingCompetency ?? {
+      id: template?.id ?? createConfigId('competency'),
+      name: cleanName,
+      ...(template ? { templateId: template.id } : {}),
+    };
+    const linked = configuration.associations.some(
+      (item) => item.levelId === levelId && item.competencyId === competency.id,
+    );
+    const hasObjectives = configuration.objectives.some(
+      (item) => item.levelId === levelId && item.competencyId === competency.id,
+    );
+    const defaultObjectives = template?.defaultObjectives ?? ['Objectif 1'];
+    const updatedConfiguration: SchoolYearConfiguration = {
+      ...configuration,
+      competencies: existingCompetency
+        ? configuration.competencies
+        : [...configuration.competencies, competency],
+      associations: linked
+        ? configuration.associations
+        : [
+            ...configuration.associations,
+            { levelId, competencyId: competency.id },
+          ],
+      objectives: hasObjectives
+        ? configuration.objectives
+        : [
+            ...configuration.objectives,
+            ...defaultObjectives.map((description, index) => ({
+              id: createConfigId('objective'),
+              levelId,
+              competencyId: competency.id,
+              order: index + 1,
+              description,
+            })),
+          ],
+    };
+    setState((prev) => {
+      const alreadyExists = prev.schoolYearConfigurations.some(
+        (item) => normalizeLabel(item.year) === normalizeLabel(year),
+      );
+      return {
+        ...prev,
+        schoolYearConfigurations: alreadyExists
+          ? prev.schoolYearConfigurations.map((item) =>
+              normalizeLabel(item.year) === normalizeLabel(year)
+                ? updatedConfiguration
+                : item,
+            )
+          : [...prev.schoolYearConfigurations, updatedConfiguration],
+      };
+    });
+    setIsDirty(true);
+    setSyncStatus('pending');
+    return competency.id;
+  };
+
+  const setCompetencyAssociation = (
+    year: string,
+    levelId: string,
+    competencyId: string,
+    associated: boolean,
+  ) => {
+    const configuration = getSchoolYearConfiguration(year);
+    if (
+      !configuration ||
+      !configuration.levels.some((item) => item.id === levelId) ||
+      !configuration.competencies.some((item) => item.id === competencyId)
+    )
+      return;
+    const linked = configuration.associations.some(
+      (item) => item.levelId === levelId && item.competencyId === competencyId,
+    );
+    if (linked === associated) return;
+
+    const competency = configuration.competencies.find(
+      (item) => item.id === competencyId,
+    )!;
+    const template = COMPETENCY_TEMPLATES.find(
+      (item) =>
+        item.id === competency.templateId ||
+        normalizeLabel(item.name) === normalizeLabel(competency.name),
+    );
+    const existingObjectives = configuration.objectives.some(
+      (item) => item.levelId === levelId && item.competencyId === competencyId,
+    );
+    const defaultObjectives = template?.defaultObjectives ?? ['Objectif 1'];
+    const updatedConfiguration: SchoolYearConfiguration = {
+      ...configuration,
+      associations: associated
+        ? [...configuration.associations, { levelId, competencyId }]
+        : configuration.associations.filter(
+            (item) =>
+              !(item.levelId === levelId && item.competencyId === competencyId),
+          ),
+      objectives:
+        associated && !existingObjectives
+          ? [
+              ...configuration.objectives,
+              ...defaultObjectives.map((description, index) => ({
+                id: createConfigId('objective'),
+                levelId,
+                competencyId,
+                order: index + 1,
+                description,
+              })),
+            ]
+          : configuration.objectives,
+    };
+    setState((prev) => ({
+      ...prev,
+      schoolYearConfigurations: prev.schoolYearConfigurations.map((item) =>
+        normalizeLabel(item.year) === normalizeLabel(year)
+          ? updatedConfiguration
+          : item,
+      ),
+    }));
+    setIsDirty(true);
+    setSyncStatus('pending');
+  };
+
+  const setConfiguredObjectives = (
+    year: string,
+    levelId: string,
+    competencyId: string,
+    descriptions: string[],
+  ) => {
+    const configuration = getSchoolYearConfiguration(year);
+    if (
+      !configuration ||
+      !configuration.associations.some(
+        (item) =>
+          item.levelId === levelId && item.competencyId === competencyId,
+      )
+    )
+      return;
+    const pairObjectives = descriptions
+      .map((description) => description.trim())
+      .filter(Boolean);
+    const updatedConfiguration: SchoolYearConfiguration = {
+      ...configuration,
+      objectives: [
+        ...configuration.objectives.filter(
+          (item) =>
+            !(item.levelId === levelId && item.competencyId === competencyId),
+        ),
+        ...pairObjectives.map((description, index) => ({
+          id: createConfigId('objective'),
+          levelId,
+          competencyId,
+          order: index + 1,
+          description,
+        })),
+      ],
+    };
+    setState((prev) => ({
+      ...prev,
+      schoolYearConfigurations: prev.schoolYearConfigurations.map((item) =>
+        normalizeLabel(item.year) === normalizeLabel(year)
+          ? updatedConfiguration
+          : item,
+      ),
     }));
     setIsDirty(true);
     setSyncStatus('pending');
@@ -414,7 +990,9 @@ export function AppDataProvider({ children }: PropsWithChildren) {
   const resetAllData = () => {
     const empty = createEmptyState();
     setState(empty);
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(empty)).catch(() => undefined);
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(empty)).catch(
+      () => undefined,
+    );
     setIsDirty(false);
     setSyncStatus('synced');
   };
@@ -431,7 +1009,9 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       const deletedAssessmentIds = new Set(
         prev.assessments.filter((a) => a.classId === classId).map((a) => a.id),
       );
-      const remainingAssessments = prev.assessments.filter((a) => a.classId !== classId);
+      const remainingAssessments = prev.assessments.filter(
+        (a) => a.classId !== classId,
+      );
 
       // Cascade delete objectives, evaluations, remediations for those assessments
       const nextObjectives = { ...prev.objectives };
@@ -446,11 +1026,15 @@ export function AppDataProvider({ children }: PropsWithChildren) {
 
       // Determine next active assessment
       let nextActiveAssessmentId = prev.activeAssessmentId;
-      if (deletedAssessmentIds.has(prev.activeAssessmentId) || !nextActiveAssessmentId) {
+      if (
+        deletedAssessmentIds.has(prev.activeAssessmentId) ||
+        !nextActiveAssessmentId
+      ) {
         const remainingForNextClass = remainingAssessments.filter(
           (a) => a.classId === nextActiveClassId,
         );
-        nextActiveAssessmentId = remainingForNextClass[0]?.id ?? remainingAssessments[0]?.id ?? '';
+        nextActiveAssessmentId =
+          remainingForNextClass[0]?.id ?? remainingAssessments[0]?.id ?? '';
       }
 
       return {
@@ -475,7 +1059,12 @@ export function AppDataProvider({ children }: PropsWithChildren) {
   };
 
   const addPupils = (
-    incoming: Array<Pick<Pupil, 'registrationNumber' | 'firstName' | 'lastName' | 'dateOfBirth'>>,
+    incoming: Array<
+      Pick<
+        Pupil,
+        'registrationNumber' | 'firstName' | 'lastName' | 'dateOfBirth'
+      >
+    >,
     targetClassId?: string,
   ) => {
     const classId = targetClassId ?? state.activeClassId;
@@ -489,10 +1078,15 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     const additions: Pupil[] = [];
 
     incoming.forEach((pupil, index) => {
-      let regNo = pupil.registrationNumber ? pupil.registrationNumber.trim() : '';
+      let regNo = pupil.registrationNumber
+        ? pupil.registrationNumber.trim()
+        : '';
       if (!regNo || existing.has(regNo.toLowerCase())) {
         let candidate = existing.size + 1;
-        while (existing.has(String(candidate).padStart(2, '0').toLowerCase()) || existing.has(String(candidate).toLowerCase())) {
+        while (
+          existing.has(String(candidate).padStart(2, '0').toLowerCase()) ||
+          existing.has(String(candidate).toLowerCase())
+        ) {
           candidate++;
         }
         regNo = String(candidate).padStart(2, '0');
@@ -538,6 +1132,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
   const createAssessment = (input: {
     classId: string;
     competency: string;
+    competencyId?: string;
     title: string;
     subject?: string;
     level?: string;
@@ -546,8 +1141,25 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     date?: string;
     objectives?: string[];
   }) => {
-    const newAssessmentId = `assessment-${Date.now()}`;
-    const targetClass = state.classes.find((c) => c.id === input.classId) ?? activeClass;
+    const newAssessmentId = createConfigId('assessment');
+    const targetClass =
+      state.classes.find((c) => c.id === input.classId) ?? activeClass;
+    const configuration = getSchoolYearConfiguration(targetClass.academicYear);
+    const levelId = getLevelIdForYear(
+      targetClass.academicYear,
+      targetClass.levelId,
+      targetClass.level,
+    );
+    const competency =
+      (input.competencyId &&
+        configuration?.competencies.find(
+          (item) => item.id === input.competencyId,
+        )) ||
+      configuration?.competencies.find(
+        (item) =>
+          normalizeLabel(item.name) === normalizeLabel(input.competency),
+      );
+    const competencyId = input.competencyId ?? competency?.id;
 
     const newAssessment: Assessment = {
       id: newAssessmentId,
@@ -557,6 +1169,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       subject: input.subject ?? 'Français',
       level: input.level ?? targetClass.level,
       competency: input.competency.trim(),
+      ...(competencyId ? { competencyId } : {}),
       support: input.support ?? '',
       sessionObjectives: input.sessionObjectives ?? '',
       status: 'Draft',
@@ -565,9 +1178,20 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     // Determine objectives
     let objectiveTexts = input.objectives;
     if (!objectiveTexts || objectiveTexts.length === 0) {
-      // Find matching template
-      const matched = COMPETENCY_TEMPLATES.find((t) => t.name.toLowerCase() === input.competency.toLowerCase());
-      objectiveTexts = matched ? matched.defaultObjectives : ['Objectif 1'];
+      const configured =
+        competencyId && levelId
+          ? getObjectivesForPair(configuration, levelId, competencyId).map(
+              (item) => item.description,
+            )
+          : [];
+      const matched = COMPETENCY_TEMPLATES.find(
+        (item) =>
+          item.id === competency?.templateId ||
+          normalizeLabel(item.name) === normalizeLabel(input.competency),
+      );
+      objectiveTexts = configured.length
+        ? configured
+        : (matched?.defaultObjectives ?? ['Objectif 1']);
     }
 
     const createdObjectives: Objective[] = objectiveTexts.map((desc, idx) => ({
@@ -623,9 +1247,14 @@ export function AppDataProvider({ children }: PropsWithChildren) {
 
       let nextActiveAssessmentId = prev.activeAssessmentId;
       if (prev.activeAssessmentId === assessmentId) {
-        const deletedAssessment = prev.assessments.find((a) => a.id === assessmentId);
-        const sameClassAssessments = remaining.filter((a) => a.classId === deletedAssessment?.classId);
-        nextActiveAssessmentId = sameClassAssessments[0]?.id ?? remaining[0]?.id ?? '';
+        const deletedAssessment = prev.assessments.find(
+          (a) => a.id === assessmentId,
+        );
+        const sameClassAssessments = remaining.filter(
+          (a) => a.classId === deletedAssessment?.classId,
+        );
+        nextActiveAssessmentId =
+          sameClassAssessments[0]?.id ?? remaining[0]?.id ?? '';
       }
 
       return {
@@ -678,7 +1307,10 @@ export function AppDataProvider({ children }: PropsWithChildren) {
 
       // Clean up evaluations for this specific objective across all pupils
       const currentAssessEval = prev.evaluations[assessmentId] ?? {};
-      const cleanedAssessEval: Record<string, Record<string, EvaluationValue>> = {};
+      const cleanedAssessEval: Record<
+        string,
+        Record<string, EvaluationValue>
+      > = {};
       for (const [pupilId, objMap] of Object.entries(currentAssessEval)) {
         const { [objectiveId]: _, ...rest } = objMap;
         cleanedAssessEval[pupilId] = rest;
@@ -700,7 +1332,11 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     setSyncStatus('pending');
   };
 
-  const updateObjective = (assessmentId: string, objectiveId: string, description: string) => {
+  const updateObjective = (
+    assessmentId: string,
+    objectiveId: string,
+    description: string,
+  ) => {
     setState((prev) => {
       const currentList = prev.objectives[assessmentId] ?? [];
       const updated = currentList.map((o) =>
@@ -751,9 +1387,15 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     setSyncStatus('pending');
   };
 
-  const cycleEvaluation = (pupilId: string, objectiveId: string, assessmentId?: string) => {
+  const cycleEvaluation = (
+    pupilId: string,
+    objectiveId: string,
+    assessmentId?: string,
+  ) => {
     const targetAssessmentId = assessmentId ?? state.activeAssessmentId;
-    const current = state.evaluations[targetAssessmentId]?.[pupilId]?.[objectiveId] ?? 'NotEvaluated';
+    const current =
+      state.evaluations[targetAssessmentId]?.[pupilId]?.[objectiveId] ??
+      'NotEvaluated';
     const next: EvaluationValue =
       current === 'NotEvaluated'
         ? 'Acquired'
@@ -771,12 +1413,16 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     assessmentId?: string,
   ) => {
     const targetAssessmentId = assessmentId ?? state.activeAssessmentId;
-    const targetAssessment = state.assessments.find((a) => a.id === targetAssessmentId);
+    const targetAssessment = state.assessments.find(
+      (a) => a.id === targetAssessmentId,
+    );
     const targetClassId = targetAssessment?.classId ?? state.activeClassId;
     const classPupils = state.pupils.filter((p) => p.classId === targetClassId);
 
     setState((prev) => {
-      const currentAssessEval = { ...(prev.evaluations[targetAssessmentId] ?? {}) };
+      const currentAssessEval = {
+        ...(prev.evaluations[targetAssessmentId] ?? {}),
+      };
       classPupils.forEach((pupil) => {
         currentAssessEval[pupil.id] = {
           ...(currentAssessEval[pupil.id] ?? {}),
@@ -823,17 +1469,25 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         acquired,
         partiallyAcquired,
         notAcquired,
-        acquiredPercent: evaluated ? Math.round((acquired / evaluated) * 100) : 0,
+        acquiredPercent: evaluated
+          ? Math.round((acquired / evaluated) * 100)
+          : 0,
       };
     });
   };
 
   // REMEDIATION ACTIONS
   const getRemediationForAssessment = (assessmentId: string) => {
-    return state.remediations[assessmentId] ?? { individual: '', classroom: '' };
+    return (
+      state.remediations[assessmentId] ?? { individual: '', classroom: '' }
+    );
   };
 
-  const updateRemediation = (individual: string, classroom: string, assessmentId?: string) => {
+  const updateRemediation = (
+    individual: string,
+    classroom: string,
+    assessmentId?: string,
+  ) => {
     const targetAssessmentId = assessmentId ?? state.activeAssessmentId;
     setState((prev) => ({
       ...prev,
@@ -896,6 +1550,16 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       // Profile / Settings
       updateTeacherName,
       updateSchool,
+      setActiveAcademicYear,
+      createAcademicYear,
+      addSchoolLevel,
+      addOrAssociateCompetency,
+      setCompetencyAssociation,
+      setConfiguredObjectives,
+      getSchoolYearConfiguration,
+      getLevelIdForYear,
+      getCompetenciesForLevel,
+      getObjectivesForLevelCompetency,
       resetAllData,
 
       // Methods
@@ -943,11 +1607,14 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     ],
   );
 
-  return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>;
+  return (
+    <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>
+  );
 }
 
 export function useAppData() {
   const context = useContext(AppDataContext);
-  if (!context) throw new Error('useAppData must be used within AppDataProvider');
+  if (!context)
+    throw new Error('useAppData must be used within AppDataProvider');
   return context;
 }

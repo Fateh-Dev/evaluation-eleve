@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Pressable,
@@ -10,10 +10,17 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { AppHeader, Button, Screen, SectionTitle, Surface } from '@/components/AppShell';
+import {
+  AppHeader,
+  Button,
+  Screen,
+  SectionTitle,
+  Surface,
+} from '@/components/AppShell';
 import { COMPETENCY_TEMPLATES } from '@/constants/competencies';
 import { useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
+import { normalizeLabel } from '@/services/pedagogicalConfiguration';
 
 export default function NewAssessmentScreen() {
   const colors = useColors();
@@ -24,39 +31,79 @@ export default function NewAssessmentScreen() {
     params.classId || data.activeClassId || data.classes[0]?.id || '',
   );
 
-  const selectedClass = data.classes.find((c) => c.id === selectedClassId) ?? data.activeClass;
+  const selectedClass =
+    data.classes.find((c) => c.id === selectedClassId) ?? data.activeClass;
 
-  const [competencyType, setCompetencyType] = useState<string>(
-    COMPETENCY_TEMPLATES[0].name,
+  const competencies = useMemo(
+    () =>
+      data.getCompetenciesForLevel(
+        selectedClass.academicYear,
+        selectedClass.levelId,
+        selectedClass.level,
+      ),
+    [
+      data.schoolYearConfigurations,
+      selectedClass.academicYear,
+      selectedClass.levelId,
+      selectedClass.level,
+    ],
   );
-  const [title, setTitle] = useState(COMPETENCY_TEMPLATES[0].defaultTitle);
+  const [selectedCompetencyId, setSelectedCompetencyId] = useState('');
+  const [title, setTitle] = useState('');
   const [subject, setSubject] = useState('Français');
-  const [support, setSupport] = useState(COMPETENCY_TEMPLATES[0].defaultSupport);
-  const [sessionObjectives, setSessionObjectives] = useState(
-    COMPETENCY_TEMPLATES[0].defaultSessionObjectives,
-  );
+  const [support, setSupport] = useState('');
+  const [sessionObjectives, setSessionObjectives] = useState('');
   const [date, setDate] = useState(new Date().toLocaleDateString('fr-FR'));
 
   // Objectives list
-  const [objectives, setObjectives] = useState<string[]>([
-    ...COMPETENCY_TEMPLATES[0].defaultObjectives,
-  ]);
+  const [objectives, setObjectives] = useState<string[]>([]);
   const [newObjectiveText, setNewObjectiveText] = useState('');
+  const selectedCompetency = competencies.find(
+    (competency) => competency.id === selectedCompetencyId,
+  );
 
-  const handleSelectTemplate = (templateName: string) => {
-    setCompetencyType(templateName);
-    const tmpl = COMPETENCY_TEMPLATES.find((t) => t.name === templateName);
-    if (tmpl) {
-      setTitle(tmpl.defaultTitle);
-      setSupport(tmpl.defaultSupport);
-      setSessionObjectives(tmpl.defaultSessionObjectives);
-      setObjectives([...tmpl.defaultObjectives]);
-    } else {
-      setTitle(templateName);
+  useEffect(() => {
+    const nextCompetency =
+      competencies.find((item) => item.id === selectedCompetencyId) ??
+      competencies[0];
+    setSelectedCompetencyId(nextCompetency?.id ?? '');
+    if (!nextCompetency) {
+      setTitle('');
       setSupport('');
       setSessionObjectives('');
-      setObjectives(['Objectif 1']);
+      setObjectives([]);
+      return;
     }
+    const template = COMPETENCY_TEMPLATES.find(
+      (item) =>
+        item.id === nextCompetency.templateId ||
+        normalizeLabel(item.name) === normalizeLabel(nextCompetency.name),
+    );
+    const levelId = data.getLevelIdForYear(
+      selectedClass.academicYear,
+      selectedClass.levelId,
+      selectedClass.level,
+    );
+    const configuredObjectives = data
+      .getObjectivesForLevelCompetency(
+        selectedClass.academicYear,
+        levelId,
+        nextCompetency.id,
+      )
+      .map((item) => item.description);
+    setTitle(template?.defaultTitle ?? nextCompetency.name);
+    setSupport(template?.defaultSupport ?? '');
+    setSessionObjectives(template?.defaultSessionObjectives ?? '');
+    setObjectives(
+      configuredObjectives.length
+        ? configuredObjectives
+        : (template?.defaultObjectives ?? ['Objectif 1']),
+    );
+  }, [selectedClassId, selectedCompetencyId, data.schoolYearConfigurations]);
+
+  const handleSelectCompetency = (competencyId: string) => {
+    setSelectedCompetencyId(competencyId);
+    setNewObjectiveText('');
   };
 
   const handleAddObjective = () => {
@@ -67,19 +114,27 @@ export default function NewAssessmentScreen() {
 
   const handleRemoveObjective = (indexToRemove: number) => {
     if (objectives.length <= 1) {
-      Alert.alert('Attention', 'Une évaluation doit comporter au moins un objectif.');
+      Alert.alert(
+        'Attention',
+        'Une évaluation doit comporter au moins un objectif.',
+      );
       return;
     }
     setObjectives((prev) => prev.filter((_, idx) => idx !== indexToRemove));
   };
 
   const handleUpdateObjective = (index: number, newText: string) => {
-    setObjectives((prev) => prev.map((item, idx) => (idx === index ? newText : item)));
+    setObjectives((prev) =>
+      prev.map((item, idx) => (idx === index ? newText : item)),
+    );
   };
 
   const create = () => {
-    if (!title.trim() || !competencyType.trim()) {
-      Alert.alert('Informations manquantes', 'Le titre et la compétence sont obligatoires.');
+    if (!title.trim() || !selectedCompetency) {
+      Alert.alert(
+        'Informations manquantes',
+        'Le titre et la compétence sont obligatoires.',
+      );
       return;
     }
     if (objectives.length === 0) {
@@ -89,7 +144,8 @@ export default function NewAssessmentScreen() {
 
     const createdId = data.createAssessment({
       classId: selectedClassId,
-      competency: competencyType,
+      competency: selectedCompetency.name,
+      competencyId: selectedCompetency.id,
       title: title.trim(),
       subject: subject.trim(),
       level: selectedClass.level,
@@ -112,8 +168,14 @@ export default function NewAssessmentScreen() {
 
       {/* Class Selector */}
       <Surface style={styles.sectionCard}>
-        <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>1. CHOISIR LA CLASSE</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.classChips}>
+        <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>
+          1. CHOISIR LA CLASSE
+        </Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.classChips}
+        >
           {data.classes.map((cls) => {
             const isSelected = cls.id === selectedClassId;
             return (
@@ -123,7 +185,9 @@ export default function NewAssessmentScreen() {
                 style={[
                   styles.classChip,
                   {
-                    backgroundColor: isSelected ? colors.primary : colors.secondary,
+                    backgroundColor: isSelected
+                      ? colors.primary
+                      : colors.secondary,
                     borderColor: isSelected ? colors.primary : colors.border,
                   },
                 ]}
@@ -131,7 +195,11 @@ export default function NewAssessmentScreen() {
                 <Text
                   style={[
                     styles.classChipText,
-                    { color: isSelected ? colors.primaryForeground : colors.foreground },
+                    {
+                      color: isSelected
+                        ? colors.primaryForeground
+                        : colors.foreground,
+                    },
                   ]}
                 >
                   {cls.name} ({cls.level})
@@ -142,18 +210,32 @@ export default function NewAssessmentScreen() {
         </ScrollView>
       </Surface>
 
-      {/* Competency Template Selector */}
+      {/* Competencies configured for this school year and level */}
       <Surface style={styles.sectionCard}>
         <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>
-          2. CHOISIR LA COMPÉTENCE (MODÈLE)
+          2. COMPÉTENCES ASSOCIÉES À {selectedClass.level.toLocaleUpperCase()}
+        </Text>
+        <Text style={[styles.templateCount, { color: colors.mutedForeground }]}>
+          Année scolaire : {selectedClass.academicYear}. Les objectifs sont
+          copiés depuis la configuration de ce niveau.
         </Text>
         <View style={styles.templatesGrid}>
-          {COMPETENCY_TEMPLATES.map((tmpl) => {
-            const isSelected = competencyType === tmpl.name;
+          {competencies.map((competency) => {
+            const isSelected = selectedCompetencyId === competency.id;
+            const levelId = data.getLevelIdForYear(
+              selectedClass.academicYear,
+              selectedClass.levelId,
+              selectedClass.level,
+            );
+            const objectiveCount = data.getObjectivesForLevelCompetency(
+              selectedClass.academicYear,
+              levelId,
+              competency.id,
+            ).length;
             return (
               <Pressable
-                key={tmpl.id}
-                onPress={() => handleSelectTemplate(tmpl.name)}
+                key={competency.id}
+                onPress={() => handleSelectCompetency(competency.id)}
                 style={[
                   styles.templateCard,
                   {
@@ -169,45 +251,37 @@ export default function NewAssessmentScreen() {
                     { color: isSelected ? colors.primary : colors.foreground },
                   ]}
                 >
-                  {tmpl.name}
+                  {competency.name}
                 </Text>
-                <Text style={[styles.templateCount, { color: colors.mutedForeground }]}>
-                  {tmpl.defaultObjectives.length} objectifs pré-configurés
+                <Text
+                  style={[
+                    styles.templateCount,
+                    { color: colors.mutedForeground },
+                  ]}
+                >
+                  {objectiveCount} objectif{objectiveCount > 1 ? 's' : ''}{' '}
+                  configuré{objectiveCount > 1 ? 's' : ''}
                 </Text>
               </Pressable>
             );
           })}
-
-          {/* Custom option */}
-          <Pressable
-            onPress={() => handleSelectTemplate('Compétence personnalisée')}
-            style={[
-              styles.templateCard,
-              {
-                backgroundColor:
-                  competencyType === 'Compétence personnalisée' ? colors.accent : colors.card,
-                borderColor:
-                  competencyType === 'Compétence personnalisée' ? colors.primary : colors.border,
-                borderWidth: competencyType === 'Compétence personnalisée' ? 2 : 1,
-              },
-            ]}
-          >
-            <Text
-              style={[
-                styles.templateTitle,
-                {
-                  color:
-                    competencyType === 'Compétence personnalisée' ? colors.primary : colors.foreground,
-                },
-              ]}
-            >
-              Autre / Personnalisée
-            </Text>
-            <Text style={[styles.templateCount, { color: colors.mutedForeground }]}>
-              Définir des objectifs sur mesure
-            </Text>
-          </Pressable>
         </View>
+        {competencies.length === 0 && (
+          <View style={styles.emptyCompetencies}>
+            <Text
+              style={[styles.templateCount, { color: colors.mutedForeground }]}
+            >
+              Aucune compétence n’est associée à ce niveau pour cette année.
+              Ajoutez-la dans la configuration pédagogique.
+            </Text>
+            <Button
+              label="Configurer les compétences"
+              icon="settings"
+              secondary
+              onPress={() => router.push('/settings')}
+            />
+          </View>
+        )}
       </Surface>
 
       {/* Details Form */}
@@ -215,48 +289,72 @@ export default function NewAssessmentScreen() {
         <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>
           3. DÉTAILS DE LA SÉANCE
         </Text>
+        <Text style={[styles.templateCount, { color: colors.mutedForeground }]}>
+          Les objectifs sont copiés depuis la configuration du niveau. Les
+          modifications ci-dessous s’appliquent uniquement à cette évaluation.
+        </Text>
 
         <View style={styles.field}>
-          <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>TITRE DE L’ÉVALUATION</Text>
+          <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>
+            TITRE DE L’ÉVALUATION
+          </Text>
           <TextInput
             value={title}
             onChangeText={setTitle}
             placeholder="Ex. Compréhension de l’écrit — Le texte explicatif"
             placeholderTextColor={colors.mutedForeground}
-            style={[styles.input, { color: colors.foreground, borderColor: colors.border }]}
+            style={[
+              styles.input,
+              { color: colors.foreground, borderColor: colors.border },
+            ]}
           />
         </View>
 
         <View style={styles.field}>
-          <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>SUPPORT PÉDAGOGIQUE</Text>
+          <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>
+            SUPPORT PÉDAGOGIQUE
+          </Text>
           <TextInput
             value={support}
             onChangeText={setSupport}
             placeholder="Ex. Des extraits écrits / Document sonore"
             placeholderTextColor={colors.mutedForeground}
-            style={[styles.input, { color: colors.foreground, borderColor: colors.border }]}
+            style={[
+              styles.input,
+              { color: colors.foreground, borderColor: colors.border },
+            ]}
           />
         </View>
 
         <View style={styles.field}>
-          <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>OBJECTIF DE LA SÉANCE</Text>
+          <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>
+            OBJECTIF DE LA SÉANCE
+          </Text>
           <TextInput
             value={sessionObjectives}
             onChangeText={setSessionObjectives}
             placeholder="Ex. Comprendre et interpréter des textes écrits en vue"
             placeholderTextColor={colors.mutedForeground}
-            style={[styles.input, { color: colors.foreground, borderColor: colors.border }]}
+            style={[
+              styles.input,
+              { color: colors.foreground, borderColor: colors.border },
+            ]}
           />
         </View>
 
         <View style={styles.field}>
-          <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>DATE</Text>
+          <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>
+            DATE
+          </Text>
           <TextInput
             value={date}
             onChangeText={setDate}
             placeholder="JJ/MM/AAAA"
             placeholderTextColor={colors.mutedForeground}
-            style={[styles.input, { color: colors.foreground, borderColor: colors.border }]}
+            style={[
+              styles.input,
+              { color: colors.foreground, borderColor: colors.border },
+            ]}
           />
         </View>
       </Surface>
@@ -271,9 +369,19 @@ export default function NewAssessmentScreen() {
 
         <View style={styles.objectivesList}>
           {objectives.map((desc, idx) => (
-            <View key={idx} style={[styles.objectiveRow, { borderColor: colors.border }]}>
-              <View style={[styles.objectiveIndex, { backgroundColor: colors.accent }]}>
-                <Text style={[styles.objectiveIndexText, { color: colors.primary }]}>
+            <View
+              key={idx}
+              style={[styles.objectiveRow, { borderColor: colors.border }]}
+            >
+              <View
+                style={[
+                  styles.objectiveIndex,
+                  { backgroundColor: colors.accent },
+                ]}
+              >
+                <Text
+                  style={[styles.objectiveIndexText, { color: colors.primary }]}
+                >
                   {String(idx + 1).padStart(2, '0')}
                 </Text>
               </View>
@@ -288,7 +396,11 @@ export default function NewAssessmentScreen() {
                 hitSlop={8}
                 style={styles.deleteButton}
               >
-                <Feather name="trash-2" size={17} color={colors.destructiveForeground || '#DC2626'} />
+                <Feather
+                  name="trash-2"
+                  size={17}
+                  color={colors.destructiveForeground || '#DC2626'}
+                />
               </Pressable>
             </View>
           ))}
@@ -301,7 +413,10 @@ export default function NewAssessmentScreen() {
             onChangeText={setNewObjectiveText}
             placeholder="Ajouter un objectif personnalisé…"
             placeholderTextColor={colors.mutedForeground}
-            style={[styles.addObjectiveInput, { color: colors.foreground, borderColor: colors.border }]}
+            style={[
+              styles.addObjectiveInput,
+              { color: colors.foreground, borderColor: colors.border },
+            ]}
           />
           <Button
             label="Ajouter"
@@ -315,7 +430,11 @@ export default function NewAssessmentScreen() {
 
       {/* Submit / Cancel Actions */}
       <View style={styles.actions}>
-        <Button label="Créer cette compétence & Commencer l’évaluation" icon="check" onPress={create} />
+        <Button
+          label="Créer cette compétence & Commencer l’évaluation"
+          icon="check"
+          onPress={create}
+        />
         <Button label="Annuler" secondary onPress={() => router.back()} />
       </View>
     </Screen>
@@ -340,8 +459,9 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   classChip: {
+    minHeight: 40,
     paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingVertical: 9,
     borderRadius: 9,
     borderWidth: 1,
   },
@@ -351,6 +471,9 @@ const styles = StyleSheet.create({
   },
   templatesGrid: {
     gap: 8,
+  },
+  emptyCompetencies: {
+    gap: 10,
   },
   templateCard: {
     padding: 12,
