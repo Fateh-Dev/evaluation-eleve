@@ -1228,7 +1228,6 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       school: { ...createEmptyState().school, ...candidate.school },
       teacherName: typeof candidate.teacherName === 'string' ? candidate.teacherName : '',
       academicYear: typeof candidate.academicYear === 'string' ? candidate.academicYear : '2026-2027',
-      customCompetencies: Array.isArray(candidate.customCompetencies) ? candidate.customCompetencies : [],
       classes: candidate.classes,
       pupils: candidate.pupils,
       assessments: candidate.assessments,
@@ -1868,11 +1867,6 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       statistics,
       getBackupState,
       restoreBackupState,
-      remoteSync.syncing,
-      remoteSync.syncError,
-      remoteSync.conflict,
-      remoteSync.syncNow,
-      remoteSync.resolveConflict,
     ],
   );
 
