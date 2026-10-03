@@ -46,9 +46,18 @@ export default function AssessmentEvaluationScreen() {
     return data.getEvaluationsForAssessment(currentAssessment.id);
   }, [data.evaluations, currentAssessment.id]);
 
+  const absentPupilIds = useMemo(
+    () => new Set(
+      data.getAbsentPupilIdsForAssessment(currentAssessment.id)
+        .filter((id) => currentPupils.some((pupil) => pupil.id === id)),
+    ),
+    [data.absentPupilIds, currentAssessment.id, currentPupils],
+  );
+  const presentPupilCount = currentPupils.length - absentPupilIds.size;
+
   const currentStatistics = useMemo(() => {
     return data.getStatisticsForAssessment(currentAssessment.id);
-  }, [data.pupils, data.objectives, data.evaluations, currentAssessment.id]);
+  }, [data.pupils, data.objectives, data.evaluations, data.absentPupilIds, currentAssessment.id]);
 
   const [pupilIndex, setPupilIndex] = useState(() => {
     const index = currentPupils.findIndex((pupil) => pupil.id === pupilId);
@@ -77,7 +86,7 @@ export default function AssessmentEvaluationScreen() {
   };
 
   const evaluatedTotal = currentStatistics.reduce((sum, stat) => sum + stat.evaluated, 0);
-  const total = currentPupils.length * currentObjectives.length;
+  const total = presentPupilCount * currentObjectives.length;
   const progressPercentage =
     total > 0 ? Math.round((evaluatedTotal / total) * 100) : 0;
   const currentValues = useMemo(
@@ -309,6 +318,9 @@ export default function AssessmentEvaluationScreen() {
                   <Text style={[styles.metaProgressCount, { color: colors.foreground }]}>
                     {evaluatedTotal} / {total} évaluations complétées
                   </Text>
+                  <Text style={[styles.attendanceSummary, { color: colors.mutedForeground }]}>
+                    {presentPupilCount} présents · {absentPupilIds.size} absents
+                  </Text>
                 </View>
                 <View style={[styles.metaObjectivesBadge, { backgroundColor: colors.secondary }]}>
                   <Feather name="list" size={13} color={colors.mutedForeground} />
@@ -406,9 +418,27 @@ export default function AssessmentEvaluationScreen() {
                   <Text style={[styles.pupilName, { color: colors.foreground }]}>
                     {pupil.lastName} {pupil.firstName}
                   </Text>
-                  <Text style={[styles.pupilNumber, { color: colors.mutedForeground }]}>
-                    N° {pupil.registrationNumber}
-                  </Text>
+                  <View style={styles.desktopPupilMeta}>
+                    <Text style={[styles.pupilNumber, { color: colors.mutedForeground }]}>
+                      N° {pupil.registrationNumber}
+                    </Text>
+                    <Pressable
+                      onPress={() => data.setPupilAbsent(pupil.id, !absentPupilIds.has(pupil.id), currentAssessment.id)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${absentPupilIds.has(pupil.id) ? 'Marquer présent' : 'Marquer absent'} : ${pupil.lastName} ${pupil.firstName}`}
+                      style={[
+                        styles.attendanceToggle,
+                        { backgroundColor: absentPupilIds.has(pupil.id) ? colors.errorSurface : colors.successSurface },
+                      ]}
+                    >
+                      <Text style={[
+                        styles.attendanceToggleText,
+                        { color: absentPupilIds.has(pupil.id) ? colors.errorForeground : colors.successForeground },
+                      ]}>
+                        {absentPupilIds.has(pupil.id) ? 'Absent' : 'Présent'}
+                      </Text>
+                    </Pressable>
+                  </View>
                 </View>
 
                 {currentObjectives.map((objective) => {
@@ -417,9 +447,12 @@ export default function AssessmentEvaluationScreen() {
                     <Pressable
                       key={objective.id}
                       onPress={() => data.cycleEvaluation(pupil.id, objective.id, currentAssessment.id)}
-                      style={styles.cell}
+                      disabled={absentPupilIds.has(pupil.id)}
+                      style={[styles.cell, absentPupilIds.has(pupil.id) && styles.absentCell]}
                     >
-                      <ValueMark value={value} size="small" />
+                      {absentPupilIds.has(pupil.id)
+                        ? <Text style={[styles.absentCellText, { color: colors.errorForeground }]}>ABS</Text>
+                        : <ValueMark value={value} size="small" />}
                     </Pressable>
                   );
                 })}
@@ -473,6 +506,22 @@ export default function AssessmentEvaluationScreen() {
               <Text style={[styles.mobilePupilName, { color: colors.foreground }]}>
                 {currentPupil.lastName} {currentPupil.firstName}
               </Text>
+              <Pressable
+                onPress={() => data.setPupilAbsent(currentPupil.id, !absentPupilIds.has(currentPupil.id), currentAssessment.id)}
+                accessibilityRole="button"
+                accessibilityLabel={`${absentPupilIds.has(currentPupil.id) ? 'Marquer présent' : 'Marquer absent'} : ${currentPupil.lastName} ${currentPupil.firstName}`}
+                style={[
+                  styles.attendanceToggle,
+                  { backgroundColor: absentPupilIds.has(currentPupil.id) ? colors.errorSurface : colors.successSurface },
+                ]}
+              >
+                <Text style={[
+                  styles.attendanceToggleText,
+                  { color: absentPupilIds.has(currentPupil.id) ? colors.errorForeground : colors.successForeground },
+                ]}>
+                  {absentPupilIds.has(currentPupil.id) ? 'Absent · toucher pour marquer présent' : 'Marquer absent'}
+                </Text>
+              </Pressable>
             </View>
 
             <Pressable
@@ -492,6 +541,14 @@ export default function AssessmentEvaluationScreen() {
             </Pressable>
           </View>
 
+          {absentPupilIds.has(currentPupil.id) ? (
+            <Surface style={[styles.absentNotice, { backgroundColor: colors.errorSurface }]}>
+              <Feather name="user-x" size={18} color={colors.errorForeground} />
+              <Text style={[styles.absentNoticeText, { color: colors.errorForeground }]}>
+                Élève absent à cette évaluation. Ses résultats sont exclus des statistiques.
+              </Text>
+            </Surface>
+          ) : null}
           <View style={styles.mobileObjectives}>
             {currentObjectives.map((objective) => {
               const value = currentValues[objective.id] ?? 'NotEvaluated';
@@ -519,6 +576,7 @@ export default function AssessmentEvaluationScreen() {
                     {(['Acquired', 'PartiallyAcquired', 'NotAcquired'] as EvaluationValue[]).map((choice) => (
                       <Pressable
                         key={choice}
+                        disabled={absentPupilIds.has(currentPupil.id)}
                         onPress={() =>
                           data.setEvaluation(currentPupil.id, objective.id, choice, currentAssessment.id)
                         }
@@ -527,6 +585,7 @@ export default function AssessmentEvaluationScreen() {
                           {
                             backgroundColor: value === choice ? colors.primary : colors.secondary,
                             borderColor: value === choice ? colors.primary : colors.border,
+                            opacity: absentPupilIds.has(currentPupil.id) ? 0.45 : 1,
                           },
                         ]}
                       >
@@ -665,6 +724,7 @@ const styles = StyleSheet.create({
   metaProgress: { gap: 9, paddingHorizontal: 2 },
   metaProgressTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   metaProgressCount: { fontSize: 11, fontWeight: '600', marginTop: 3 },
+  attendanceSummary: { fontSize: 10, marginTop: 3, fontWeight: '600' },
   metaObjectivesBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 9, paddingHorizontal: 9, paddingVertical: 7 },
   metaObjectivesText: { fontSize: 10, fontWeight: '700' },
   metaProgressTrack: { height: 7, borderRadius: 5, overflow: 'hidden' },
@@ -682,6 +742,11 @@ const styles = StyleSheet.create({
   markAll: { fontSize: 9, fontWeight: '700' },
   pupilName: { fontSize: 12, fontWeight: '700' },
   pupilNumber: { fontSize: 10, marginTop: 3 },
+  desktopPupilMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6 },
+  attendanceToggle: { alignSelf: 'center', borderRadius: 7, paddingHorizontal: 8, paddingVertical: 4 },
+  attendanceToggleText: { fontSize: 10, fontWeight: '800' },
+  absentCell: { backgroundColor: '#FDE8E7' },
+  absentCellText: { fontSize: 9, fontWeight: '800' },
   cell: { width: 83, alignItems: 'center', justifyContent: 'center' },
   totalRow: { flexDirection: 'row', minHeight: 50 },
   totalText: { fontSize: 11, fontWeight: '800' },
@@ -693,6 +758,8 @@ const styles = StyleSheet.create({
   pupilHeading: { alignItems: 'center', flex: 1, gap: 3 },
   pupilIndex: { fontSize: 10, fontWeight: '800', letterSpacing: 1 },
   mobilePupilName: { fontSize: 17, fontWeight: '700', textAlign: 'center' },
+  absentNotice: { flexDirection: 'row', alignItems: 'center', gap: 9, padding: 12, borderRadius: 12, marginBottom: 10 },
+  absentNoticeText: { flex: 1, fontSize: 12, lineHeight: 17, fontWeight: '700' },
   mobileObjectives: { gap: 10 },
   mobileObjective: { gap: 13, padding: 14 },
   objectiveCopy: { gap: 5 },

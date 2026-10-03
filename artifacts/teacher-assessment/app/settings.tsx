@@ -85,7 +85,7 @@ export default function SettingsScreen() {
         includedCollections: [
           'school', 'teacherName', 'academicYear', 'schoolYearConfigurations',
           'classes', 'pupils', 'assessments', 'objectives', 'evaluations',
-          'remediations', 'activeClassId', 'activeAssessmentId',
+          'absentPupilIds', 'remediations', 'activeClassId', 'activeAssessmentId',
         ],
         counts: {
           classes: backupState.classes.length,

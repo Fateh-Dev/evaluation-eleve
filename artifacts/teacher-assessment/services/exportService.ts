@@ -36,6 +36,7 @@ export type AssessmentExportData = {
     lastName: string;
   }>;
   evaluations: Record<string, Record<string, string>>;
+  absentPupilIds?: string[];
   individualRemediation: string;
   classRemediation: string;
 };
@@ -81,10 +82,11 @@ export function generateAssessmentCsv(data: AssessmentExportData): Uint8Array {
     const num = String(obj.order || idx + 1).padStart(2, '0');
     objHeaders.push(`Obj ${num} (+)`, `Obj ${num} (±)`, `Obj ${num} (-)`);
   });
-  rows.push(['N°', 'Nom et Prénom', ...objHeaders, 'Total (+)', 'Total (±)', 'Total (-)']);
+  rows.push(['N°', 'Nom et Prénom', 'Présence', ...objHeaders, 'Total (+)', 'Total (±)', 'Total (-)']);
 
   // â”€â”€ Pupil data rows â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const objectiveTotals = data.objectives.map(() => ({ plus: 0, pm: 0, minus: 0 }));
+  const absentPupilIds = new Set(data.absentPupilIds ?? []);
   let grandPlus = 0;
   let grandPm = 0;
   let grandMinus = 0;
@@ -92,6 +94,7 @@ export function generateAssessmentCsv(data: AssessmentExportData): Uint8Array {
   data.pupils.forEach((pupil, pIdx) => {
     const regNo = pupil.registrationNumber || String(pIdx + 1).padStart(2, '0');
     const fullName = `${pupil.lastName || ''} ${pupil.firstName || ''}`.trim();
+    const isAbsent = absentPupilIds.has(pupil.id);
     let pPlus = 0;
     let pPm = 0;
     let pMinus = 0;
@@ -99,15 +102,15 @@ export function generateAssessmentCsv(data: AssessmentExportData): Uint8Array {
     const evalCells: string[] = [];
     data.objectives.forEach((obj, oIdx) => {
       const val = data.evaluations[pupil.id]?.[obj.id] ?? 'NotEvaluated';
-      if (val === 'Acquired') {
+      if (!isAbsent && val === 'Acquired') {
         evalCells.push('+', '', '');
         pPlus++;
         objectiveTotals[oIdx].plus++;
-      } else if (val === 'PartiallyAcquired') {
+      } else if (!isAbsent && val === 'PartiallyAcquired') {
         evalCells.push('', '±', '');
         pPm++;
         objectiveTotals[oIdx].pm++;
-      } else if (val === 'NotAcquired') {
+      } else if (!isAbsent && val === 'NotAcquired') {
         evalCells.push('', '', '-');
         pMinus++;
         objectiveTotals[oIdx].minus++;
@@ -120,7 +123,7 @@ export function generateAssessmentCsv(data: AssessmentExportData): Uint8Array {
     grandPm += pPm;
     grandMinus += pMinus;
 
-    rows.push([regNo, fullName, ...evalCells, String(pPlus), String(pPm), String(pMinus)]);
+    rows.push([regNo, fullName, isAbsent ? 'Absent' : 'Présent', ...(isAbsent ? data.objectives.flatMap(() => ['', '', '']) : evalCells), String(pPlus), String(pPm), String(pMinus)]);
   });
 
   // â”€â”€ Bottom total row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -128,7 +131,7 @@ export function generateAssessmentCsv(data: AssessmentExportData): Uint8Array {
   objectiveTotals.forEach((t) => {
     totalCells.push(String(t.plus), String(t.pm), String(t.minus));
   });
-  rows.push(['Total', '', ...totalCells, String(grandPlus), String(grandPm), String(grandMinus)]);
+  rows.push(['Total', '', '', ...totalCells, String(grandPlus), String(grandPm), String(grandMinus)]);
 
   rows.push([]); // spacer
 
@@ -164,7 +167,7 @@ export async function generateAssessmentWorkbook(data: AssessmentExportData): Pr
   const zip = new JSZip();
   const rows: Cell[][] = [];
   const merges: string[] = [];
-  const columnCount = Math.max(8, 5 + data.objectives.length * 3);
+  const columnCount = Math.max(8, 6 + data.objectives.length * 3);
   const lastColumn = excelColumn(columnCount - 1);
   const mergedLine = (value: string, style: number) => {
     const row = rows.length + 1;
@@ -195,6 +198,7 @@ export async function generateAssessmentWorkbook(data: AssessmentExportData): Pr
   const groupedHeader: Cell[] = [
     { value: 'N°', style: 5 },
     { value: 'Nom et prénom', style: 5 },
+    { value: 'Présence', style: 5 },
   ];
   data.objectives.forEach((objective, index) => {
     const firstColumn = groupedHeader.length;
@@ -209,7 +213,7 @@ export async function generateAssessmentWorkbook(data: AssessmentExportData): Pr
   merges.push(`${excelColumn(totalColumn)}${headerRowNumber}:${excelColumn(totalColumn + 2)}${headerRowNumber}`);
   rows.push(groupedHeader);
 
-  const subHeader: Cell[] = [null, null];
+  const subHeader: Cell[] = [null, null, null];
   data.objectives.forEach(() => {
     subHeader.push(
       { value: '+', style: 6 },
@@ -223,26 +227,29 @@ export async function generateAssessmentWorkbook(data: AssessmentExportData): Pr
     { value: '−', style: 6 },
   );
   rows.push(subHeader);
-  merges.push(`A${headerRowNumber}:A${headerRowNumber + 1}`, `B${headerRowNumber}:B${headerRowNumber + 1}`);
+  merges.push(`A${headerRowNumber}:A${headerRowNumber + 1}`, `B${headerRowNumber}:B${headerRowNumber + 1}`, `C${headerRowNumber}:C${headerRowNumber + 1}`);
   const pupilFirstRow = rows.length + 1;
 
   const objectiveTotals = data.objectives.map(() => ({ plus: 0, partial: 0, minus: 0 }));
+  const absentPupilIds = new Set(data.absentPupilIds ?? []);
   let grandPlus = 0;
   let grandPartial = 0;
   let grandMinus = 0;
   data.pupils.forEach((pupil, pupilIndex) => {
+    const isAbsent = absentPupilIds.has(pupil.id);
     let pupilPlus = 0;
     let pupilPartial = 0;
     let pupilMinus = 0;
     const pupilRow: Cell[] = [
       { value: pupil.registrationNumber || String(pupilIndex + 1).padStart(2, '0'), style: 7 },
       { value: `${pupil.lastName || ''} ${pupil.firstName || ''}`.trim(), style: 8 },
+      { value: isAbsent ? 'Absent' : 'Présent', style: isAbsent ? 11 : 9 },
     ];
     data.objectives.forEach((objective, objectiveIndex) => {
       const evaluation = data.evaluations[pupil.id]?.[objective.id];
-      const acquired = evaluation === 'Acquired';
-      const partial = evaluation === 'PartiallyAcquired';
-      const notAcquired = evaluation === 'NotAcquired';
+      const acquired = !isAbsent && evaluation === 'Acquired';
+      const partial = !isAbsent && evaluation === 'PartiallyAcquired';
+      const notAcquired = !isAbsent && evaluation === 'NotAcquired';
       pupilRow.push(
         { value: acquired ? '+' : '', style: acquired ? 9 : 7 },
         { value: partial ? '±' : '', style: partial ? 10 : 7 },
@@ -264,8 +271,8 @@ export async function generateAssessmentWorkbook(data: AssessmentExportData): Pr
   });
 
   const totalRowNumber = rows.length + 1;
-  const totalRow: Cell[] = [{ value: 'TOTAL CLASSE', style: 13 }, null];
-  merges.push(`A${totalRowNumber}:B${totalRowNumber}`);
+  const totalRow: Cell[] = [{ value: 'TOTAL CLASSE', style: 13 }, null, null];
+  merges.push(`A${totalRowNumber}:C${totalRowNumber}`);
   objectiveTotals.forEach((total) => totalRow.push(
     { value: total.plus, style: 13 },
     { value: total.partial, style: 13 },
@@ -308,10 +315,11 @@ export async function generateAssessmentWorkbook(data: AssessmentExportData): Pr
   const columns = [
     '<col min="1" max="1" width="7" customWidth="1"/>',
     '<col min="2" max="2" width="30" customWidth="1"/>',
+    '<col min="3" max="3" width="12" customWidth="1"/>',
     data.objectives.length
-      ? `<col min="3" max="${2 + data.objectives.length * 3}" width="6" customWidth="1"/>`
+      ? `<col min="4" max="${3 + data.objectives.length * 3}" width="6" customWidth="1"/>`
       : '',
-    `<col min="${3 + data.objectives.length * 3}" max="${5 + data.objectives.length * 3}" width="8" customWidth="1"/>`,
+    `<col min="${4 + data.objectives.length * 3}" max="${6 + data.objectives.length * 3}" width="8" customWidth="1"/>`,
   ].join('');
   const mergeXml = `<mergeCells count="${merges.length}">${merges.map((merge) => `<mergeCell ref="${merge}"/>`).join('')}</mergeCells>`;
   const worksheetXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -437,24 +445,28 @@ export async function generateAssessmentWord(data: AssessmentExportData): Promis
 
   const totalWidth = 15398;
   const numberWidth = 620;
-  const nameWidth = 2800;
+  const nameWidth = 2200;
+  const presenceWidth = 900;
   const totalCellWidth = 520;
-  const evaluationWidth = Math.max(180, Math.floor((totalWidth - numberWidth - nameWidth - totalCellWidth * 3) / Math.max(1, data.objectives.length * 3)));
+  const evaluationWidth = Math.max(180, Math.floor((totalWidth - numberWidth - nameWidth - presenceWidth - totalCellWidth * 3) / Math.max(1, data.objectives.length * 3)));
   const gridWidths = [
     numberWidth,
     nameWidth,
+    presenceWidth,
     ...data.objectives.flatMap(() => [evaluationWidth, evaluationWidth, evaluationWidth]),
     totalCellWidth, totalCellWidth, totalCellWidth,
   ];
   const groupedHeaders = [
     cell('N°', numberWidth, { fill: '1F4E78', color: 'FFFFFF', bold: true, verticalMerge: 'restart' }),
     cell('Nom et prénom', nameWidth, { fill: '1F4E78', color: 'FFFFFF', bold: true, align: 'left', verticalMerge: 'restart' }),
+    cell('Présence', presenceWidth, { fill: '1F4E78', color: 'FFFFFF', bold: true, verticalMerge: 'restart' }),
     ...data.objectives.map((objective, index) => cell(`Objectif ${String(objective.order || index + 1).padStart(2, '0')}`, evaluationWidth * 3, { fill: '1F4E78', color: 'FFFFFF', bold: true, gridSpan: 3 })),
     cell('Totaux', totalCellWidth * 3, { fill: '1F4E78', color: 'FFFFFF', bold: true, gridSpan: 3 }),
   ];
   const subHeaders = [
     cell('', numberWidth, { fill: '1F4E78', verticalMerge: 'continue' }),
     cell('', nameWidth, { fill: '1F4E78', verticalMerge: 'continue' }),
+    cell('', presenceWidth, { fill: '1F4E78', verticalMerge: 'continue' }),
     ...data.objectives.flatMap(() => [
       cell('+', evaluationWidth, { fill: 'D9E1F2', bold: true }),
       cell('±', evaluationWidth, { fill: 'FFF3CD', bold: true }),
@@ -466,18 +478,20 @@ export async function generateAssessmentWord(data: AssessmentExportData): Promis
   ];
   const resultsTable = [tableStart(gridWidths), tableRow(groupedHeaders, true), tableRow(subHeaders, true)];
   const objectiveTotals = data.objectives.map(() => ({ plus: 0, partial: 0, minus: 0 }));
+  const absentPupilIds = new Set(data.absentPupilIds ?? []);
   let grandPlus = 0;
   let grandPartial = 0;
   let grandMinus = 0;
   data.pupils.forEach((pupil, index) => {
+    const isAbsent = absentPupilIds.has(pupil.id);
     let plus = 0;
     let partial = 0;
     let minus = 0;
     const resultCells = data.objectives.flatMap((objective, objectiveIndex) => {
       const result = data.evaluations[pupil.id]?.[objective.id];
-      const acquired = result === 'Acquired';
-      const partlyAcquired = result === 'PartiallyAcquired';
-      const notAcquired = result === 'NotAcquired';
+      const acquired = !isAbsent && result === 'Acquired';
+      const partlyAcquired = !isAbsent && result === 'PartiallyAcquired';
+      const notAcquired = !isAbsent && result === 'NotAcquired';
       if (acquired) { plus++; objectiveTotals[objectiveIndex].plus++; }
       if (partlyAcquired) { partial++; objectiveTotals[objectiveIndex].partial++; }
       if (notAcquired) { minus++; objectiveTotals[objectiveIndex].minus++; }
@@ -494,6 +508,11 @@ export async function generateAssessmentWord(data: AssessmentExportData): Promis
     resultsTable.push(tableRow([
       cell(pupil.registrationNumber || String(index + 1).padStart(2, '0'), numberWidth, { fill: stripe }),
       cell(`${pupil.lastName || ''} ${pupil.firstName || ''}`.trim(), nameWidth, { fill: stripe, align: 'left' }),
+      cell(isAbsent ? 'ABSENT' : 'Présent', presenceWidth, {
+        fill: isAbsent ? 'FDE8E7' : 'E8F5E9',
+        color: isAbsent ? 'B91C1C' : '166534',
+        bold: true,
+      }),
       ...resultCells,
       cell(String(plus), totalCellWidth, { fill: 'E9EEF4', bold: true }),
       cell(String(partial), totalCellWidth, { fill: 'E9EEF4', bold: true }),
@@ -506,7 +525,7 @@ export async function generateAssessmentWord(data: AssessmentExportData): Promis
     cell(String(total.minus), evaluationWidth, { fill: 'D9E1F2', bold: true }),
   ]);
   resultsTable.push(tableRow([
-    cell('TOTAL CLASSE', numberWidth + nameWidth, { fill: 'D9E1F2', bold: true, gridSpan: 2 }),
+    cell('TOTAL CLASSE', numberWidth + nameWidth + presenceWidth, { fill: 'D9E1F2', bold: true, gridSpan: 3 }),
     ...totalCells,
     cell(String(grandPlus), totalCellWidth, { fill: 'D9E1F2', bold: true }),
     cell(String(grandPartial), totalCellWidth, { fill: 'D9E1F2', bold: true }),
@@ -672,6 +691,7 @@ export async function downloadFile(
  */
 export function generateAssessmentPdfHtml(data: AssessmentExportData): string {
   const numObjectives = data.objectives.length;
+  const absentPupilIds = new Set(data.absentPupilIds ?? []);
 
   // Compute totals
   const objTotals = data.objectives.map((obj) => {
@@ -679,6 +699,7 @@ export function generateAssessmentPdfHtml(data: AssessmentExportData): string {
     let plusMinus = 0;
     let minus = 0;
     data.pupils.forEach((pupil) => {
+      if (absentPupilIds.has(pupil.id)) return;
       const val = data.evaluations[pupil.id]?.[obj.id];
       if (val === 'Acquired') plus++;
       else if (val === 'PartiallyAcquired') plusMinus++;
@@ -692,15 +713,16 @@ export function generateAssessmentPdfHtml(data: AssessmentExportData): string {
   let grandMinus = 0;
 
   const pupilRows = data.pupils.map((pupil, pIndex) => {
+    const isAbsent = absentPupilIds.has(pupil.id);
     let pPlus = 0;
     let pPlusMinus = 0;
     let pMinus = 0;
 
     const objCells = data.objectives.map((obj) => {
       const val = data.evaluations[pupil.id]?.[obj.id];
-      const isPlus = val === 'Acquired';
-      const isPlusMinus = val === 'PartiallyAcquired';
-      const isMinus = val === 'NotAcquired';
+      const isPlus = !isAbsent && val === 'Acquired';
+      const isPlusMinus = !isAbsent && val === 'PartiallyAcquired';
+      const isMinus = !isAbsent && val === 'NotAcquired';
 
       if (isPlus) { pPlus++; grandPlus++; }
       if (isPlusMinus) { pPlusMinus++; grandPlusMinus++; }
@@ -717,6 +739,7 @@ export function generateAssessmentPdfHtml(data: AssessmentExportData): string {
       <tr>
         <td class="col-num">${pupil.registrationNumber || pIndex + 1}</td>
         <td class="col-name">${pupil.lastName} ${pupil.firstName}</td>
+        <td class="${isAbsent ? 'presence-absent' : 'presence-present'}">${isAbsent ? 'ABSENT' : 'Présent'}</td>
         ${objCells}
         <td class="col-total col-plus">${pPlus}</td>
         <td class="col-total col-pm">${pPlusMinus}</td>
@@ -841,6 +864,9 @@ export function generateAssessmentPdfHtml(data: AssessmentExportData): string {
         }
         .th-num { width: 32px; }
         .th-name { width: 140px; text-align: left; padding-left: 6px; }
+        .th-presence { width: 62px; }
+        .presence-present { color: #166534; font-weight: 700; background: #e8f5e9; }
+        .presence-absent { color: #b91c1c; font-weight: 800; background: #fde8e7; }
         .col-num { font-weight: 600; color: #4a5568; }
         .col-name { text-align: left; padding-left: 6px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .th-obj { font-size: 9px; }
@@ -918,6 +944,7 @@ export function generateAssessmentPdfHtml(data: AssessmentExportData): string {
           <tr>
             <th rowspan="2" class="th-num">N°</th>
             <th rowspan="2" class="th-name">Nom et Prénom</th>
+            <th rowspan="2" class="th-presence">Présence</th>
             ${objHeaders}
             <th colspan="3" class="th-obj">Total</th>
           </tr>
@@ -932,6 +959,7 @@ export function generateAssessmentPdfHtml(data: AssessmentExportData): string {
           ${pupilRows}
           <tr class="total-row">
             <td colspan="2" style="text-align: right; padding-right: 8px; font-weight: 800;">TOTAL CLASSE :</td>
+            <td></td>
             ${totalCells}
             <td class="col-total col-plus">${grandPlus}</td>
             <td class="col-total col-pm">${grandPlusMinus}</td>

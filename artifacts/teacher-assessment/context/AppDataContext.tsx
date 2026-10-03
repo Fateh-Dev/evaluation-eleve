@@ -93,6 +93,7 @@ export type AppState = {
   activeAssessmentId: string;
   objectives: Record<string, Objective[]>; // keyed by assessmentId
   evaluations: Record<string, Record<string, Record<string, EvaluationValue>>>; // [assessmentId][pupilId][objectiveId]
+  absentPupilIds: Record<string, string[]>; // [assessmentId] => absent pupil IDs
   remediations: Record<string, { individual: string; classroom: string }>; // keyed by assessmentId
 };
 
@@ -119,6 +120,7 @@ export type AppDataContextValue = {
   pupils: Pupil[];
   assessments: Assessment[];
   activeAssessmentId: string;
+  absentPupilIds: Record<string, string[]>;
   allObjectives: Record<string, Objective[]>; // alias for objectives (all assessments)
   allEvaluations: Record<
     string,
@@ -276,6 +278,8 @@ export type AppDataContextValue = {
   getEvaluationsForAssessment: (
     assessmentId: string,
   ) => Record<string, Record<string, EvaluationValue>>;
+  setPupilAbsent: (pupilId: string, absent: boolean, assessmentId?: string) => void;
+  getAbsentPupilIdsForAssessment: (assessmentId: string) => string[];
   getStatisticsForAssessment: (assessmentId: string) => AssessmentStatistics[];
 
   // Remediation Actions
@@ -315,6 +319,7 @@ export function createEmptyState(): AppState {
     activeAssessmentId: '',
     objectives: {},
     evaluations: {},
+    absentPupilIds: {},
     remediations: {},
   };
 }
@@ -358,6 +363,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
               assessments,
               objectives,
               evaluations: parsed.evaluations ?? {},
+              absentPupilIds: parsed.absentPupilIds ?? {},
               remediations: parsed.remediations ?? {},
             }));
           } catch {
@@ -1248,6 +1254,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       assessments: candidate.assessments,
       objectives: candidate.objectives ?? {},
       evaluations: candidate.evaluations ?? {},
+      absentPupilIds: candidate.absentPupilIds ?? {},
       remediations: candidate.remediations ?? {},
       activeClassId: typeof candidate.activeClassId === 'string' ? candidate.activeClassId : '',
       activeAssessmentId: typeof candidate.activeAssessmentId === 'string' ? candidate.activeAssessmentId : '',
@@ -1282,11 +1289,13 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       const nextObjectives = { ...prev.objectives };
       const nextEvaluations = { ...prev.evaluations };
       const nextRemediations = { ...prev.remediations };
+      const nextAbsences = { ...prev.absentPupilIds };
 
       deletedAssessmentIds.forEach((id) => {
         delete nextObjectives[id];
         delete nextEvaluations[id];
         delete nextRemediations[id];
+        delete nextAbsences[id];
       });
 
       // Determine next active assessment
@@ -1312,6 +1321,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         objectives: nextObjectives,
         evaluations: nextEvaluations,
         remediations: nextRemediations,
+        absentPupilIds: nextAbsences,
       };
     });
   };
@@ -1529,10 +1539,12 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       const nextObjectives = { ...prev.objectives };
       const nextEvaluations = { ...prev.evaluations };
       const nextRemediations = { ...prev.remediations };
+      const nextAbsences = { ...prev.absentPupilIds };
 
       delete nextObjectives[assessmentId];
       delete nextEvaluations[assessmentId];
       delete nextRemediations[assessmentId];
+      delete nextAbsences[assessmentId];
 
       let nextActiveAssessmentId = prev.activeAssessmentId;
       if (prev.activeAssessmentId === assessmentId) {
@@ -1553,6 +1565,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         objectives: nextObjectives,
         evaluations: nextEvaluations,
         remediations: nextRemediations,
+        absentPupilIds: nextAbsences,
       };
     });
   };
@@ -1640,6 +1653,27 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     return state.evaluations[assessmentId] ?? {};
   };
 
+  const getAbsentPupilIdsForAssessment = (assessmentId: string) => {
+    return state.absentPupilIds[assessmentId] ?? [];
+  };
+
+  const setPupilAbsent = (pupilId: string, absent: boolean, assessmentId?: string) => {
+    const targetAssessmentId = assessmentId ?? state.activeAssessmentId;
+    setState((prev) => {
+      const current = prev.absentPupilIds[targetAssessmentId] ?? [];
+      const next = absent
+        ? current.includes(pupilId) ? current : [...current, pupilId]
+        : current.filter((id) => id !== pupilId);
+      return {
+        ...prev,
+        absentPupilIds: {
+          ...prev.absentPupilIds,
+          [targetAssessmentId]: next,
+        },
+      };
+    });
+  };
+
   const setEvaluation = (
     pupilId: string,
     objectiveId: string,
@@ -1648,6 +1682,9 @@ export function AppDataProvider({ children }: PropsWithChildren) {
   ) => {
     const targetAssessmentId = assessmentId ?? state.activeAssessmentId;
     setState((prev) => {
+      if ((prev.absentPupilIds[targetAssessmentId] ?? []).includes(pupilId)) {
+        return prev;
+      }
       const currentAssessEval = prev.evaluations[targetAssessmentId] ?? {};
       const currentPupilEval = currentAssessEval[pupilId] ?? {};
       return {
@@ -1696,7 +1733,10 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       (a) => a.id === targetAssessmentId,
     );
     const targetClassId = targetAssessment?.classId ?? state.activeClassId;
-    const classPupils = state.pupils.filter((p) => p.classId === targetClassId);
+    const absentPupilIds = new Set(state.absentPupilIds[targetAssessmentId] ?? []);
+    const classPupils = state.pupils.filter(
+      (p) => p.classId === targetClassId && !absentPupilIds.has(p.id),
+    );
 
     setState((prev) => {
       const currentAssessEval = {
@@ -1724,6 +1764,8 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     const classPupils = state.pupils.filter((p) => p.classId === classId);
     const objList = state.objectives[assessmentId] ?? [];
     const assessEvals = state.evaluations[assessmentId] ?? {};
+    const absentPupilIds = new Set(state.absentPupilIds[assessmentId] ?? []);
+    const attendingPupils = classPupils.filter((pupil) => !absentPupilIds.has(pupil.id));
 
     return objList.map((objective) => {
       let evaluated = 0;
@@ -1731,7 +1773,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       let partiallyAcquired = 0;
       let notAcquired = 0;
 
-      classPupils.forEach((pupil) => {
+      attendingPupils.forEach((pupil) => {
         const val = assessEvals[pupil.id]?.[objective.id] ?? 'NotEvaluated';
         if (val !== 'NotEvaluated') evaluated += 1;
         if (val === 'Acquired') acquired += 1;
@@ -1742,7 +1784,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       return {
         objectiveId: objective.id,
         evaluated,
-        notEvaluated: classPupils.length - evaluated,
+        notEvaluated: attendingPupils.length - evaluated,
         acquired,
         partiallyAcquired,
         notAcquired,
@@ -1787,13 +1829,17 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         ...prev.evaluations,
         [targetAssessmentId]: {},
       },
+      absentPupilIds: {
+        ...prev.absentPupilIds,
+        [targetAssessmentId]: [],
+      },
     }));
   };
 
   // Active statistics helper
   const statistics = useMemo(() => {
     return getStatisticsForAssessment(activeAssessment.id);
-  }, [state.pupils, state.objectives, state.evaluations, activeAssessment.id]);
+  }, [state.pupils, state.objectives, state.evaluations, state.absentPupilIds, activeAssessment.id]);
 
   const value = useMemo<AppDataContextValue>(
     () => ({
@@ -1862,6 +1908,8 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       cycleEvaluation,
       setAllForObjective,
       getEvaluationsForAssessment,
+      setPupilAbsent,
+      getAbsentPupilIdsForAssessment,
       getStatisticsForAssessment,
       updateRemediation,
       getRemediationForAssessment,

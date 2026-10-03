@@ -53,6 +53,14 @@ export default function AssessmentDocumentScreen() {
     return data.getEvaluationsForAssessment(currentAssessment.id);
   }, [data.evaluations, currentAssessment.id]);
 
+  const absentPupilIds = useMemo(
+    () => new Set(
+      data.getAbsentPupilIdsForAssessment(currentAssessment.id)
+        .filter((id) => currentPupils.some((pupil) => pupil.id === id)),
+    ),
+    [data.absentPupilIds, currentAssessment.id, currentPupils],
+  );
+
   // Remediation for this specific assessment
   const currentRemediation = useMemo(() => {
     return data.getRemediationForAssessment(currentAssessment.id);
@@ -67,6 +75,7 @@ export default function AssessmentDocumentScreen() {
       let plusMinus = 0;
       let minus = 0;
       currentPupils.forEach((pupil) => {
+        if (absentPupilIds.has(pupil.id)) return;
         const val = currentEvaluations[pupil.id]?.[obj.id];
         if (val === 'Acquired') plus++;
         else if (val === 'PartiallyAcquired') plusMinus++;
@@ -74,12 +83,13 @@ export default function AssessmentDocumentScreen() {
       });
       return { plus, plusMinus, minus };
     });
-  }, [currentObjectives, currentPupils, currentEvaluations]);
+  }, [currentObjectives, currentPupils, currentEvaluations, absentPupilIds]);
 
   // Compute pupil totals
   const pupilTotals = useMemo(() => {
     const map = new Map<string, { plus: number; plusMinus: number; minus: number }>();
     currentPupils.forEach((pupil) => {
+      if (absentPupilIds.has(pupil.id)) return;
       let plus = 0;
       let plusMinus = 0;
       let minus = 0;
@@ -92,7 +102,7 @@ export default function AssessmentDocumentScreen() {
       map.set(pupil.id, { plus, plusMinus, minus });
     });
     return map;
-  }, [currentPupils, currentObjectives, currentEvaluations]);
+  }, [currentPupils, currentObjectives, currentEvaluations, absentPupilIds]);
 
   const grandTotals = useMemo(() => {
     let plus = 0;
@@ -117,6 +127,7 @@ export default function AssessmentDocumentScreen() {
       objectives: currentObjectives,
       pupils: currentPupils,
       evaluations: currentEvaluations,
+      absentPupilIds: [...absentPupilIds],
       individualRemediation: currentRemediation.individual,
       classRemediation: currentRemediation.classroom,
     };
@@ -128,6 +139,7 @@ export default function AssessmentDocumentScreen() {
     currentObjectives,
     currentPupils,
     currentEvaluations,
+    absentPupilIds,
     currentRemediation,
   ]);
 
@@ -321,6 +333,9 @@ export default function AssessmentDocumentScreen() {
               <View style={[styles.thCell, styles.colName, styles.cellR1to3]}>
                 <Text style={styles.thText}>Nom et Prénom</Text>
               </View>
+              <View style={[styles.thCell, styles.colPresence, styles.cellR1to3]}>
+                <Text style={styles.thText}>Présence</Text>
+              </View>
               <View
                 style={[
                   styles.thCell,
@@ -338,6 +353,7 @@ export default function AssessmentDocumentScreen() {
             <View style={styles.headerRow2}>
               <View style={[styles.colNum, styles.hiddenPlaceholder]} />
               <View style={[styles.colName, styles.hiddenPlaceholder]} />
+              <View style={[styles.colPresence, styles.hiddenPlaceholder]} />
               <View style={styles.objectivesRow2Group}>
                 {currentObjectives.map((obj, idx) => (
                   <View key={obj.id} style={styles.objNumCol}>
@@ -352,6 +368,7 @@ export default function AssessmentDocumentScreen() {
             <View style={styles.headerRow3}>
               <View style={[styles.colNum, styles.hiddenPlaceholder]} />
               <View style={[styles.colName, styles.hiddenPlaceholder]} />
+              <View style={[styles.colPresence, styles.hiddenPlaceholder]} />
               <View style={styles.objectivesRow3Group}>
                 {currentObjectives.map((obj) => (
                   <View key={obj.id} style={styles.objSubcolsGroup}>
@@ -399,10 +416,18 @@ export default function AssessmentDocumentScreen() {
                       {pupil.lastName} {pupil.firstName}
                     </Text>
                   </View>
+                  <View style={[styles.cell, styles.colPresence]}>
+                    <Text style={[
+                      styles.presenceText,
+                      { color: absentPupilIds.has(pupil.id) ? '#B91C1C' : '#166534' },
+                    ]}>
+                      {absentPupilIds.has(pupil.id) ? 'ABSENT' : 'Présent'}
+                    </Text>
+                  </View>
 
                   <View style={styles.objectivesRow3Group}>
                     {currentObjectives.map((obj) => {
-                      const val = currentEvaluations[pupil.id]?.[obj.id];
+                      const val = absentPupilIds.has(pupil.id) ? undefined : currentEvaluations[pupil.id]?.[obj.id];
                       return (
                         <View key={obj.id} style={styles.objSubcolsGroup}>
                           <View style={styles.subcolCell}>
@@ -615,8 +640,9 @@ const styles = StyleSheet.create({
   colName: {
     width: 190,
   },
+  colPresence: { width: 76 },
   colTotalLabel: {
-    width: 228,
+    width: 304,
   },
   objNumCol: {
     width: 66,
@@ -748,6 +774,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#111827',
   },
+  presenceText: { fontSize: 9, fontWeight: '800' },
   markText: {
     fontSize: 11,
     fontWeight: '700',
