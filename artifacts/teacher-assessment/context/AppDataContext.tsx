@@ -191,6 +191,8 @@ export type AppDataContextValue = {
     competencyId: string,
   ) => ConfiguredObjective[];
   resetAllData: () => void;
+  getBackupState: () => AppState;
+  restoreBackupState: (backup: unknown) => Promise<void>;
 
   // Class Actions
   createClass: (input: {
@@ -1213,6 +1215,34 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     setSyncStatus('pending');
   };
 
+  const getBackupState = () => state;
+  const restoreBackupState = async (backup: unknown) => {
+    if (!backup || typeof backup !== 'object') throw new Error('Fichier de sauvegarde invalide.');
+    const candidate = backup as Partial<AppState>;
+    if (!candidate.school || !Array.isArray(candidate.classes) || !Array.isArray(candidate.pupils) || !Array.isArray(candidate.assessments)) {
+      throw new Error('Cette sauvegarde ne correspond pas à une sauvegarde Évaluation Élève.');
+    }
+    const restored: AppState = {
+      ...createEmptyState(),
+      ...candidate,
+      school: { ...createEmptyState().school, ...candidate.school },
+      teacherName: typeof candidate.teacherName === 'string' ? candidate.teacherName : '',
+      academicYear: typeof candidate.academicYear === 'string' ? candidate.academicYear : '2026-2027',
+      customCompetencies: Array.isArray(candidate.customCompetencies) ? candidate.customCompetencies : [],
+      classes: candidate.classes,
+      pupils: candidate.pupils,
+      assessments: candidate.assessments,
+      objectives: candidate.objectives ?? {},
+      evaluations: candidate.evaluations ?? {},
+      remediations: candidate.remediations ?? {},
+      activeClassId: typeof candidate.activeClassId === 'string' ? candidate.activeClassId : '',
+      activeAssessmentId: typeof candidate.activeAssessmentId === 'string' ? candidate.activeAssessmentId : '',
+    };
+    setState(restored);
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(restored));
+    setIsDirty(true);
+    setSyncStatus('pending');
+  };
   const resetAllData = () => {
     const empty = createEmptyState();
     setState(empty);
@@ -1791,6 +1821,8 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       getCompetenciesForLevel,
       getObjectivesForLevelCompetency,
       resetAllData,
+      getBackupState,
+      restoreBackupState,
 
       // Methods
       createClass,
@@ -1834,6 +1866,13 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       activeEvaluations,
       activeRemediation,
       statistics,
+      getBackupState,
+      restoreBackupState,
+      remoteSync.syncing,
+      remoteSync.syncError,
+      remoteSync.conflict,
+      remoteSync.syncNow,
+      remoteSync.resolveConflict,
     ],
   );
 

@@ -1,4 +1,7 @@
 import { Feather } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -20,11 +23,16 @@ import {
 } from '@/components/AppShell';
 import PedagogicalConfigurationManager from '@/components/PedagogicalConfigurationManager';
 import { useAppData } from '@/context/AppDataContext';
+import { useSecurity } from '@/context/SecurityContext';
 import { useColors } from '@/hooks/useColors';
 
 export default function SettingsScreen() {
   const colors = useColors();
   const data = useAppData();
+  const security = useSecurity();
+  const [pinInput, setPinInput] = useState('');
+  const [pinConfirmation, setPinConfirmation] = useState('');
+  const [editingPin, setEditingPin] = useState(false);
 
   // Teacher Name Edit State
   const [editingTeacher, setEditingTeacher] = useState(false);
@@ -56,6 +64,44 @@ export default function SettingsScreen() {
     Alert.alert('Succès', 'Informations de l’établissement enregistrées.');
   };
 
+  const handleCreateBackup = async () => {
+    try {
+      const timestamp = new Date().toISOString().slice(0, 10);
+      const uri = `${FileSystem.cacheDirectory}evaluation-eleve-${timestamp}.json`;
+      await FileSystem.writeAsStringAsync(uri, JSON.stringify({
+        format: 'evaluation-eleve-backup',
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        state: data.getBackupState(),
+      }, null, 2));
+      if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri, { mimeType: 'application/json', dialogTitle: 'Enregistrer la sauvegarde' });
+      else Alert.alert('Sauvegarde créée', `Le fichier est disponible ici : ${uri}`);
+    } catch { Alert.alert('Erreur', 'Impossible de créer la sauvegarde.'); }
+  };
+  const handleRestoreBackup = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({ type: 'application/json', copyToCacheDirectory: true, multiple: false });
+      if (result.canceled || !result.assets[0]) return;
+      const raw = await FileSystem.readAsStringAsync(result.assets[0].uri);
+      const parsed = JSON.parse(raw) as { format?: string; state?: unknown };
+      const backup = parsed.format === 'evaluation-eleve-backup' ? parsed.state : parsed;
+      Alert.alert('Restaurer cette sauvegarde ?', 'Les données actuelles seront remplacées par celles du fichier sélectionné.', [
+        { text: 'Annuler', style: 'cancel' },
+        { text: 'Restaurer', onPress: () => { void data.restoreBackupState(backup).then(() => Alert.alert('Restauration terminée', 'Vos données ont été restaurées.')).catch((error: Error) => Alert.alert('Erreur', error.message)); } },
+      ]);
+    } catch { Alert.alert('Erreur', 'Le fichier sélectionné est invalide ou illisible.'); }
+  };
+  const handleSavePin = async () => {
+    if (!/^[0-9]{4,6}$/.test(pinInput)) return Alert.alert('Code PIN invalide', 'Utilisez un code de 4 à 6 chiffres.');
+    if (pinInput !== pinConfirmation) return Alert.alert('Codes différents', 'La confirmation du code PIN ne correspond pas.');
+    await security.setPin(pinInput);
+    setPinInput(''); setPinConfirmation(''); setEditingPin(false);
+    Alert.alert('Code PIN activé', 'Le code PIN sera demandé à chaque ouverture de l’application.');
+  };
+  const handleRemovePin = () => Alert.alert('Désactiver le code PIN ?', 'La protection de l’application sera retirée sur cet appareil.', [
+    { text: 'Annuler', style: 'cancel' },
+    { text: 'Désactiver', style: 'destructive', onPress: () => { void security.removePin(); } },
+  ]);
   const handleResetData = () => {
     Alert.alert(
       'Vider la base de données',
@@ -304,6 +350,38 @@ export default function SettingsScreen() {
         />
       </Surface>
 
+      {/* BACKUP & SECURITY */}
+      <SectionTitle title="Sauvegarde & sécurité" />
+      <Surface style={styles.card}>
+        <View style={styles.settingRowInner}>
+          <View style={[styles.settingIcon, { backgroundColor: colors.accent }]}><Feather name="archive" size={18} color={colors.primary} /></View>
+          <View style={styles.settingCopy}>
+            <Text style={[styles.value, { color: colors.foreground }]}>Sauvegarde complète</Text>
+            <Text style={[styles.help, { color: colors.mutedForeground }]}>Enregistrez toutes vos classes, élèves, évaluations et paramètres dans un fichier JSON sur votre appareil ou dans un autre emplacement.</Text>
+          </View>
+        </View>
+        <View style={styles.buttonRow}>
+          <Button label="Créer une sauvegarde" compact icon="download" onPress={() => { void handleCreateBackup(); }} />
+          <Button label="Restaurer" compact secondary icon="upload" onPress={() => { void handleRestoreBackup(); }} />
+        </View>
+        <View style={[styles.settingRowInner, { marginTop: 8 }]}>
+          <View style={[styles.settingIcon, { backgroundColor: colors.accent }]}><Feather name="lock" size={18} color={colors.primary} /></View>
+          <View style={styles.settingCopy}>
+            <Text style={[styles.value, { color: colors.foreground }]}>Code PIN d’accès</Text>
+            <Text style={[styles.help, { color: colors.mutedForeground }]}>{security.hasPin ? 'Activé : un code est demandé à l’ouverture et au retour dans l’application.' : 'Protégez l’accès à vos données avec un code de 4 à 6 chiffres.'}</Text>
+          </View>
+          <Text style={[styles.enabled, { color: security.hasPin ? colors.successForeground : colors.mutedForeground }]}>{security.hasPin ? 'Activé' : 'Désactivé'}</Text>
+        </View>
+        {!security.hasPin && !editingPin ? <Button label="Activer le code PIN" compact onPress={() => setEditingPin(true)} icon="lock" /> : null}
+        {security.hasPin ? <Button label="Désactiver le code PIN" compact secondary onPress={handleRemovePin} icon="unlock" /> : null}
+        {editingPin ? <View style={[styles.editBox, { borderTopColor: colors.border }]}>
+          <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>NOUVEAU CODE PIN</Text>
+          <TextInput value={pinInput} onChangeText={(value) => setPinInput(value.replace(/\D/g, '').slice(0, 6))} keyboardType="number-pad" secureTextEntry placeholder="4 à 6 chiffres" placeholderTextColor={colors.mutedForeground} style={[styles.input, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]} />
+          <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>CONFIRMER LE CODE PIN</Text>
+          <TextInput value={pinConfirmation} onChangeText={(value) => setPinConfirmation(value.replace(/\D/g, '').slice(0, 6))} keyboardType="number-pad" secureTextEntry placeholder="Répétez le code" placeholderTextColor={colors.mutedForeground} style={[styles.input, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]} />
+          <View style={styles.buttonRow}><Button label="Activer" compact onPress={() => { void handleSavePin(); }} /><Button label="Annuler" compact secondary onPress={() => { setEditingPin(false); setPinInput(''); setPinConfirmation(''); }} /></View>
+        </View> : null}
+      </Surface>
       {/* DANGER ZONE / RESET */}
       <SectionTitle title="Gestion des données" />
       <Surface style={[styles.card, { borderColor: colors.errorSurface }]}>
@@ -376,6 +454,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   settingCopy: { flex: 1, gap: 4 },
+  settingRowInner: { flexDirection: 'row', alignItems: 'flex-start', gap: 11 },
   help: { fontSize: 12, lineHeight: 18 },
   enabled: { fontSize: 12, fontWeight: '800' },
   editBox: { paddingTop: 14, marginTop: 4, borderTopWidth: 1, gap: 10 },
