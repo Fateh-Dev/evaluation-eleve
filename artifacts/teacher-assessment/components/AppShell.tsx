@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import React, { PropsWithChildren } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 
@@ -20,9 +20,18 @@ export function AppHeader({ eyebrow, title, onBack, compact = false }: { eyebrow
   const colors = useColors();
   return (
     <View style={[styles.header, compact && styles.compactHeader]}>
-      <View style={styles.headerText}>
-        {eyebrow ? <Text style={[styles.eyebrow, { color: colors.primary }]}>{eyebrow.toUpperCase()}</Text> : null}
-        <Text style={[styles.title, compact && styles.compactTitle, { color: colors.foreground }]}>{title}</Text>
+      <View style={styles.headerLeading}>
+        <Image
+          source={require('../assets/images/logo.png')}
+          style={[styles.logo, compact && styles.compactLogo]}
+          resizeMode="contain"
+          accessible
+          accessibilityLabel="Logo de l’établissement Chaibeddra"
+        />
+        <View style={styles.headerText}>
+          {eyebrow ? <Text style={[styles.eyebrow, { color: colors.primary }]}>{eyebrow.toUpperCase()}</Text> : null}
+          <Text style={[styles.title, compact && styles.compactTitle, { color: colors.foreground }]}>{title}</Text>
+        </View>
       </View>
       {onBack ? (
         <Pressable onPress={onBack} accessibilityRole="button" style={[styles.iconButton, { borderColor: colors.border, backgroundColor: colors.card }]}>
@@ -103,7 +112,10 @@ const styles = StyleSheet.create({
   scrollContent: { flexGrow: 1 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 },
   compactHeader: { marginBottom: 10 },
-  headerText: { flex: 1 },
+  headerLeading: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  headerText: { flex: 1, minWidth: 0 },
+  logo: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#FFFFFF' },
+  compactLogo: { width: 40, height: 40, borderRadius: 20 },
   eyebrow: { fontSize: 11, fontWeight: '700', letterSpacing: 1.6, marginBottom: 7 },
   title: { fontSize: 28, lineHeight: 34, fontWeight: '700', letterSpacing: -0.5 },
   compactTitle: { fontSize: 20, lineHeight: 25 },

@@ -189,7 +189,7 @@ export default function AssessmentAnalysisScreen() {
       )}
 
       <Button
-        label="Document & Exporter (PDF / Excel)"
+        label="Exporter"
         icon="file-text"
         onPress={() => router.push(`/assessments/${currentAssessment.id}/document`)}
       />

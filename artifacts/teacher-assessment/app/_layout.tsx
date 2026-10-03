@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
@@ -14,6 +14,9 @@ import {
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { AppDataProvider } from '@/context/AppDataContext';
+import { AppLockGate, SecurityProvider } from '@/context/SecurityContext';
+import { StorageProvider } from '@/context/StorageContext';
+import { ThemeProvider } from '@/context/ThemeContext';
 import { setBaseUrl } from '@workspace/api-client-react';
 
 if (process.env.EXPO_PUBLIC_DOMAIN) {
@@ -21,7 +24,7 @@ if (process.env.EXPO_PUBLIC_DOMAIN) {
 }
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
-SplashScreen.preventAutoHideAsync();
+void SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 const queryClient = new QueryClient();
 
@@ -40,27 +43,43 @@ export default function RootLayout() {
     Inter_600SemiBold,
     Inter_700Bold,
   });
+  const [startupTimedOut, setStartupTimedOut] = useState(false);
 
   useEffect(() => {
+    const timeout = setTimeout(() => {
+      setStartupTimedOut(true);
+      SplashScreen.hideAsync().catch(() => undefined);
+    }, 3000);
+
     if (fontsLoaded || fontError) {
-      SplashScreen.hideAsync();
+      SplashScreen.hideAsync().catch(() => undefined);
     }
+
+    return () => clearTimeout(timeout);
   }, [fontsLoaded, fontError]);
 
-  if (!fontsLoaded && !fontError) return null;
+  if (!fontsLoaded && !fontError && !startupTimedOut) return null;
 
   return (
     <SafeAreaProvider>
       <ErrorBoundary>
-        <AppDataProvider>
-          <QueryClientProvider client={queryClient}>
-            <GestureHandlerRootView style={{ flex: 1 }}>
-              <KeyboardProvider>
-                <RootLayoutNav />
-              </KeyboardProvider>
-            </GestureHandlerRootView>
-          </QueryClientProvider>
-        </AppDataProvider>
+        <ThemeProvider>
+          <SecurityProvider>
+            <AppLockGate>
+              <AppDataProvider>
+                <StorageProvider>
+                  <QueryClientProvider client={queryClient}>
+                    <GestureHandlerRootView style={{ flex: 1 }}>
+                      <KeyboardProvider>
+                        <RootLayoutNav />
+                      </KeyboardProvider>
+                    </GestureHandlerRootView>
+                  </QueryClientProvider>
+                </StorageProvider>
+              </AppDataProvider>
+            </AppLockGate>
+          </SecurityProvider>
+        </ThemeProvider>
       </ErrorBoundary>
     </SafeAreaProvider>
   );

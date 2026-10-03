@@ -33,6 +33,10 @@ function NativeTabLayout() {
         <NativeTabs.Trigger.Icon sf={{ default: 'person', selected: 'person.fill' }} />
         <NativeTabs.Trigger.Label>Élèves</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="storage">
+        <NativeTabs.Trigger.Icon sf={{ default: 'folder', selected: 'folder.fill' }} />
+        <NativeTabs.Trigger.Label>Stockage</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="settings">
         <NativeTabs.Trigger.Icon sf={{ default: 'gearshape', selected: 'gearshape.fill' }} />
         <NativeTabs.Trigger.Label>Configuration</NativeTabs.Trigger.Label>
@@ -102,6 +106,10 @@ function ClassicTabLayout() {
       <Tabs.Screen
         name="pupils"
         options={{ title: 'Élèves', tabBarIcon: ({ color }) => <Feather name="user" size={22} color={color} /> }}
+      />
+      <Tabs.Screen
+        name="storage"
+        options={{ title: 'Stockage', tabBarIcon: ({ color }) => <Feather name="folder" size={22} color={color} /> }}
       />
       <Tabs.Screen
         name="settings"
