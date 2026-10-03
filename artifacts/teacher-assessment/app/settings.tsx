@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import * as DocumentPicker from 'expo-document-picker';
+import { File } from 'expo-file-system';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { router } from 'expo-router';
@@ -80,9 +80,9 @@ export default function SettingsScreen() {
   };
   const handleRestoreBackup = async () => {
     try {
-      const result = await DocumentPicker.getDocumentAsync({ type: 'application/json', copyToCacheDirectory: true, multiple: false });
-      if (result.canceled || !result.assets[0]) return;
-      const raw = await FileSystem.readAsStringAsync(result.assets[0].uri);
+      const result = await File.pickFileAsync({ mimeTypes: ['application/json'] });
+      if (result.canceled || !result.result) return;
+      const raw = await result.result.text();
       const parsed = JSON.parse(raw) as { format?: string; state?: unknown };
       const backup = parsed.format === 'evaluation-eleve-backup' ? parsed.state : parsed;
       Alert.alert('Restaurer cette sauvegarde ?', 'Les données actuelles seront remplacées par celles du fichier sélectionné.', [

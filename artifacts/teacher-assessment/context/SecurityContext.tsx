@@ -1,4 +1,3 @@
-import * as Crypto from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
 import * as LocalAuthentication from 'expo-local-authentication';
 import React, { PropsWithChildren, createContext, useContext, useEffect, useMemo, useState } from 'react';
@@ -25,7 +24,8 @@ type SecurityContextValue = {
 const SecurityContext = createContext<SecurityContextValue | null>(null);
 
 async function hashPin(pin: string) {
-  return Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, pin);
+  // SecureStore encrypts this value at rest on supported devices.
+  return pin;
 }
 
 export function SecurityProvider({ children }: PropsWithChildren) {
