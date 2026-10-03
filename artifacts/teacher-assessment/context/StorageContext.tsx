@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Directory, File, Paths } from 'expo-file-system';
+import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
 import React, { PropsWithChildren, createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { Linking } from 'react-native';
@@ -48,15 +49,19 @@ export function StorageProvider({ children }: PropsWithChildren) {
     files,
     hydrated,
     uploadPdf: async () => {
-      const result = await File.pickFileAsync({ mimeTypes: ['application/pdf'] });
-      if (result.canceled || !result.result) return;
-      const picked = result.result;
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/pdf',
+        copyToCacheDirectory: false,
+        multiple: false,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      const picked = result.assets[0];
       const id = `pdf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const originalName = picked.name || `${id}.pdf`;
       const directory = new Directory(Paths.document, DIRECTORY_NAME, id);
       directory.create({ intermediates: true, idempotent: true });
       const destination = new File(directory, originalName);
-      await picked.copy(destination, { overwrite: true });
+      await new File(picked.uri).copy(destination, { overwrite: true });
       const created: StoredPdf = {
         id,
         name: originalName,
