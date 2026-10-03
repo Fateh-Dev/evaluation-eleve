@@ -24,7 +24,7 @@ if (process.env.EXPO_PUBLIC_DOMAIN) {
 }
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
-SplashScreen.preventAutoHideAsync();
+void SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 const queryClient = new QueryClient();
 
@@ -45,9 +45,15 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
+    const timeout = setTimeout(() => {
+      SplashScreen.hideAsync().catch(() => undefined);
+    }, 3000);
+
     if (fontsLoaded || fontError) {
-      SplashScreen.hideAsync();
+      SplashScreen.hideAsync().catch(() => undefined);
     }
+
+    return () => clearTimeout(timeout);
   }, [fontsLoaded, fontError]);
 
   if (!fontsLoaded && !fontError) return null;
