@@ -38,6 +38,7 @@ export default function ClassesScreen() {
   const [objectiveInputs, setObjectiveInputs] = useState<
     Record<string, string>
   >({});
+  const [objectivesExpanded, setObjectivesExpanded] = useState(false);
   const [visibleYear, setVisibleYear] = useState(data.academicYear);
 
   const selectedYearConfiguration =
@@ -70,6 +71,7 @@ export default function ClassesScreen() {
     setSelectedCompetencyIds(competencies.slice(0, 1).map((item) => item.id));
     setNewCompetencyName('');
     setObjectiveInputs({});
+    setObjectivesExpanded(false);
     setModalVisible(true);
   };
 
@@ -85,6 +87,7 @@ export default function ClassesScreen() {
     setSelectedCompetencyIds([]);
     setNewCompetencyName('');
     setObjectiveInputs({});
+    setObjectivesExpanded(false);
     setModalVisible(false);
   };
 
@@ -454,7 +457,11 @@ export default function ClassesScreen() {
               { backgroundColor: colors.card, borderColor: colors.border },
             ]}
           >
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView
+              contentContainerStyle={styles.modalContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
               <View style={styles.modalHeader}>
                 <Text style={[styles.modalTitle, { color: colors.foreground }]}>
                   Nouvelle classe
@@ -728,106 +735,132 @@ export default function ClassesScreen() {
                       },
                     ]}
                   >
-                    <Text
-                      style={[
-                        styles.objectivesSummaryTitle,
-                        { color: colors.foreground },
-                      ]}
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={
+                        objectivesExpanded
+                          ? 'Masquer les objectifs de la configuration'
+                          : 'Afficher les objectifs de la configuration'
+                      }
+                      accessibilityState={{ expanded: objectivesExpanded }}
+                      onPress={() =>
+                        setObjectivesExpanded((expanded) => !expanded)
+                      }
+                      style={styles.objectivesSummaryHeader}
                     >
-                      Objectifs de la configuration :
-                    </Text>
-                    {configuredCompetencies
-                      .filter((item) => selectedCompetencyIds.includes(item.id))
-                      .map((competency) => {
-                        const objectiveDescriptions = selectedLevel
-                          ? data
-                              .getObjectivesForLevelCompetency(
-                                newClassYear,
-                                selectedLevel.id,
-                                competency.id,
-                              )
-                              .map((item) => item.description)
-                          : [];
-                        return (
-                          <View
-                            key={competency.id}
-                            style={styles.objectiveGroup}
-                          >
-                            <Text
+                      <Text
+                        style={[
+                          styles.objectivesSummaryTitle,
+                          { color: colors.foreground },
+                        ]}
+                      >
+                        Objectifs de la configuration
+                      </Text>
+                      <Feather
+                        name={objectivesExpanded ? 'chevron-up' : 'chevron-down'}
+                        size={18}
+                        color={colors.mutedForeground}
+                      />
+                    </Pressable>
+                    {objectivesExpanded &&
+                      configuredCompetencies
+                        .filter((item) =>
+                          selectedCompetencyIds.includes(item.id),
+                        )
+                        .map((competency) => {
+                          const objectiveDescriptions = selectedLevel
+                            ? data
+                                .getObjectivesForLevelCompetency(
+                                  newClassYear,
+                                  selectedLevel.id,
+                                  competency.id,
+                                )
+                                .map((item) => item.description)
+                            : [];
+                          return (
+                            <View
+                              key={competency.id}
                               style={[
-                                styles.objectiveGroupName,
-                                { color: colors.primary },
+                                styles.objectiveGroup,
+                                { borderTopColor: colors.border },
                               ]}
                             >
-                              {competency.name} ({objectiveDescriptions.length}{' '}
-                              objectifs)
-                            </Text>
-                            {objectiveDescriptions
-                              .slice(0, 3)
-                              .map((obj, idx) => (
+                              <Text
+                                style={[
+                                  styles.objectiveGroupName,
+                                  { color: colors.primary },
+                                ]}
+                              >
+                                {competency.name} (
+                                {objectiveDescriptions.length} objectifs)
+                              </Text>
+                              {objectiveDescriptions
+                                .slice(0, 3)
+                                .map((obj, idx) => (
+                                  <Text
+                                    key={idx}
+                                    style={[
+                                      styles.objectivePreview,
+                                      { color: colors.mutedForeground },
+                                    ]}
+                                    numberOfLines={1}
+                                  >
+                                    {String(idx + 1).padStart(2, '0')}. {obj}
+                                  </Text>
+                                ))}
+                              {objectiveDescriptions.length > 3 && (
                                 <Text
-                                  key={idx}
                                   style={[
                                     styles.objectivePreview,
                                     { color: colors.mutedForeground },
                                   ]}
-                                  numberOfLines={1}
                                 >
-                                  {String(idx + 1).padStart(2, '0')}. {obj}
+                                  … +{objectiveDescriptions.length - 3}{' '}
+                                  objectifs
                                 </Text>
-                              ))}
-                            {objectiveDescriptions.length > 3 && (
-                              <Text
-                                style={[
-                                  styles.objectivePreview,
-                                  { color: colors.mutedForeground },
-                                ]}
-                              >
-                                … +{objectiveDescriptions.length - 3} objectifs
-                              </Text>
-                            )}
-                            <View style={styles.objectiveAddRow}>
-                              <TextInput
-                                value={objectiveInputs[competency.id] ?? ''}
-                                onChangeText={(value) =>
-                                  setObjectiveInputs((previous) => ({
-                                    ...previous,
-                                    [competency.id]: value,
-                                  }))
-                                }
-                                placeholder="Ajouter un objectif à cette configuration"
-                                placeholderTextColor={colors.mutedForeground}
-                                style={[
-                                  styles.input,
-                                  styles.objectiveInput,
-                                  {
-                                    color: colors.foreground,
-                                    borderColor: colors.border,
-                                    backgroundColor: colors.card,
-                                  },
-                                ]}
-                              />
-                              <Pressable
-                                accessibilityRole="button"
-                                accessibilityLabel={`Ajouter un objectif à ${competency.name}`}
-                                onPress={() =>
-                                  addConfiguredObjective(competency.id)
-                                }
-                                style={[
-                                  styles.objectiveAddButton,
-                                  { backgroundColor: colors.accent },
-                                ]}
-                              >
-                                <Feather
-                                  name="plus"
-                                  size={16}
-                                  color={colors.primary}
+                              )}
+                              <View style={styles.objectiveAddRow}>
+                                <TextInput
+                                  value={objectiveInputs[competency.id] ?? ''}
+                                  onChangeText={(value) =>
+                                    setObjectiveInputs((previous) => ({
+                                      ...previous,
+                                      [competency.id]: value,
+                                    }))
+                                  }
+                                  placeholder="Ajouter un objectif à cette configuration"
+                                  placeholderTextColor={colors.mutedForeground}
+                                  style={[
+                                    styles.input,
+                                    styles.objectiveInput,
+                                    {
+                                      color: colors.foreground,
+                                      borderColor: colors.border,
+                                      backgroundColor: colors.card,
+                                    },
+                                  ]}
                                 />
-                              </Pressable>
+                                <Pressable
+                                  accessibilityRole="button"
+                                  accessibilityLabel={`Ajouter un objectif à ${competency.name}`}
+                                  onPress={() =>
+                                    addConfiguredObjective(competency.id)
+                                  }
+                                  style={[
+                                    styles.objectiveAddButton,
+                                    { backgroundColor: colors.accent },
+                                  ]}
+                                >
+                                  <Feather
+                                    name="plus"
+                                    size={16}
+                                    color={colors.primary}
+                                  />
+                                </Pressable>
+                              </View>
                             </View>
-                          </View>
-                        );
-                      })}
+                          );
+                        })}
                   </View>
                 )}
               </View>
@@ -958,11 +991,14 @@ const styles = StyleSheet.create({
   modalCard: {
     width: '100%',
     maxWidth: 500,
-    maxHeight: '88%',
+    maxHeight: '90%',
     borderRadius: 18,
     borderWidth: 1,
-    padding: 20,
-    gap: 14,
+    padding: 18,
+  },
+  modalContent: {
+    gap: 16,
+    paddingBottom: 4,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -974,7 +1010,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   formGroup: {
-    gap: 6,
+    gap: 8,
   },
   fieldLabel: {
     fontSize: 9.5,
@@ -1074,20 +1110,28 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   objectivesSummary: {
-    marginTop: 10,
     borderRadius: 10,
     borderWidth: 1,
     padding: 12,
+    gap: 10,
+  },
+  objectivesSummaryHeader: {
+    minHeight: 28,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 8,
   },
   objectivesSummaryTitle: {
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.5,
+    flex: 1,
   },
   objectiveGroup: {
-    gap: 3,
-    marginTop: 4,
+    gap: 5,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   objectiveAddRow: {
     flexDirection: 'row',

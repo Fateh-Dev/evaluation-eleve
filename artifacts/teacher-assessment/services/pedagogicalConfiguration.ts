@@ -52,7 +52,7 @@ export type LegacyObjective = {
   description: string;
 };
 
-export const DEFAULT_SCHOOL_LEVELS = ['1AS', '2AS', '3As'];
+export const DEFAULT_SCHOOL_LEVELS = ['1AS', '2AS', '3AS'];
 
 export function normalizeLabel(value: string): string {
   return value
