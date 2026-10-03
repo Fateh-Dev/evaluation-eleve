@@ -190,7 +190,7 @@ export type AppDataContextValue = {
     levelId: string,
     competencyId: string,
   ) => ConfiguredObjective[];
-  resetAllData: () => void;
+  resetAllData: () => Promise<void>;
   getBackupState: () => AppState;
   restoreBackupState: (backup: unknown) => Promise<void>;
 
@@ -1255,13 +1255,11 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     setState(restored);
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(restored));
   };
-  const resetAllData = () => {
+  const resetAllData = async () => {
     void writeAutomaticBackup(state);
     const empty = createEmptyState();
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(empty));
     setState(empty);
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(empty)).catch(
-      () => undefined,
-    );
   };
 
   const deleteClass = (classId: string) => {

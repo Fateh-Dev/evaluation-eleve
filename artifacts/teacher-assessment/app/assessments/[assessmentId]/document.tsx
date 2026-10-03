@@ -1,24 +1,26 @@
-import { Feather } from '@expo/vector-icons';
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Platform,
+  Pressable,
   ScrollView,
   Share,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import { AppHeader, Button, Screen, Surface } from '@/components/AppShell';
+import { AppHeader, Screen, Surface } from '@/components/AppShell';
 import { useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
 import {
   AssessmentExportData,
   downloadFile,
   exportAssessmentPdf,
-  generateAssessmentExcel,
+  generateAssessmentWord,
+  generateAssessmentWorkbook,
 } from '@/services/exportService';
 
 export default function AssessmentDocumentScreen() {
@@ -56,7 +58,7 @@ export default function AssessmentDocumentScreen() {
     return data.getRemediationForAssessment(currentAssessment.id);
   }, [data.allRemediations, currentAssessment.id]);
 
-  const [exportingFormat, setExportingFormat] = useState<'excel' | null>(null);
+  const [exportingFormat, setExportingFormat] = useState<'excel' | 'word' | 'pdf' | null>(null);
 
   // Compute column totals for bottom total row
   const objectiveTotals = useMemo(() => {
@@ -132,16 +134,35 @@ export default function AssessmentDocumentScreen() {
   const handleExportExcel = async () => {
     try {
       setExportingFormat('excel');
-      const csvData = generateAssessmentExcel(exportPayload);
-      const filename = `Evaluation_${currentClass.name.replace(/\s+/g, '_')}_${currentAssessment.competency.replace(/\s+/g, '_')}_${currentAssessment.date.replace(/[/\\:]/g, '-')}.csv`;
+      const workbook = await generateAssessmentWorkbook(exportPayload);
+      const filename = `Evaluation_${currentClass.name.replace(/[^\p{L}\p{N}-]+/gu, '_')}_${currentAssessment.competency.replace(/[^\p{L}\p{N}-]+/gu, '_')}_${currentAssessment.date.replace(/[/\\:]/g, '-')}.xlsx`;
       await downloadFile(
-        csvData,
+        workbook,
         filename,
-        'text/csv;charset=utf-8',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       );
     } catch (error) {
-      console.error('Erreur export CSV:', error);
-      Alert.alert('Erreur', 'Impossible de générer le fichier CSV.');
+      console.error('Erreur export Excel:', error);
+      Alert.alert('Erreur', 'Impossible de générer le fichier Excel.');
+    } finally {
+      setExportingFormat(null);
+    }
+  };
+
+  const handleExportWord = async () => {
+    try {
+      setExportingFormat('word');
+      const document = await generateAssessmentWord(exportPayload);
+      const safeName = (value: string) => value.replace(/[^\p{L}\p{N}-]+/gu, '_');
+      const filename = `Evaluation_${safeName(currentClass.name)}_${safeName(currentAssessment.competency)}_${currentAssessment.date.replace(/[/\\:]/g, '-')}.docx`;
+      await downloadFile(
+        document,
+        filename,
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      );
+    } catch (error) {
+      console.error('Erreur export Word:', error);
+      Alert.alert('Erreur', 'Impossible de générer le document Word.');
     } finally {
       setExportingFormat(null);
     }
@@ -149,10 +170,16 @@ export default function AssessmentDocumentScreen() {
 
   const printReport = async () => {
     try {
+      setExportingFormat('pdf');
       await exportAssessmentPdf(exportPayload);
     } catch (error) {
       console.error('Erreur impression/PDF:', error);
-      Alert.alert('Erreur', 'Impossible de générer le document PDF.');
+      Alert.alert(
+        'Erreur PDF',
+        error instanceof Error ? error.message : 'Impossible de générer ou partager le document PDF.',
+      );
+    } finally {
+      setExportingFormat(null);
     }
   };
 
@@ -174,27 +201,71 @@ export default function AssessmentDocumentScreen() {
         compact
       />
 
-      {/* Top Action Toolbar */}
-      <View style={styles.actionsBar}>
-        <View style={styles.primaryButtons}>
-          <Button
-            label={exportingFormat === 'excel' ? 'Génération CSV…' : 'Exporter CSV (.csv)'}
-            icon={exportingFormat === 'excel' ? 'loader' : 'file-text'}
-            onPress={handleExportExcel}
-            disabled={exportingFormat !== null}
-          />
-        </View>
-        <View style={styles.secondaryButtons}>
-          <Button label="Imprimer / PDF" icon="printer" secondary onPress={printReport} />
-          <Button label="Partager" icon="share-2" secondary onPress={shareReport} />
-        </View>
+      <View style={[styles.actionsBar, { borderColor: colors.border, backgroundColor: colors.card }]}>
+        <Pressable
+          onPress={handleExportExcel}
+          disabled={exportingFormat !== null}
+          accessibilityRole="button"
+          accessibilityLabel="Exporter le rapport au format Excel"
+          accessibilityHint="Crée un classeur Excel .xlsx avec la grille d’évaluation"
+          style={({ pressed }) => [
+            styles.actionIconButton,
+            { backgroundColor: colors.background, borderColor: colors.border, opacity: exportingFormat !== null && exportingFormat !== 'excel' ? 0.45 : pressed ? 0.7 : 1 },
+          ]}
+        >
+          {exportingFormat === 'excel'
+            ? <ActivityIndicator size="small" color="#217346" />
+            : <MaterialCommunityIcons name="file-excel-box" size={27} color="#217346" />}
+        </Pressable>
+        <Pressable
+          onPress={handleExportWord}
+          disabled={exportingFormat !== null}
+          accessibilityRole="button"
+          accessibilityLabel="Exporter le rapport au format Word"
+          accessibilityHint="Crée un document Word .docx avec la grille d’évaluation"
+          style={({ pressed }) => [
+            styles.actionIconButton,
+            { backgroundColor: colors.background, borderColor: colors.border, opacity: exportingFormat !== null && exportingFormat !== 'word' ? 0.45 : pressed ? 0.7 : 1 },
+          ]}
+        >
+          {exportingFormat === 'word'
+            ? <ActivityIndicator size="small" color="#185ABD" />
+            : <MaterialCommunityIcons name="file-word-box" size={27} color="#185ABD" />}
+        </Pressable>
+        <Pressable
+          onPress={printReport}
+          disabled={exportingFormat !== null}
+          accessibilityRole="button"
+          accessibilityLabel="Imprimer ou exporter en PDF"
+          accessibilityHint="Génère le rapport d’évaluation au format PDF"
+          style={({ pressed }) => [
+            styles.actionIconButton,
+            { backgroundColor: colors.background, borderColor: colors.border, opacity: exportingFormat !== null && exportingFormat !== 'pdf' ? 0.45 : pressed ? 0.7 : 1 },
+          ]}
+        >
+          {exportingFormat === 'pdf'
+            ? <ActivityIndicator size="small" color="#D32F2F" />
+            : <MaterialCommunityIcons name="file-pdf-box" size={27} color="#D32F2F" />}
+        </Pressable>
+        <Pressable
+          onPress={() => { void shareReport(); }}
+          disabled={exportingFormat !== null}
+          accessibilityRole="button"
+          accessibilityLabel="Partager le rapport d’évaluation"
+          style={({ pressed }) => [
+            styles.actionIconButton,
+            { backgroundColor: colors.background, borderColor: colors.border, opacity: exportingFormat !== null ? 0.45 : pressed ? 0.7 : 1 },
+          ]}
+        >
+          <Feather name="share-2" size={19} color={colors.primary} />
+        </Pressable>
       </View>
 
       {exportingFormat && (
         <Surface style={styles.loadingBanner}>
           <ActivityIndicator size="small" color={colors.primary} />
           <Text style={[styles.loadingText, { color: colors.foreground }]}>
-          Préparation du fichier CSV (.csv) en cours…
+          Préparation du fichier {exportingFormat === 'excel' ? 'Excel (.xlsx)' : exportingFormat === 'word' ? 'Word (.docx)' : 'PDF'} en cours…
           </Text>
         </Surface>
       )}
@@ -443,21 +514,21 @@ export default function AssessmentDocumentScreen() {
 const styles = StyleSheet.create({
   actionsBar: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 10,
-    marginBottom: 16,
-  },
-  primaryButtons: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: 8,
+    padding: 8,
+    borderWidth: 1,
+    borderRadius: 15,
+    marginBottom: 14,
   },
-  secondaryButtons: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+  actionIconButton: {
+    flex: 1,
+    height: 42,
+    minWidth: 0,
+    borderWidth: 1,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   loadingBanner: {
     flexDirection: 'row',

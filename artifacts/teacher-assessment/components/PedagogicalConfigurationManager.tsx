@@ -16,6 +16,9 @@ import { normalizeLabel } from '@/services/pedagogicalConfiguration';
 export default function PedagogicalConfigurationManager() {
   const colors = useColors();
   const data = useAppData();
+  const [step, setStep] = useState<
+    'year' | 'levels' | 'competencies' | 'objectives'
+  >('year');
   const [selectedYear, setSelectedYear] = useState(data.academicYear);
   const [newYearName, setNewYearName] = useState('');
   const [newLevelName, setNewLevelName] = useState('');
@@ -40,6 +43,19 @@ export default function PedagogicalConfigurationManager() {
   const selectedCompetency = allCompetencies.find(
     (competency) => competency.id === selectedCompetencyId,
   );
+  const steps = [
+    { id: 'year', label: 'Année', icon: 'calendar' as const },
+    { id: 'levels', label: 'Niveaux', icon: 'layers' as const },
+    { id: 'competencies', label: 'Compétences', icon: 'award' as const },
+    { id: 'objectives', label: 'Objectifs', icon: 'list' as const },
+  ] as const;
+  const stepIndex = steps.findIndex((item) => item.id === step);
+  const stepTitles: Record<(typeof steps)[number]['id'], string> = {
+    year: 'Choisir une année scolaire',
+    levels: 'Organiser les niveaux',
+    competencies: 'Associer les compétences',
+    objectives: 'Définir les objectifs',
+  };
 
   useEffect(() => {
     if (
@@ -342,12 +358,110 @@ export default function PedagogicalConfigurationManager() {
       <SectionTitle title="Configuration pédagogique par année" />
       <Surface style={[styles.card, { borderColor: colors.border }]}>
         <Text style={[styles.help, { color: colors.mutedForeground }]}>
-          Chaque année possède ses niveaux, ses compétences et ses objectifs par
-          couple niveau–compétence. Une copie crée un nouveau jeu indépendant
-          sans modifier l’année source.
+          Configurez progressivement chaque année. Les changements restent
+          indépendants d’une année scolaire à l’autre.
         </Text>
+        <Text style={[styles.stepTitle, { color: colors.foreground }]}>
+          {stepTitles[step]}
+        </Text>
+        <View style={[styles.selectionSummary, { backgroundColor: colors.background }]}>
+          <View style={styles.selectionContextItem}>
+            <Feather name="calendar" size={14} color={colors.primary} />
+            <View style={styles.selectionContextCopy}>
+              <Text style={[styles.selectionContextLabel, { color: colors.mutedForeground }]}>
+                ANNÉE SCOLAIRE
+              </Text>
+              <Text style={[styles.selectionSummaryText, { color: colors.foreground }]}>
+                {selectedYear || 'Aucune année sélectionnée'}
+              </Text>
+            </View>
+          </View>
+          {(step === 'levels' || step === 'competencies' || step === 'objectives') && (
+            <View style={styles.selectionContextItem}>
+              <Feather name="layers" size={14} color={colors.primary} />
+              <View style={styles.selectionContextCopy}>
+                <Text style={[styles.selectionContextLabel, { color: colors.mutedForeground }]}>
+                  NIVEAU · {selectedYear}
+                </Text>
+                <Text style={[styles.selectionSummaryText, { color: colors.foreground }]}>
+                  {selectedLevel?.name ?? 'Sélectionnez un niveau'}
+                </Text>
+              </View>
+            </View>
+          )}
+          {(step === 'competencies' || step === 'objectives') && (
+            <View style={styles.selectionContextItem}>
+              <Feather name="award" size={14} color={colors.primary} />
+              <View style={styles.selectionContextCopy}>
+                <Text style={[styles.selectionContextLabel, { color: colors.mutedForeground }]}>
+                  COMPÉTENCE · {selectedYear} · {selectedLevel?.name ?? 'Niveau non sélectionné'}
+                </Text>
+                <Text style={[styles.selectionSummaryText, { color: colors.foreground }]}>
+                  {selectedCompetency?.name ?? 'Sélectionnez une compétence'}
+                </Text>
+              </View>
+            </View>
+          )}
+          {step === 'objectives' && (
+            <View style={styles.selectionContextItem}>
+              <Feather name="list" size={14} color={colors.primary} />
+              <View style={styles.selectionContextCopy}>
+                <Text style={[styles.selectionContextLabel, { color: colors.mutedForeground }]}>
+                  OBJECTIFS DE LA COMPÉTENCE
+                </Text>
+                <Text style={[styles.selectionSummaryText, { color: colors.foreground }]}>
+                  {selectedCompetency?.name ?? 'Choisissez une compétence'}
+                </Text>
+              </View>
+            </View>
+          )}
+        </View>
+        <View style={styles.stepNavigation}>
+          {steps.map((item) => {
+            const active = item.id === step;
+            return (
+              <Pressable
+                key={item.id}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                onPress={() => setStep(item.id)}
+                style={[
+                  styles.stepItem,
+                  {
+                    borderColor: active ? colors.primary : colors.border,
+                    backgroundColor: active ? colors.accent : colors.background,
+                  },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.stepIcon,
+                    {
+                      backgroundColor: active ? colors.primary : colors.secondary,
+                    },
+                  ]}
+                >
+                  <Feather
+                    name={item.icon}
+                    size={14}
+                    color={active ? colors.primaryForeground : colors.mutedForeground}
+                  />
+                </View>
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    styles.stepLabel,
+                    { color: active ? colors.primary : colors.mutedForeground },
+                  ]}
+                >
+                  {item.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
 
-        <View style={styles.block}>
+        {step === 'year' && <View style={styles.block}>
           <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>
             ANNÉES CONFIGURÉES
           </Text>
@@ -401,42 +515,46 @@ export default function PedagogicalConfigurationManager() {
                       </Text>
                     )}
                   </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Modifier l’année ${item.year}`}
-                    onPress={() => startEditYear(item.year)}
-                    style={[
-                      styles.iconButton,
-                      {
-                        borderColor: colors.border,
-                        backgroundColor: colors.card,
-                      },
-                    ]}
-                  >
-                    <Feather name="edit-2" size={15} color={colors.primary} />
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Supprimer l’année ${item.year}`}
-                    accessibilityState={{ disabled: !canDelete }}
-                    disabled={!canDelete}
-                    onPress={() => requestDeleteYear(item.year)}
-                    style={[
-                      styles.iconButton,
-                      styles.dangerIconButton,
-                      {
-                        borderColor: colors.border,
-                        backgroundColor: colors.errorSurface,
-                      },
-                      !canDelete && styles.disabledButton,
-                    ]}
-                  >
-                    <Feather
-                      name="trash-2"
-                      size={15}
-                      color={colors.errorForeground}
-                    />
-                  </Pressable>
+                  {selected && (
+                    <>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Modifier l’année ${item.year}`}
+                        onPress={() => startEditYear(item.year)}
+                        style={[
+                          styles.iconButton,
+                          {
+                            borderColor: colors.border,
+                            backgroundColor: colors.card,
+                          },
+                        ]}
+                      >
+                        <Feather name="edit-2" size={15} color={colors.primary} />
+                      </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Supprimer l’année ${item.year}`}
+                        accessibilityState={{ disabled: !canDelete }}
+                        disabled={!canDelete}
+                        onPress={() => requestDeleteYear(item.year)}
+                        style={[
+                          styles.iconButton,
+                          styles.dangerIconButton,
+                          {
+                            borderColor: colors.border,
+                            backgroundColor: colors.errorSurface,
+                          },
+                          !canDelete && styles.disabledButton,
+                        ]}
+                      >
+                        <Feather
+                          name="trash-2"
+                          size={15}
+                          color={colors.errorForeground}
+                        />
+                      </Pressable>
+                    </>
+                  )}
                 </View>
               );
             })}
@@ -493,9 +611,9 @@ export default function PedagogicalConfigurationManager() {
               </View>
             </View>
           )}
-        </View>
+        </View>}
 
-        <View
+        {step === 'year' && <View
           style={[
             styles.block,
             styles.divider,
@@ -503,7 +621,7 @@ export default function PedagogicalConfigurationManager() {
           ]}
         >
           <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>
-            NOUVELLE ANNÉE SCOLAIRE
+            NOUVELLE ANNÉE SCOLAIRE · configuration de départ : {selectedYear}
           </Text>
           <TextInput
             value={newYearName}
@@ -537,9 +655,9 @@ export default function PedagogicalConfigurationManager() {
             puis choisissez « Définir comme année par défaut » pour l’utiliser
             lors de la création des prochaines classes.
           </Text>
-        </View>
+        </View>}
 
-        <View
+        {step === 'levels' && <View
           style={[
             styles.block,
             styles.divider,
@@ -583,39 +701,43 @@ export default function PedagogicalConfigurationManager() {
                       {level.name}
                     </Text>
                   </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Modifier le niveau ${level.name}`}
-                    onPress={() => startEditLevel(level.id, level.name)}
-                    style={[
-                      styles.iconButton,
-                      {
-                        borderColor: colors.border,
-                        backgroundColor: colors.card,
-                      },
-                    ]}
-                  >
-                    <Feather name="edit-2" size={15} color={colors.primary} />
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Supprimer le niveau ${level.name}`}
-                    onPress={() => requestDeleteLevel(level.id, level.name)}
-                    style={[
-                      styles.iconButton,
-                      styles.dangerIconButton,
-                      {
-                        borderColor: colors.border,
-                        backgroundColor: colors.errorSurface,
-                      },
-                    ]}
-                  >
-                    <Feather
-                      name="trash-2"
-                      size={15}
-                      color={colors.errorForeground}
-                    />
-                  </Pressable>
+                  {selected && (
+                    <>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Modifier le niveau ${level.name}`}
+                        onPress={() => startEditLevel(level.id, level.name)}
+                        style={[
+                          styles.iconButton,
+                          {
+                            borderColor: colors.border,
+                            backgroundColor: colors.card,
+                          },
+                        ]}
+                      >
+                        <Feather name="edit-2" size={15} color={colors.primary} />
+                      </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Supprimer le niveau ${level.name}`}
+                        onPress={() => requestDeleteLevel(level.id, level.name)}
+                        style={[
+                          styles.iconButton,
+                          styles.dangerIconButton,
+                          {
+                            borderColor: colors.border,
+                            backgroundColor: colors.errorSurface,
+                          },
+                        ]}
+                      >
+                        <Feather
+                          name="trash-2"
+                          size={15}
+                          color={colors.errorForeground}
+                        />
+                      </Pressable>
+                    </>
+                  )}
                 </View>
               );
             })}
@@ -625,7 +747,7 @@ export default function PedagogicalConfigurationManager() {
               <Text
                 style={[styles.fieldLabel, { color: colors.mutedForeground }]}
               >
-                RENOMMER LE NIVEAU
+                RENOMMER LE NIVEAU · {selectedYear}
               </Text>
               <TextInput
                 value={levelNameDraft}
@@ -680,9 +802,9 @@ export default function PedagogicalConfigurationManager() {
               <Feather name="plus" size={17} color={colors.primary} />
             </Pressable>
           </View>
-        </View>
+        </View>}
 
-        <View
+        {step === 'competencies' && <View
           style={[
             styles.block,
             styles.divider,
@@ -690,7 +812,7 @@ export default function PedagogicalConfigurationManager() {
           ]}
         >
           <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>
-            COMPÉTENCES DISPONIBLES ·{' '}
+            COMPÉTENCES · {selectedYear} ·{' '}
             {selectedLevel?.name ?? 'choisissez un niveau'}
           </Text>
           {allCompetencies.map((competency) => {
@@ -738,7 +860,10 @@ export default function PedagogicalConfigurationManager() {
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={`Configurer les objectifs de ${competency.name}`}
-                    onPress={() => setSelectedCompetencyId(competency.id)}
+                    onPress={() => {
+                      setSelectedCompetencyId(competency.id);
+                      setStep('objectives');
+                    }}
                     style={[
                       styles.objectivesButton,
                       {
@@ -796,9 +921,9 @@ export default function PedagogicalConfigurationManager() {
             être associée à plusieurs niveaux. Chaque association conserve sa
             propre liste d’objectifs.
           </Text>
-        </View>
+        </View>}
 
-        {selectedLevel && selectedCompetency && (
+        {step === 'objectives' && selectedLevel && selectedCompetency && (
           <View
             style={[
               styles.objectiveEditor,
@@ -816,7 +941,7 @@ export default function PedagogicalConfigurationManager() {
                   {selectedCompetency.name}
                 </Text>
                 <Text style={[styles.help, { color: colors.mutedForeground }]}>
-                  {selectedYear} · {selectedLevel.name}
+                  {selectedYear} · {selectedLevel.name} · {selectedCompetency.name}
                 </Text>
               </View>
               <Pressable
@@ -889,6 +1014,39 @@ export default function PedagogicalConfigurationManager() {
             />
           </View>
         )}
+        {step === 'objectives' && (!selectedLevel || !selectedCompetency) && (
+          <View style={styles.emptyStep}>
+            <Feather name="info" size={20} color={colors.mutedForeground} />
+            <Text style={[styles.help, { color: colors.mutedForeground }]}>
+              Sélectionnez un niveau et associez une compétence avant de
+              configurer ses objectifs.
+            </Text>
+            <Button
+              label="Choisir une compétence"
+              icon="arrow-left"
+              secondary
+              onPress={() => setStep('competencies')}
+            />
+          </View>
+        )}
+
+        <View style={styles.stepFooter}>
+          {stepIndex > 0 ? (
+            <Button
+              label="Précédent"
+              icon="arrow-left"
+              secondary
+              onPress={() => setStep(steps[stepIndex - 1].id)}
+            />
+          ) : <View />}
+          {stepIndex < steps.length - 1 ? (
+            <Button
+              label="Continuer"
+              icon="arrow-right"
+              onPress={() => setStep(steps[stepIndex + 1].id)}
+            />
+          ) : null}
+        </View>
       </Surface>
     </>
   );
@@ -896,6 +1054,18 @@ export default function PedagogicalConfigurationManager() {
 
 const styles = StyleSheet.create({
   card: { gap: 16, padding: 16, marginBottom: 14 },
+  stepTitle: { fontSize: 16, fontWeight: '800', marginTop: 2 },
+  selectionSummary: { gap: 9, borderRadius: 12, padding: 10 },
+  selectionContextItem: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  selectionContextCopy: { flex: 1, minWidth: 0, gap: 2 },
+  selectionContextLabel: { fontSize: 8.5, fontWeight: '800', letterSpacing: 0.5 },
+  selectionSummaryText: { fontSize: 11, fontWeight: '700' },
+  stepNavigation: { flexDirection: 'row', gap: 6 },
+  stepItem: { flex: 1, minWidth: 0, alignItems: 'center', gap: 5, borderWidth: 1, borderRadius: 12, paddingVertical: 8, paddingHorizontal: 3 },
+  stepIcon: { width: 26, height: 26, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  stepLabel: { fontSize: 9, fontWeight: '700' },
+  stepFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(128, 128, 128, 0.25)', paddingTop: 14 },
+  emptyStep: { gap: 12, alignItems: 'flex-start', paddingVertical: 12 },
   block: { gap: 10 },
   divider: { borderTopWidth: 1, paddingTop: 14 },
   fieldLabel: { fontSize: 10, letterSpacing: 1, fontWeight: '800' },

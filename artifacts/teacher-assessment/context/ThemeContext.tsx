@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { PropsWithChildren, createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { ThemeId } from '@/constants/colors';
+import { themeOptions, ThemeId } from '@/constants/colors';
 
 const THEME_STORAGE_KEY = '@teacher-assessment/theme-v1';
 
@@ -16,9 +16,8 @@ export function ThemeProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     AsyncStorage.getItem(THEME_STORAGE_KEY).then((stored) => {
-      if (stored === 'ocean' || stored === 'sage' || stored === 'lavender' || stored === 'sunset' || stored === 'slate') {
-        setThemeState(stored);
-      }
+      const savedTheme = themeOptions.find((option) => option.id === stored);
+      if (savedTheme) setThemeState(savedTheme.id);
     }).catch(() => undefined);
   }, []);
 

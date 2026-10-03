@@ -21,21 +21,27 @@ import {
   SectionTitle,
   Surface,
 } from '@/components/AppShell';
-import PedagogicalConfigurationManager from '@/components/PedagogicalConfigurationManager';
-import { themeOptions } from '@/constants/colors';
+import { PinEntryScreen } from '@/components/PinEntryScreen';
 import { useAppData } from '@/context/AppDataContext';
 import { useSecurity } from '@/context/SecurityContext';
-import { useTheme } from '@/context/ThemeContext';
 import { useColors } from '@/hooks/useColors';
 
 export default function SettingsScreen() {
   const colors = useColors();
   const data = useAppData();
   const security = useSecurity();
-  const { theme, setTheme } = useTheme();
   const [pinInput, setPinInput] = useState('');
   const [pinConfirmation, setPinConfirmation] = useState('');
   const [editingPin, setEditingPin] = useState(false);
+  const [confirmingPin, setConfirmingPin] = useState(false);
+  const [pinError, setPinError] = useState('');
+  const [resetModalVisible, setResetModalVisible] = useState(false);
+  const [resetStage, setResetStage] = useState<'confirm' | 'pin' | 'type'>('confirm');
+  const [resetPin, setResetPin] = useState('');
+  const [resetPinError, setResetPinError] = useState('');
+  const [resetConfirmation, setResetConfirmation] = useState('');
+  const [resetError, setResetError] = useState('');
+  const [resetting, setResetting] = useState(false);
 
   // Teacher Name Edit State
   const [editingTeacher, setEditingTeacher] = useState(false);
@@ -106,12 +112,51 @@ export default function SettingsScreen() {
       ]);
     } catch { Alert.alert('Erreur', 'Le fichier sélectionné est invalide ou illisible.'); }
   };
-  const handleSavePin = async () => {
-    if (!/^[0-9]{4}$/.test(pinInput)) return Alert.alert('Code PIN invalide', 'Utilisez exactement 4 chiffres.');
-    if (pinInput !== pinConfirmation) return Alert.alert('Codes différents', 'La confirmation du code PIN ne correspond pas.');
-    await security.setPin(pinInput);
-    setPinInput(''); setPinConfirmation(''); setEditingPin(false);
-    Alert.alert('Code PIN activé', 'Le code PIN sera demandé à chaque ouverture de l’application.');
+  const closePinSetup = () => {
+    setEditingPin(false);
+    setConfirmingPin(false);
+    setPinInput('');
+    setPinConfirmation('');
+    setPinError('');
+  };
+  const handleSavePin = async (pin: string) => {
+    try {
+      await security.setPin(pin);
+      closePinSetup();
+      Alert.alert('Code PIN activé', 'Le code PIN sera demandé à chaque ouverture de l’application.');
+    } catch {
+      setPinError('Impossible d’enregistrer le code PIN. Réessayez.');
+      setPinConfirmation('');
+    }
+  };
+  const handlePinDigit = (digit: string) => {
+    setPinError('');
+    if (!confirmingPin) {
+      const nextPin = `${pinInput}${digit}`;
+      if (nextPin.length > 4) return;
+      setPinInput(nextPin);
+      if (nextPin.length === 4) {
+        setPinConfirmation('');
+        setConfirmingPin(true);
+      }
+      return;
+    }
+    const nextConfirmation = `${pinConfirmation}${digit}`;
+    if (nextConfirmation.length > 4) return;
+    setPinConfirmation(nextConfirmation);
+    if (nextConfirmation.length === 4) {
+      if (nextConfirmation !== pinInput) {
+        setPinConfirmation('');
+        setPinError('Les codes ne correspondent pas. Réessayez.');
+        return;
+      }
+      void handleSavePin(nextConfirmation);
+    }
+  };
+  const handlePinBackspace = () => {
+    setPinError('');
+    if (confirmingPin) setPinConfirmation((current) => current.slice(0, -1));
+    else setPinInput((current) => current.slice(0, -1));
   };
   const handleRemovePin = () => Alert.alert('Désactiver le code PIN ?', 'La protection de l’application sera retirée sur cet appareil.', [
     { text: 'Annuler', style: 'cancel' },
@@ -136,25 +181,67 @@ export default function SettingsScreen() {
       Alert.alert('Biométrie activée', 'Vous pourrez utiliser votre visage ou votre empreinte pour ouvrir l’application.');
     }
   };
-  const handleResetData = () => {
-    Alert.alert(
-      'Vider la base de données',
-      'Attention : cette action va effacer TOUTES vos classes, élèves, évaluations et notes enregistrées. L’application repartira de zéro.\n\nÊtes-vous sûr de vouloir continuer ?',
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Tout effacer',
-          style: 'destructive',
-          onPress: () => {
-            data.resetAllData();
-            Alert.alert(
-              'Base réinitialisée',
-              'Toutes les données ont été effacées.',
-            );
-          },
-        },
-      ],
-    );
+  const closeResetModal = () => {
+    if (resetting) return;
+    setResetModalVisible(false);
+    setResetStage('confirm');
+    setResetPin('');
+    setResetPinError('');
+    setResetConfirmation('');
+    setResetError('');
+  };
+  const beginResetConfirmation = () => {
+    setResetError('');
+    if (security.hasPin) {
+      setResetStage('pin');
+      setResetPin('');
+      setResetPinError('');
+    } else {
+      setResetStage('type');
+    }
+  };
+  const handleResetPinDigit = (digit: string) => {
+    if (resetPin.length >= 4) return;
+    const nextPin = `${resetPin}${digit}`;
+    setResetPin(nextPin);
+    setResetPinError('');
+    if (nextPin.length === 4) {
+      void security.unlock(nextPin).then((valid) => {
+        if (valid) {
+          setResetPin('');
+          setResetStage('type');
+        } else {
+          setResetPin('');
+          setResetPinError('Code PIN incorrect.');
+        }
+      }).catch(() => {
+        setResetPin('');
+        setResetPinError('Vérification impossible. Réessayez.');
+      });
+    }
+  };
+  const authorizeResetWithBiometrics = async () => {
+    try {
+      if (await security.authenticateBiometric()) setResetStage('type');
+    } catch {
+      setResetPinError('La vérification biométrique a échoué. Utilisez le code PIN.');
+    }
+  };
+  const handleResetData = async () => {
+    if (resetConfirmation !== 'EFFACER' || resetting) return;
+    setResetting(true);
+    setResetError('');
+    try {
+      await data.resetAllData();
+      setResetModalVisible(false);
+      setResetStage('confirm');
+      setResetConfirmation('');
+      Alert.alert('Base réinitialisée', 'Toutes les données ont été effacées.');
+    } catch {
+      setResetError('La réinitialisation a échoué. Vos données n’ont pas été effacées.');
+    } finally {
+      setResetting(false);
+    }
   };
 
   return (
@@ -344,53 +431,64 @@ export default function SettingsScreen() {
         )}
       </Surface>
 
-      {/* COLOR THEME */}
       <SectionTitle title="Palette de couleurs" />
-      <Surface style={styles.card}>
-        <Text style={[styles.help, { color: colors.mutedForeground }]}>Choisissez l’ambiance visuelle de l’application. Le choix est mémorisé sur cet appareil.</Text>
-        <View style={styles.themeGrid}>
-          {themeOptions.map((option) => {
-            const selected = theme === option.id;
-            return (
-              <Pressable
-                key={option.id}
-                onPress={() => setTheme(option.id)}
-                accessibilityRole="button"
-                accessibilityState={{ selected }}
-                style={[styles.themeOption, { borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? colors.accent : colors.card }]}
-              >
-                <View style={styles.swatchRow}>
-                  {option.swatches.map((swatch) => <View key={swatch} style={[styles.swatch, { backgroundColor: swatch }]} />)}
-                  {selected ? <Feather name="check-circle" size={16} color={colors.primary} /> : null}
-                </View>
-                <Text style={[styles.themeName, { color: colors.foreground }]}>{option.label}</Text>
-                <Text style={[styles.themeDescription, { color: colors.mutedForeground }]}>{option.description}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </Surface>
-
-      <PedagogicalConfigurationManager />
-
-      {/* DOCUMENTS SPEC */}
-      <SectionTitle title="Documents & Modèles" />
-      <Surface style={styles.settingRow}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Ouvrir le choix des palettes de couleurs"
+        onPress={() => router.push('/settings/theme')}
+        style={({ pressed }) => [
+          styles.settingRow,
+          {
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+            borderWidth: 1,
+            borderRadius: 18,
+            opacity: pressed ? 0.82 : 1,
+          },
+        ]}
+      >
         <View style={[styles.settingIcon, { backgroundColor: colors.accent }]}>
-          <Feather name="file-text" size={18} color={colors.primary} />
+          <Feather name="droplet" size={18} color={colors.primary} />
         </View>
         <View style={styles.settingCopy}>
           <Text style={[styles.value, { color: colors.foreground }]}>
-            Format officiel de référence
+            Choisir une palette
           </Text>
           <Text style={[styles.help, { color: colors.mutedForeground }]}>
-            Grille officielle d’évaluation · Algérie
+            Changez les couleurs de l’application.
           </Text>
         </View>
-        <Text style={[styles.enabled, { color: colors.successForeground }]}>
-          Actif
-        </Text>
-      </Surface>
+        <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
+      </Pressable>
+
+      <SectionTitle title="Configuration pédagogique" />
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => router.push('/settings/pedagogical')}
+        style={({ pressed }) => [
+          styles.settingRow,
+          {
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+            borderWidth: 1,
+            borderRadius: 18,
+            opacity: pressed ? 0.82 : 1,
+          },
+        ]}
+      >
+        <View style={[styles.settingIcon, { backgroundColor: colors.accent }]}>
+          <Feather name="book-open" size={18} color={colors.primary} />
+        </View>
+        <View style={styles.settingCopy}>
+          <Text style={[styles.value, { color: colors.foreground }]}>
+            Années, niveaux et compétences
+          </Text>
+          <Text style={[styles.help, { color: colors.mutedForeground }]}>
+            Configurez les niveaux, compétences et objectifs par année scolaire.
+          </Text>
+        </View>
+        <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
+      </Pressable>
 
       {/* BACKUP & SECURITY */}
       <SectionTitle title="Sauvegarde & sécurité" />
@@ -421,18 +519,31 @@ export default function SettingsScreen() {
           </View>
           <Text style={[styles.enabled, { color: security.hasPin ? colors.successForeground : colors.mutedForeground }]}>{security.hasPin ? 'Activé' : 'Désactivé'}</Text>
         </View>
-        {!security.hasPin && !editingPin ? <Button label="Activer le code PIN" compact onPress={() => setEditingPin(true)} icon="lock" /> : null}
+        {!security.hasPin && !editingPin ? <Button label="Activer le code PIN" compact onPress={() => { setPinInput(''); setPinConfirmation(''); setPinError(''); setConfirmingPin(false); setEditingPin(true); }} icon="lock" /> : null}
         {security.hasPin ? <Button label="Désactiver le code PIN" compact secondary onPress={handleRemovePin} icon="unlock" /> : null}
         {security.hasPin && security.biometricAvailable ? <Button label={security.biometricEnabled ? 'Désactiver visage / empreinte' : 'Activer visage / empreinte'} compact secondary onPress={() => { void handleToggleBiometric(); }} icon={security.biometricEnabled ? 'shield-off' : 'shield'} /> : null}
         {security.hasPin && !security.biometricAvailable ? <Text style={[styles.help, { color: colors.mutedForeground }]}>La biométrie sera disponible après l’enregistrement d’un visage ou d’une empreinte dans les réglages de l’appareil.</Text> : null}
-        {editingPin ? <View style={[styles.editBox, { borderTopColor: colors.border }]}>
-          <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>NOUVEAU CODE PIN</Text>
-          <TextInput value={pinInput} onChangeText={(value) => setPinInput(value.replace(/\D/g, '').slice(0, 4))} keyboardType="number-pad" secureTextEntry placeholder="4 chiffres" placeholderTextColor={colors.mutedForeground} style={[styles.input, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]} />
-          <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>CONFIRMER LE CODE PIN</Text>
-          <TextInput value={pinConfirmation} onChangeText={(value) => setPinConfirmation(value.replace(/\D/g, '').slice(0, 4))} keyboardType="number-pad" secureTextEntry placeholder="Répétez le code" placeholderTextColor={colors.mutedForeground} style={[styles.input, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]} />
-          <View style={styles.buttonRow}><Button label="Activer" compact onPress={() => { void handleSavePin(); }} /><Button label="Annuler" compact secondary onPress={() => { setEditingPin(false); setPinInput(''); setPinConfirmation(''); }} /></View>
-        </View> : null}
       </Surface>
+      <Modal visible={editingPin} animationType="fade" onRequestClose={closePinSetup}>
+        <PinEntryScreen
+          title={confirmingPin ? 'Confirmez votre code PIN' : 'Créez votre code PIN'}
+          subtitle={confirmingPin ? 'Saisissez à nouveau les 4 chiffres pour confirmer' : 'Choisissez un code à 4 chiffres pour protéger vos données'}
+          pin={confirmingPin ? pinConfirmation : pinInput}
+          error={pinError}
+          hint={confirmingPin ? 'Confirmation du code' : 'Nouveau code de 4 chiffres'}
+          onDigit={handlePinDigit}
+          onBackspace={handlePinBackspace}
+          footer={
+            <Pressable
+              onPress={closePinSetup}
+              style={({ pressed }) => [styles.cancelPinButton, { borderColor: colors.border, opacity: pressed ? 0.65 : 1 }]}
+              accessibilityRole="button"
+            >
+              <Text style={[styles.cancelPinText, { color: colors.mutedForeground }]}>Annuler</Text>
+            </Pressable>
+          }
+        />
+      </Modal>
       {/* DANGER ZONE / RESET */}
       <SectionTitle title="Gestion des données" />
       <Surface style={[styles.card, { borderColor: colors.errorSurface }]}>
@@ -451,7 +562,12 @@ export default function SettingsScreen() {
           évaluations et élèves) pour repartir d'une base vierge.
         </Text>
         <Pressable
-          onPress={handleResetData}
+          onPress={() => {
+            setResetStage('confirm');
+            setResetConfirmation('');
+            setResetError('');
+            setResetModalVisible(true);
+          }}
           style={({ pressed }) => [
             styles.dangerButton,
             {
@@ -468,6 +584,118 @@ export default function SettingsScreen() {
           </Text>
         </Pressable>
       </Surface>
+      <Modal
+        visible={resetModalVisible}
+        animationType="fade"
+        onRequestClose={closeResetModal}
+      >
+        {resetStage === 'pin' ? (
+          <PinEntryScreen
+            title="Confirmez votre identité"
+            subtitle="Saisissez le code PIN de l’application pour continuer"
+            pin={resetPin}
+            error={resetPinError}
+            hint="Vérification requise avant l’effacement"
+            onDigit={handleResetPinDigit}
+            onBackspace={() => {
+              setResetPin((current) => current.slice(0, -1));
+              setResetPinError('');
+            }}
+            footer={
+              <Pressable
+                onPress={closeResetModal}
+                style={({ pressed }) => [styles.cancelPinButton, { borderColor: colors.border, opacity: pressed ? 0.65 : 1 }]}
+                accessibilityRole="button"
+              >
+                <Text style={[styles.cancelPinText, { color: colors.mutedForeground }]}>Annuler</Text>
+              </Pressable>
+            }
+          >
+            {security.biometricEnabled && security.biometricAvailable ? (
+              <Pressable
+                onPress={() => { void authorizeResetWithBiometrics(); }}
+                style={({ pressed }) => [styles.biometricResetButton, { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
+                accessibilityRole="button"
+              >
+                <Feather name="shield" size={16} color={colors.primary} />
+                <Text style={[styles.biometricResetText, { color: colors.primary }]}>Utiliser visage / empreinte</Text>
+              </Pressable>
+            ) : null}
+          </PinEntryScreen>
+        ) : (
+          <View style={[styles.resetModal, { backgroundColor: colors.background }]}>
+            <View style={[styles.resetPanel, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={[styles.resetIcon, { backgroundColor: colors.errorSurface }]}>
+                <Feather name="alert-triangle" size={24} color={colors.errorForeground} />
+              </View>
+              <Text style={[styles.resetTitle, { color: colors.foreground }]}>
+                {resetStage === 'confirm' ? 'Réinitialiser l’application ?' : 'Dernière confirmation'}
+              </Text>
+              {resetStage === 'confirm' ? (
+                <>
+                  <Text style={[styles.resetDescription, { color: colors.mutedForeground }]}>
+                    Cette action effacera définitivement les données locales suivantes :
+                  </Text>
+                  <View style={[styles.resetCounts, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                    <Text style={[styles.resetCountText, { color: colors.foreground }]}>{data.classes.length} classes</Text>
+                    <Text style={[styles.resetCountText, { color: colors.foreground }]}>{data.pupils.length} élèves</Text>
+                    <Text style={[styles.resetCountText, { color: colors.foreground }]}>{data.assessments.length} évaluations</Text>
+                  </View>
+                  <Text style={[styles.resetDescription, { color: colors.mutedForeground }]}>
+                    Vous pouvez d’abord créer une sauvegarde complète. Cette étape est facultative.
+                  </Text>
+                  <Button label="Créer une sauvegarde" compact secondary icon="download" onPress={() => { void handleCreateBackup(); }} />
+                  <View style={styles.buttonRow}>
+                    <Button label="Annuler" compact secondary onPress={closeResetModal} />
+                    <Button label="Continuer" compact icon="arrow-right" onPress={beginResetConfirmation} />
+                  </View>
+                </>
+              ) : (
+                <>
+                  <Text style={[styles.resetDescription, { color: colors.mutedForeground }]}>
+                    {security.hasPin
+                      ? 'Identité vérifiée. Pour effacer les données, saisissez EFFACER ci-dessous.'
+                      : 'Pour éviter un effacement accidentel, saisissez EFFACER ci-dessous.'}
+                  </Text>
+                  <TextInput
+                    value={resetConfirmation}
+                    onChangeText={(value) => {
+                      setResetConfirmation(value.toUpperCase());
+                      setResetError('');
+                    }}
+                    autoCapitalize="characters"
+                    autoCorrect={false}
+                    placeholder="EFFACER"
+                    placeholderTextColor={colors.mutedForeground}
+                    accessibilityLabel="Saisissez EFFACER pour confirmer la réinitialisation"
+                    style={[styles.resetInput, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]}
+                  />
+                  {resetError ? <Text style={[styles.resetError, { color: colors.errorForeground }]}>{resetError}</Text> : null}
+                  <View style={styles.buttonRow}>
+                    <Button label="Annuler" compact secondary onPress={closeResetModal} disabled={resetting} />
+                    <Pressable
+                      onPress={() => { void handleResetData(); }}
+                      disabled={resetConfirmation !== 'EFFACER' || resetting}
+                      style={({ pressed }) => [
+                        styles.resetConfirmButton,
+                        {
+                          backgroundColor: colors.errorForeground,
+                          opacity: resetConfirmation !== 'EFFACER' || resetting ? 0.45 : pressed ? 0.75 : 1,
+                        },
+                      ]}
+                      accessibilityRole="button"
+                    >
+                      <Text style={[styles.resetConfirmText, { color: colors.primaryForeground }]}>
+                        {resetting ? 'Réinitialisation…' : 'Tout effacer'}
+                      </Text>
+                    </Pressable>
+                  </View>
+                </>
+              )}
+            </View>
+          </View>
+        )}
+      </Modal>
     </Screen>
   );
 }
@@ -519,12 +747,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   buttonRow: { flexDirection: 'row', gap: 10, marginTop: 4 },
-  themeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  themeOption: { width: '48%', minHeight: 96, borderWidth: 1.5, borderRadius: 14, padding: 11, gap: 5 },
-  swatchRow: { flexDirection: 'row', alignItems: 'center', gap: 5, minHeight: 20 },
-  swatch: { width: 17, height: 17, borderRadius: 9 },
-  themeName: { fontSize: 14, fontWeight: '800' },
-  themeDescription: { fontSize: 11, lineHeight: 15 },
+  cancelPinButton: { borderWidth: 1, borderRadius: 20, paddingHorizontal: 18, paddingVertical: 9, marginTop: 16 },
+  cancelPinText: { fontSize: 13, fontWeight: '700' },
+  biometricResetButton: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 9, marginTop: 14 },
+  biometricResetText: { fontSize: 13, fontWeight: '700' },
+  resetModal: { flex: 1, justifyContent: 'center', padding: 20 },
+  resetPanel: { width: '100%', maxWidth: 460, alignSelf: 'center', borderWidth: 1, borderRadius: 22, padding: 22, gap: 14 },
+  resetIcon: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  resetTitle: { fontSize: 21, fontWeight: '800' },
+  resetDescription: { fontSize: 14, lineHeight: 21 },
+  resetCounts: { flexDirection: 'row', justifyContent: 'space-between', gap: 8, borderWidth: 1, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 14 },
+  resetCountText: { fontSize: 12, fontWeight: '700' },
+  resetInput: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 16, fontWeight: '700', letterSpacing: 1 },
+  resetError: { fontSize: 13, fontWeight: '700' },
+  resetConfirmButton: { minHeight: 38, borderRadius: 11, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center' },
+  resetConfirmText: { fontSize: 13, fontWeight: '800' },
   dangerHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   dangerTitle: { fontSize: 15, fontWeight: '800' },
   dangerButton: {
