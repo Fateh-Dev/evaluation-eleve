@@ -52,14 +52,14 @@ export function StorageProvider({ children }: PropsWithChildren) {
       if (result.canceled || !result.result) return;
       const picked = result.result;
       const id = `pdf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const safeName = picked.name.replace(/[^a-zA-Z0-9._-]/g, '_') || `${id}.pdf`;
-      const directory = new Directory(Paths.document, DIRECTORY_NAME);
+      const originalName = picked.name || `${id}.pdf`;
+      const directory = new Directory(Paths.document, DIRECTORY_NAME, id);
       directory.create({ intermediates: true, idempotent: true });
-      const destination = new File(directory, `${id}-${safeName}`);
+      const destination = new File(directory, originalName);
       await picked.copy(destination, { overwrite: true });
       const created: StoredPdf = {
         id,
-        name: picked.name || safeName,
+        name: originalName,
         uri: destination.uri,
         size: picked.size,
         createdAt: new Date().toISOString(),
