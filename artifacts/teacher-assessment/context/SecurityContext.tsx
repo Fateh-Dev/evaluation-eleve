@@ -1,12 +1,13 @@
 import * as SecureStore from 'expo-secure-store';
 import * as LocalAuthentication from 'expo-local-authentication';
-import React, { PropsWithChildren, createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { PropsWithChildren, createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 
 const PIN_KEY = 'teacher-assessment-app-pin-v1';
 const BIOMETRIC_KEY = 'teacher-assessment-biometric-enabled-v1';
+const INACTIVITY_TIMEOUT_MS = 5 * 60 * 1000;
 type SecurityContextValue = {
   ready: boolean;
   hasPin: boolean;
@@ -50,11 +51,34 @@ export function SecurityProvider({ children }: PropsWithChildren) {
     }).catch(() => setReady(true));
   }, []);
 
+  const inactiveSinceRef = useRef<number | null>(null);
+  const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
+    const clearInactivityTimer = () => {
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+      inactivityTimerRef.current = null;
+    };
     const subscription = AppState.addEventListener('change', (nextState) => {
-      if (nextState !== 'active' && hasPin) setLocked(true);
+      if (!hasPin) return;
+      if (nextState === 'active') {
+        const inactiveSince = inactiveSinceRef.current;
+        clearInactivityTimer();
+        inactiveSinceRef.current = null;
+        if (inactiveSince !== null && Date.now() - inactiveSince >= INACTIVITY_TIMEOUT_MS) {
+          setLocked(true);
+        }
+        return;
+      }
+      if (inactiveSinceRef.current === null) {
+        inactiveSinceRef.current = Date.now();
+        clearInactivityTimer();
+        inactivityTimerRef.current = setTimeout(() => setLocked(true), INACTIVITY_TIMEOUT_MS);
+      }
     });
-    return () => subscription.remove();
+    return () => {
+      subscription.remove();
+      clearInactivityTimer();
+    };
   }, [hasPin]);
 
   const value = useMemo<SecurityContextValue>(() => ({
