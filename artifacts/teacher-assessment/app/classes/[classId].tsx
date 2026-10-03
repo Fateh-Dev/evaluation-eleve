@@ -35,6 +35,8 @@ export default function ClassDetailScreen() {
 
   const [activeTab, setActiveTab] = useState<'competencies' | 'pupils'>('competencies');
 
+  const [classNameModalVisible, setClassNameModalVisible] = useState(false);
+  const [classNameInput, setClassNameInput] = useState('');
   // Add Pupil Modal State
   const [pupilModalVisible, setPupilModalVisible] = useState(false);
   const [newPupilLastName, setNewPupilLastName] = useState('');
@@ -49,6 +51,23 @@ export default function ClassDetailScreen() {
     setNewPupilFirstName('');
     setNewPupilDob('');
     setPupilModalVisible(true);
+  };
+
+  const openClassNameModal = () => {
+    setClassNameInput(currentClass.name);
+    setClassNameModalVisible(true);
+  };
+
+  const handleRenameClass = () => {
+    if (!classNameInput.trim()) {
+      Alert.alert('Nom obligatoire', 'Veuillez saisir un nom pour la classe.');
+      return;
+    }
+    if (!data.renameClass(currentClass.id, classNameInput)) {
+      Alert.alert('Modification impossible', 'La classe n’a pas pu être renommée.');
+      return;
+    }
+    setClassNameModalVisible(false);
   };
 
   const handleAddPupil = () => {
@@ -168,6 +187,14 @@ export default function ClassDetailScreen() {
           <Text style={[styles.infoLabel, { color: colors.mutedForeground }]}>COMPÉTENCES</Text>
           <Text style={[styles.infoValue, { color: colors.primary }]}>{classAssessments.length}</Text>
         </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Modifier le nom de la classe"
+          onPress={openClassNameModal}
+          style={[styles.editClassButton, { backgroundColor: colors.accent }]}
+        >
+          <Feather name="edit-2" size={16} color={colors.primary} />
+        </Pressable>
       </Surface>
 
       {/* Tabs Switcher: Compétences vs Élèves */}
@@ -421,6 +448,58 @@ export default function ClassDetailScreen() {
         />
       </View>
 
+      <Modal
+        visible={classNameModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setClassNameModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Surface style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={[styles.modalTitle, { color: colors.foreground }]}>
+                  Modifier la classe
+                </Text>
+                <Text style={[styles.modalSubtitle, { color: colors.mutedForeground }]}>
+                  Le nouveau nom sera utilisé partout dans l’application.
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => setClassNameModalVisible(false)}
+                style={[styles.closeBtn, { backgroundColor: colors.secondary }]}
+              >
+                <Feather name="x" size={18} color={colors.foreground} />
+              </Pressable>
+            </View>
+            <View style={styles.fieldGroup}>
+              <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>
+                NOM DE LA CLASSE
+              </Text>
+              <TextInput
+                autoFocus
+                value={classNameInput}
+                onChangeText={setClassNameInput}
+                placeholder="Nom de la classe"
+                placeholderTextColor={colors.mutedForeground}
+                style={[
+                  styles.textInput,
+                  {
+                    color: colors.foreground,
+                    borderColor: colors.border,
+                    backgroundColor: colors.background,
+                  },
+                ]}
+              />
+            </View>
+            <View style={styles.modalButtons}>
+              <Button label="Annuler" secondary onPress={() => setClassNameModalVisible(false)} />
+              <Button label="Enregistrer" icon="check" onPress={handleRenameClass} />
+            </View>
+          </Surface>
+        </View>
+      </Modal>
+
       {/* Modal: Ajouter un élève */}
       <Modal
         visible={pupilModalVisible}
@@ -553,6 +632,14 @@ const styles = StyleSheet.create({
   infoValue: {
     fontSize: 18,
     fontWeight: '800',
+  },
+  editClassButton: {
+    width: 36,
+    height: 36,
+    alignSelf: 'center',
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tabBar: {
     flexDirection: 'row',

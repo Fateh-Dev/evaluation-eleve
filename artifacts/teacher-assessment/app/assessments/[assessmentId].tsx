@@ -547,7 +547,6 @@ export default function AssessmentEvaluationScreen() {
           </View>
 
           <View style={styles.mobileFooter}>
-            <Button label="Enregistrer" icon="save" onPress={() => { void save(); }} />
             <Button label={pupilIndex === currentPupils.length - 1 ? 'Terminer' : 'Enregistrer et suivant'} icon="arrow-right" secondary onPress={() => { void saveAndNext(); }} />
           </View>
         </ScrollView>

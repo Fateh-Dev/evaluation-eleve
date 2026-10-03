@@ -16,7 +16,7 @@ export function Screen({ children, scroll = true, bottomPadding }: PropsWithChil
   return <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>{content}</ScrollView>;
 }
 
-export function AppHeader({ eyebrow, title, onBack, compact = false }: { eyebrow?: string; title: string; onBack?: () => void; compact?: boolean }) {
+export function AppHeader({ eyebrow, title, onBack, compact = true }: { eyebrow?: string; title: string; onBack?: () => void; compact?: boolean }) {
   const colors = useColors();
   return (
     <View style={[styles.header, compact && styles.compactHeader]}>
@@ -30,7 +30,7 @@ export function AppHeader({ eyebrow, title, onBack, compact = false }: { eyebrow
         />
         <View style={styles.headerText}>
           {eyebrow ? <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.eyebrow, { color: colors.primary }]}>{eyebrow.toUpperCase()}</Text> : null}
-          <Text style={[styles.title, compact && styles.compactTitle, { color: colors.foreground }]}>{title}</Text>
+          <Text numberOfLines={2} ellipsizeMode="tail" style={[styles.title, compact && styles.compactTitle, { color: colors.foreground }]}>{title}</Text>
         </View>
       </View>
       {onBack ? (

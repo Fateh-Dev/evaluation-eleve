@@ -207,6 +207,7 @@ export type AppDataContextValue = {
     }>;
   }) => string;
   setActiveClass: (classId: string) => void;
+  renameClass: (classId: string, name: string) => boolean;
   deleteClass: (classId: string) => void;
 
   // Pupil Actions
@@ -220,6 +221,11 @@ export type AppDataContextValue = {
     targetClassId?: string,
   ) => { imported: number; skipped: number };
   deletePupil: (pupilId: string) => void;
+  updatePupilName: (
+    pupilId: string,
+    firstName: string,
+    lastName: string,
+  ) => boolean;
   getPupilsForClass: (classId: string) => Pupil[];
 
   // Assessment / Competency Actions
@@ -699,6 +705,20 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       activeClassId: classId,
       activeAssessmentId: nextAssessmentId,
     }));
+  };
+
+  const renameClass = (classId: string, name: string) => {
+    const cleanName = name.trim();
+    if (!cleanName || !state.classes.some((item) => item.id === classId)) {
+      return false;
+    }
+    setState((prev) => ({
+      ...prev,
+      classes: prev.classes.map((item) =>
+        item.id === classId ? { ...item, name: cleanName } : item,
+      ),
+    }));
+    return true;
   };
 
   const updateTeacherName = (name: string) => {
@@ -1369,6 +1389,31 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     }));
   };
 
+  const updatePupilName = (
+    pupilId: string,
+    firstName: string,
+    lastName: string,
+  ) => {
+    const cleanFirstName = firstName.trim();
+    const cleanLastName = lastName.trim();
+    if (
+      !cleanFirstName ||
+      !cleanLastName ||
+      !state.pupils.some((pupil) => pupil.id === pupilId)
+    ) {
+      return false;
+    }
+    setState((prev) => ({
+      ...prev,
+      pupils: prev.pupils.map((pupil) =>
+        pupil.id === pupilId
+          ? { ...pupil, firstName: cleanFirstName, lastName: cleanLastName }
+          : pupil,
+      ),
+    }));
+    return true;
+  };
+
   // ASSESSMENT / COMPETENCY ACTIONS
   const getAssessment = (assessmentId: string) => {
     return state.assessments.find((a) => a.id === assessmentId);
@@ -1800,9 +1845,11 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       // Methods
       createClass,
       setActiveClass,
+      renameClass,
       deleteClass,
       addPupils,
       deletePupil,
+      updatePupilName,
       getPupilsForClass,
       createAssessment,
       setActiveAssessment,
