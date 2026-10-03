@@ -380,7 +380,10 @@ export default function AssessmentEvaluationScreen() {
       ) : (
           <ScrollView
             ref={mobileScrollRef}
+            style={styles.mobileScroll}
             showsVerticalScrollIndicator={false}
+            bounces={false}
+            overScrollMode="never"
             contentContainerStyle={styles.mobileContent}
             onScroll={(event) => setHasScrolled(event.nativeEvent.contentOffset.y > 12)}
             scrollEventThrottle={16}
@@ -605,7 +608,8 @@ const styles = StyleSheet.create({
   cell: { width: 83, alignItems: 'center', justifyContent: 'center' },
   totalRow: { flexDirection: 'row', minHeight: 50 },
   totalText: { fontSize: 11, fontWeight: '800' },
-  mobileContent: { paddingBottom: 30 },
+  mobileScroll: { flex: 1 },
+  mobileContent: { flexGrow: 1, paddingBottom: 30 },
   pupilNavigator: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 15, gap: 8 },
   navButton: { minHeight: 40, maxWidth: '34%', borderWidth: 1, borderRadius: 11, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 3 },
   navText: { fontSize: 11, fontWeight: '700' },

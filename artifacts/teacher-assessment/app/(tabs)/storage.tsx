@@ -24,8 +24,9 @@ export default function StorageScreen() {
   const handleUpload = async () => {
     try {
       await storage.uploadPdf();
-    } catch {
-      Alert.alert('Import impossible', 'Le fichier PDF n’a pas pu être ajouté au stockage.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Le fichier PDF n’a pas pu être ajouté au stockage.';
+      Alert.alert('Import impossible', message);
     }
   };
 

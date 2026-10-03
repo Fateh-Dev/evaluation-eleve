@@ -1,6 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { File, Paths } from 'expo-file-system';
-import * as LegacyFileSystem from 'expo-file-system/legacy';
+import { Directory, File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import React, { PropsWithChildren, createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { Linking } from 'react-native';
@@ -54,14 +53,14 @@ export function StorageProvider({ children }: PropsWithChildren) {
       const picked = result.result;
       const id = `pdf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const safeName = picked.name.replace(/[^a-zA-Z0-9._-]/g, '_') || `${id}.pdf`;
-      const directoryUri = `${LegacyFileSystem.documentDirectory}${DIRECTORY_NAME}`;
-      await LegacyFileSystem.makeDirectoryAsync(directoryUri, { intermediates: true });
-      const destinationUri = `${directoryUri}/${id}-${safeName}`;
-      await LegacyFileSystem.copyAsync({ from: picked.uri, to: destinationUri });
+      const directory = new Directory(Paths.document, DIRECTORY_NAME);
+      directory.create({ intermediates: true, idempotent: true });
+      const destination = new File(directory, `${id}-${safeName}`);
+      await picked.copy(destination, { overwrite: true });
       const created: StoredPdf = {
         id,
         name: picked.name || safeName,
-        uri: destinationUri,
+        uri: destination.uri,
         size: picked.size,
         createdAt: new Date().toISOString(),
       };
