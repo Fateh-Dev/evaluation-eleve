@@ -52,7 +52,7 @@ export type LegacyObjective = {
   description: string;
 };
 
-export const DEFAULT_SCHOOL_LEVELS = ['1AM', '2AM', '3AM', '4AM'];
+export const DEFAULT_SCHOOL_LEVELS = ['1AS', '2AS', '3As'];
 
 export function normalizeLabel(value: string): string {
   return value

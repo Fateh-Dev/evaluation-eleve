@@ -659,7 +659,7 @@ export default function PedagogicalConfigurationManager() {
             <TextInput
               value={newLevelName}
               onChangeText={setNewLevelName}
-              placeholder="Ajouter un niveau (ex. 1AM)"
+              placeholder="Ajouter un niveau (ex. 1AS)"
               placeholderTextColor={colors.mutedForeground}
               style={[
                 styles.input,
