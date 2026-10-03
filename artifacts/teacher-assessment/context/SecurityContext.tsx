@@ -1,10 +1,9 @@
 import * as SecureStore from 'expo-secure-store';
 import * as LocalAuthentication from 'expo-local-authentication';
 import React, { PropsWithChildren, createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { AppState, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
-import { Button } from '@/components/AppShell';
 
 const PIN_KEY = 'teacher-assessment-app-pin-v1';
 const BIOMETRIC_KEY = 'teacher-assessment-biometric-enabled-v1';
@@ -114,7 +113,6 @@ export function AppLockGate({ children }: PropsWithChildren) {
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [biometricAttempted, setBiometricAttempted] = useState(false);
-
   useEffect(() => {
     if (!security.ready || !security.locked) {
       setBiometricAttempted(false);
@@ -125,11 +123,10 @@ export function AppLockGate({ children }: PropsWithChildren) {
       void security.authenticateBiometric();
     }
   }, [security.ready, security.locked, security.biometricEnabled, security.biometricAvailable, biometricAttempted]);
-
   if (!security.ready) return null;
   if (!security.hasPin || !security.locked) return <>{children}</>;
-
   const handleUnlock = async () => {
+    if (pin.length < 4) return;
     if (await security.unlock(pin)) {
       setPin('');
       setError('');
@@ -138,42 +135,75 @@ export function AppLockGate({ children }: PropsWithChildren) {
       setError('Code PIN incorrect.');
     }
   };
-
+  const handleKey = (key: string) => {
+    if (pin.length >= 6) return;
+    setPin((current) => `${current}${key}`);
+    setError('');
+  };
+  const handleBackspace = () => {
+    setPin((current) => current.slice(0, -1));
+    setError('');
+  };
+  const keypadRows = [['1', '2', '3'], ['4', '5', '6'], ['7', '8', '9']];
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <View style={styles.lockScreen}>
         <View style={[styles.icon, { backgroundColor: colors.accent }]}>
-          <Feather name="lock" size={27} color={colors.primary} />
+          <Feather name="key" size={42} color={colors.primary} />
         </View>
-        <Text style={[styles.title, { color: colors.foreground }]}>Application verrouillée</Text>
-        <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>{security.biometricEnabled && security.biometricAvailable ? 'Utilisez votre visage ou votre empreinte, ou saisissez votre code PIN.' : 'Entrez votre code PIN pour accéder à vos données.'}</Text>
-        <TextInput
-          value={pin}
-          onChangeText={(value) => { setPin(value.replace(/\D/g, '').slice(0, 6)); setError(''); }}
-          placeholder="Code PIN"
-          placeholderTextColor={colors.mutedForeground}
-          keyboardType="number-pad"
-          secureTextEntry
-          maxLength={6}
-          autoFocus
-          onSubmitEditing={handleUnlock}
-          style={[styles.input, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]}
-        />
-        {error ? <Text style={[styles.error, { color: colors.errorForeground }]}>{error}</Text> : null}
-        <Button label="Déverrouiller" icon="unlock" onPress={handleUnlock} disabled={pin.length < 4} />
-        <Pressable onPress={() => setPin('')}><Text style={[styles.hint, { color: colors.mutedForeground }]}>Code de 4 à 6 chiffres</Text></Pressable>
+        <Text style={[styles.title, { color: colors.foreground }]}>Entrez le code PIN</Text>
+        <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Saisissez votre code PIN pour accéder à vos données</Text>
+        <View style={styles.pinDots} accessibilityLabel={`${pin.length} chiffres saisis sur 6`}>
+          {[0, 1, 2, 3, 4, 5].map((index) => (
+            <View key={index} style={[styles.pinDot, { backgroundColor: index < pin.length ? colors.primary : colors.muted, borderColor: index < pin.length ? colors.primary : colors.border }]}>
+              {index < pin.length ? <View style={[styles.pinDotInner, { backgroundColor: colors.primaryForeground }]} /> : null}
+            </View>
+          ))}
+        </View>
+        {error ? <Text style={[styles.error, { color: colors.errorForeground }]}>{error}</Text> : <Text style={[styles.hint, { color: colors.mutedForeground }]}>Code de 4 à 6 chiffres</Text>}
+        {security.biometricEnabled && security.biometricAvailable ? (
+          <Pressable onPress={() => { void security.authenticateBiometric(); }} style={({ pressed }) => [styles.biometricButton, { borderColor: colors.border, backgroundColor: colors.card, opacity: pressed ? 0.7 : 1 }]}>
+            <Feather name="shield" size={17} color={colors.primary} />
+            <Text style={[styles.biometricText, { color: colors.primary }]}>Utiliser le visage / l’empreinte</Text>
+          </Pressable>
+        ) : null}
+        <View style={styles.keypad}>
+          {keypadRows.flat().map((key) => (
+            <Pressable key={key} onPress={() => handleKey(key)} style={({ pressed }) => [styles.key, { backgroundColor: colors.muted, opacity: pressed ? 0.65 : 1 }]} accessibilityRole="button" accessibilityLabel={`Chiffre ${key}`}>
+              <Text style={[styles.keyText, { color: colors.foreground }]}>{key}</Text>
+            </Pressable>
+          ))}
+          <View style={styles.keySpacer} />
+          <Pressable onPress={() => handleKey('0')} style={({ pressed }) => [styles.key, { backgroundColor: colors.muted, opacity: pressed ? 0.65 : 1 }]} accessibilityRole="button" accessibilityLabel="Chiffre 0">
+            <Text style={[styles.keyText, { color: colors.foreground }]}>0</Text>
+          </Pressable>
+          <Pressable onPress={handleBackspace} style={({ pressed }) => [styles.key, { backgroundColor: colors.muted, opacity: pressed ? 0.65 : 1 }]} accessibilityRole="button" accessibilityLabel="Effacer">
+            <Feather name="delete" size={22} color={colors.foreground} />
+          </Pressable>
+        </View>
+        <Pressable onPress={() => { void handleUnlock(); }} disabled={pin.length < 4} style={({ pressed }) => [styles.submit, { backgroundColor: colors.primary, opacity: pin.length < 4 ? 0.35 : pressed ? 0.75 : 1 }]}>
+          <Feather name="arrow-right" size={24} color={colors.primaryForeground} />
+        </Pressable>
       </View>
     </View>
   );
 }
-
 const styles = StyleSheet.create({
   container: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  card: { width: '100%', maxWidth: 420, borderWidth: 1, borderRadius: 24, padding: 24, alignItems: 'center', gap: 14 },
-  icon: { width: 64, height: 64, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  title: { fontSize: 24, fontWeight: '800', textAlign: 'center' },
-  subtitle: { fontSize: 14, lineHeight: 21, textAlign: 'center' },
-  input: { width: '100%', borderWidth: 1, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 13, fontSize: 22, textAlign: 'center', letterSpacing: 8 },
-  error: { fontSize: 13, fontWeight: '700' },
-  hint: { fontSize: 12 },
+  lockScreen: { width: '100%', maxWidth: 420, alignItems: 'center', paddingVertical: 18 },
+  icon: { width: 94, height: 94, borderRadius: 30, alignItems: 'center', justifyContent: 'center', marginBottom: 22 },
+  title: { fontSize: 25, fontWeight: '800', textAlign: 'center', letterSpacing: -0.4 },
+  subtitle: { maxWidth: 290, fontSize: 14, lineHeight: 21, textAlign: 'center', marginTop: 8 },
+  pinDots: { flexDirection: 'row', gap: 11, marginTop: 25, marginBottom: 10 },
+  pinDot: { width: 18, height: 18, borderRadius: 9, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  pinDotInner: { width: 7, height: 7, borderRadius: 4 },
+  keypad: { width: 270, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 16, marginTop: 22 },
+  key: { width: 70, height: 70, borderRadius: 35, alignItems: 'center', justifyContent: 'center' },
+  keySpacer: { width: 70, height: 70 },
+  keyText: { fontSize: 23, fontWeight: '600' },
+  biometricButton: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 9, marginTop: 10 },
+  biometricText: { fontSize: 13, fontWeight: '700' },
+  submit: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', marginTop: 18 },
+  error: { fontSize: 13, fontWeight: '700', minHeight: 18 },
+  hint: { fontSize: 12, minHeight: 18 },
 });
