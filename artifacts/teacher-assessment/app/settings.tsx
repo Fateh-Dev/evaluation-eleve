@@ -415,6 +415,13 @@ export default function SettingsScreen() {
       <SectionTitle title="Sauvegarde & sécurité" />
       <Surface style={styles.card}>
         <View style={styles.settingRowInner}>
+          <View style={[styles.settingIcon, { backgroundColor: colors.successSurface }]}><Feather name="check-circle" size={18} color={colors.successForeground} /></View>
+          <View style={styles.settingCopy}>
+            <Text style={[styles.value, { color: colors.foreground }]}>Sauvegarde automatique quotidienne</Text>
+            <Text style={[styles.help, { color: colors.mutedForeground }]}>{data.lastBackupAt ? `Dernière sauvegarde : ${new Date(data.lastBackupAt).toLocaleString('fr-FR')}` : 'Une sauvegarde sera créée automatiquement après le premier démarrage.'}</Text>
+          </View>
+        </View>
+        <View style={styles.settingRowInner}>
           <View style={[styles.settingIcon, { backgroundColor: colors.accent }]}><Feather name="archive" size={18} color={colors.primary} /></View>
           <View style={styles.settingCopy}>
             <Text style={[styles.value, { color: colors.foreground }]}>Sauvegarde complète</Text>

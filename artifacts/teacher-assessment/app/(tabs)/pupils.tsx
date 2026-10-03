@@ -10,11 +10,13 @@ export default function PupilsScreen() {
   const colors = useColors();
   const data = useAppData();
   const [search, setSearch] = useState('');
-  const pupils = useMemo(() => data.pupils.filter((pupil) => `${pupil.firstName} ${pupil.lastName} ${pupil.registrationNumber}`.toLowerCase().includes(search.toLowerCase())), [data.pupils, search]);
+  const [sortBy, setSortBy] = useState<'name' | 'registration'>('name');
+  const pupils = useMemo(() => data.pupils.filter((pupil) => `${pupil.firstName} ${pupil.lastName} ${pupil.registrationNumber}`.toLowerCase().includes(search.toLowerCase())).sort((a, b) => sortBy === 'name' ? `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`) : a.registrationNumber.localeCompare(b.registrationNumber, undefined, { numeric: true })), [data.pupils, search, sortBy]);
   return (
     <Screen>
       <AppHeader eyebrow={`${data.className} · ${data.pupils.length} élèves`} title="Élèves" />
       <View style={[styles.search, { backgroundColor: colors.card, borderColor: colors.border }]}><Feather name="search" size={17} color={colors.mutedForeground} /><TextInput value={search} onChangeText={setSearch} placeholder="Rechercher par nom ou matricule" placeholderTextColor={colors.mutedForeground} style={[styles.input, { color: colors.foreground }]} /></View>
+      <Pressable onPress={() => setSortBy(sortBy === 'name' ? 'registration' : 'name')} style={[styles.sortButton, { borderColor: colors.border, backgroundColor: colors.card }]}><Feather name="filter" size={15} color={colors.primary} /><Text style={[styles.sortText, { color: colors.foreground }]}>Tri : {sortBy === 'name' ? 'nom' : 'matricule'}</Text></Pressable>
       <SectionTitle title={`${pupils.length} résultat${pupils.length > 1 ? 's' : ''}`} />
       <View style={styles.list}>{pupils.map((pupil, index) => (
         <Pressable key={pupil.id} onPress={() => router.push(`/pupils/${pupil.id}`)} style={({ pressed }) => [styles.pupilRow, { borderBottomColor: colors.border, opacity: pressed ? 0.7 : 1 }]}>
@@ -30,6 +32,8 @@ export default function PupilsScreen() {
 const styles = StyleSheet.create({
   search: { height: 50, borderRadius: 14, borderWidth: 1, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 10 },
   input: { flex: 1, fontSize: 14 },
+  sortButton: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 7, borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 7, marginTop: 10 },
+  sortText: { fontSize: 12, fontWeight: '700' },
   list: { paddingBottom: 20 },
   pupilRow: { minHeight: 70, borderBottomWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
   avatar: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },

@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system/legacy';
 import React, {
   createContext,
   PropsWithChildren,
@@ -128,6 +129,7 @@ export type AppDataContextValue = {
   hydrated: boolean;
   isDirty: boolean;
   syncStatus: 'synced' | 'pending';
+  lastBackupAt: string | null;
 
   // Active shortcuts (backward compatibility for existing screens)
   className: string;
@@ -323,6 +325,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
   const [hydrated, setHydrated] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'pending'>('synced');
+  const [lastBackupAt, setLastBackupAt] = useState<string | null>(null);
 
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY)
@@ -373,6 +376,27 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       );
     }
   }, [hydrated, state]);
+
+  const writeAutomaticBackup = async (snapshot: AppState) => {
+    try {
+      const timestamp = new Date().toISOString();
+      const directory = `${FileSystem.documentDirectory}backups/`;
+      await FileSystem.makeDirectoryAsync(directory, { intermediates: true });
+      await FileSystem.writeAsStringAsync(`${directory}evaluation-eleve-${timestamp.slice(0, 10)}.json`, JSON.stringify({ format: 'evaluation-eleve-auto-backup', version: 1, exportedAt: timestamp, state: snapshot }));
+      await AsyncStorage.setItem('@teacher-assessment/last-backup-at', timestamp);
+      setLastBackupAt(timestamp);
+    } catch {
+      // Automatic backups must never block normal local use.
+    }
+  };
+
+  useEffect(() => {
+    if (!hydrated) return;
+    void AsyncStorage.getItem('@teacher-assessment/last-backup-at').then((stored) => {
+      setLastBackupAt(stored);
+      if (!stored || Date.now() - new Date(stored).getTime() >= 24 * 60 * 60 * 1000) void writeAutomaticBackup(state);
+    });
+  }, [hydrated]);
 
   // Active class helper (safe fallback when classes are empty)
   const activeClass = useMemo(() => {
@@ -1246,6 +1270,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     setSyncStatus('pending');
   };
   const resetAllData = () => {
+    void writeAutomaticBackup(state);
     const empty = createEmptyState();
     setState(empty);
     AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(empty)).catch(
@@ -1339,7 +1364,15 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       let regNo = pupil.registrationNumber
         ? pupil.registrationNumber.trim()
         : '';
-      if (!regNo || existing.has(regNo.toLowerCase())) {
+      if (!pupil.firstName.trim() || !pupil.lastName.trim()) {
+        skipped += 1;
+        return;
+      }
+      if (regNo && existing.has(regNo.toLowerCase())) {
+        skipped += 1;
+        return;
+      }
+      if (!regNo) {
         let candidate = existing.size + 1;
         while (
           existing.has(String(candidate).padStart(2, '0').toLowerCase()) ||
@@ -1786,6 +1819,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       hydrated,
       isDirty,
       syncStatus,
+      lastBackupAt,
 
       // Aliases for full maps (all assessments)
       allObjectives: state.objectives,
