@@ -68,11 +68,23 @@ export default function SettingsScreen() {
     try {
       const timestamp = new Date().toISOString().slice(0, 10);
       const uri = `${FileSystem.cacheDirectory}evaluation-eleve-${timestamp}.json`;
+      const backupState = data.getBackupState();
       await FileSystem.writeAsStringAsync(uri, JSON.stringify({
         format: 'evaluation-eleve-backup',
-        version: 1,
+        version: 2,
         exportedAt: new Date().toISOString(),
-        state: data.getBackupState(),
+        includedCollections: [
+          'school', 'teacherName', 'academicYear', 'schoolYearConfigurations',
+          'classes', 'pupils', 'assessments', 'objectives', 'evaluations',
+          'remediations', 'activeClassId', 'activeAssessmentId',
+        ],
+        counts: {
+          classes: backupState.classes.length,
+          pupils: backupState.pupils.length,
+          assessments: backupState.assessments.length,
+          schoolYearConfigurations: backupState.schoolYearConfigurations.length,
+        },
+        state: backupState,
       }, null, 2));
       if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri, { mimeType: 'application/json', dialogTitle: 'Enregistrer la sauvegarde' });
       else Alert.alert('Sauvegarde créée', `Le fichier est disponible ici : ${uri}`);
@@ -376,7 +388,7 @@ export default function SettingsScreen() {
           <View style={[styles.settingIcon, { backgroundColor: colors.accent }]}><Feather name="archive" size={18} color={colors.primary} /></View>
           <View style={styles.settingCopy}>
             <Text style={[styles.value, { color: colors.foreground }]}>Sauvegarde complète</Text>
-            <Text style={[styles.help, { color: colors.mutedForeground }]}>Enregistrez toutes vos classes, élèves, évaluations et paramètres dans un fichier JSON sur votre appareil ou dans un autre emplacement.</Text>
+            <Text style={[styles.help, { color: colors.mutedForeground }]}>Enregistrez toutes les données de l’application — établissement, années scolaires, classes, élèves, évaluations, objectifs, résultats et remédiations — dans un fichier JSON sur votre appareil ou dans un autre emplacement.</Text>
           </View>
         </View>
         <View style={styles.buttonRow}>

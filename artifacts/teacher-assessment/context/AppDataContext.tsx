@@ -1228,6 +1228,9 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       school: { ...createEmptyState().school, ...candidate.school },
       teacherName: typeof candidate.teacherName === 'string' ? candidate.teacherName : '',
       academicYear: typeof candidate.academicYear === 'string' ? candidate.academicYear : '2026-2027',
+      schoolYearConfigurations: Array.isArray(candidate.schoolYearConfigurations)
+        ? candidate.schoolYearConfigurations
+        : createEmptyState().schoolYearConfigurations,
       classes: candidate.classes,
       pupils: candidate.pupils,
       assessments: candidate.assessments,
