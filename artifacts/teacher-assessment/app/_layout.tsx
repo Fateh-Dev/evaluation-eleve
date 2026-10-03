@@ -15,6 +15,7 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { AppDataProvider } from '@/context/AppDataContext';
 import { AppLockGate, SecurityProvider } from '@/context/SecurityContext';
+import { StorageProvider } from '@/context/StorageContext';
 import { setBaseUrl } from '@workspace/api-client-react';
 
 if (process.env.EXPO_PUBLIC_DOMAIN) {
@@ -56,13 +57,15 @@ export default function RootLayout() {
         <SecurityProvider>
           <AppLockGate>
             <AppDataProvider>
-              <QueryClientProvider client={queryClient}>
-                <GestureHandlerRootView style={{ flex: 1 }}>
-                  <KeyboardProvider>
-                    <RootLayoutNav />
-                  </KeyboardProvider>
-                </GestureHandlerRootView>
-              </QueryClientProvider>
+              <StorageProvider>
+                <QueryClientProvider client={queryClient}>
+                  <GestureHandlerRootView style={{ flex: 1 }}>
+                    <KeyboardProvider>
+                      <RootLayoutNav />
+                    </KeyboardProvider>
+                  </GestureHandlerRootView>
+                </QueryClientProvider>
+              </StorageProvider>
             </AppDataProvider>
           </AppLockGate>
         </SecurityProvider>

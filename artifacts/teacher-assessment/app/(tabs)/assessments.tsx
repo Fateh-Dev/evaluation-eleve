@@ -199,7 +199,7 @@ export default function AssessmentsScreen() {
                     }}
                   />
                   <Button
-                    label="Document & Export (PDF / Excel)"
+                    label="Exporter"
                     icon="file-text"
                     compact
                     secondary
