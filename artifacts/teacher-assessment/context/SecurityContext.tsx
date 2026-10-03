@@ -1,5 +1,6 @@
 import * as Crypto from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
+import * as LocalAuthentication from 'expo-local-authentication';
 import React, { PropsWithChildren, createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { AppState, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
@@ -7,13 +8,18 @@ import { useColors } from '@/hooks/useColors';
 import { Button } from '@/components/AppShell';
 
 const PIN_KEY = '@teacher-assessment/app-pin-v1';
+const BIOMETRIC_KEY = '@teacher-assessment/biometric-enabled-v1';
 type SecurityContextValue = {
   ready: boolean;
   hasPin: boolean;
   locked: boolean;
+  biometricAvailable: boolean;
+  biometricEnabled: boolean;
   setPin: (pin: string) => Promise<void>;
   removePin: () => Promise<void>;
   unlock: (pin: string) => Promise<boolean>;
+  setBiometricEnabled: (enabled: boolean) => Promise<void>;
+  authenticateBiometric: () => Promise<boolean>;
   lock: () => void;
 };
 const SecurityContext = createContext<SecurityContextValue | null>(null);
@@ -26,12 +32,21 @@ export function SecurityProvider({ children }: PropsWithChildren) {
   const [ready, setReady] = useState(false);
   const [hasPin, setHasPin] = useState(false);
   const [locked, setLocked] = useState(false);
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [biometricEnabled, setBiometricEnabledState] = useState(false);
 
   useEffect(() => {
-    SecureStore.getItemAsync(PIN_KEY).then((stored) => {
-      const configured = Boolean(stored);
+    Promise.all([
+      SecureStore.getItemAsync(PIN_KEY),
+      SecureStore.getItemAsync(BIOMETRIC_KEY),
+      LocalAuthentication.hasHardwareAsync(),
+      LocalAuthentication.isEnrolledAsync(),
+    ]).then(([storedPin, storedBiometric, hasHardware, isEnrolled]) => {
+      const configured = Boolean(storedPin);
       setHasPin(configured);
       setLocked(configured);
+      setBiometricAvailable(Boolean(hasHardware && isEnrolled));
+      setBiometricEnabledState(Boolean(configured && storedBiometric === 'true' && hasHardware && isEnrolled));
       setReady(true);
     }).catch(() => setReady(true));
   }, []);
@@ -47,6 +62,8 @@ export function SecurityProvider({ children }: PropsWithChildren) {
     ready,
     hasPin,
     locked,
+    biometricAvailable,
+    biometricEnabled,
     setPin: async (pin) => {
       await SecureStore.setItemAsync(PIN_KEY, await hashPin(pin));
       setHasPin(true);
@@ -54,7 +71,9 @@ export function SecurityProvider({ children }: PropsWithChildren) {
     },
     removePin: async () => {
       await SecureStore.deleteItemAsync(PIN_KEY);
+      await SecureStore.deleteItemAsync(BIOMETRIC_KEY);
       setHasPin(false);
+      setBiometricEnabledState(false);
       setLocked(false);
     },
     unlock: async (pin) => {
@@ -63,8 +82,22 @@ export function SecurityProvider({ children }: PropsWithChildren) {
       if (valid) setLocked(false);
       return valid;
     },
+    setBiometricEnabled: async (enabled) => {
+      await SecureStore.setItemAsync(BIOMETRIC_KEY, enabled ? 'true' : 'false');
+      setBiometricEnabledState(enabled);
+    },
+    authenticateBiometric: async () => {
+      if (!biometricAvailable) return false;
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Déverrouiller Évaluation Élève',
+        cancelLabel: 'Utiliser le code PIN',
+        disableDeviceFallback: true,
+      });
+      if (result.success) setLocked(false);
+      return result.success;
+    },
     lock: () => { if (hasPin) setLocked(true); },
-  }), [ready, hasPin, locked]);
+  }), [ready, hasPin, locked, biometricAvailable, biometricEnabled]);
 
   return <SecurityContext.Provider value={value}>{children}</SecurityContext.Provider>;
 }
@@ -80,6 +113,18 @@ export function AppLockGate({ children }: PropsWithChildren) {
   const colors = useColors();
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
+  const [biometricAttempted, setBiometricAttempted] = useState(false);
+
+  useEffect(() => {
+    if (!security.ready || !security.locked) {
+      setBiometricAttempted(false);
+      return;
+    }
+    if (security.biometricEnabled && security.biometricAvailable && !biometricAttempted) {
+      setBiometricAttempted(true);
+      void security.authenticateBiometric();
+    }
+  }, [security.ready, security.locked, security.biometricEnabled, security.biometricAvailable, biometricAttempted]);
 
   if (!security.ready) return null;
   if (!security.hasPin || !security.locked) return <>{children}</>;
@@ -101,7 +146,7 @@ export function AppLockGate({ children }: PropsWithChildren) {
           <Feather name="lock" size={27} color={colors.primary} />
         </View>
         <Text style={[styles.title, { color: colors.foreground }]}>Application verrouillée</Text>
-        <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Entrez votre code PIN pour accéder à vos données.</Text>
+        <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>{security.biometricEnabled && security.biometricAvailable ? 'Utilisez votre visage ou votre empreinte, ou saisissez votre code PIN.' : 'Entrez votre code PIN pour accéder à vos données.'}</Text>
         <TextInput
           value={pin}
           onChangeText={(value) => { setPin(value.replace(/\D/g, '').slice(0, 6)); setError(''); }}

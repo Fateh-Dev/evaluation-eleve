@@ -102,6 +102,25 @@ export default function SettingsScreen() {
     { text: 'Annuler', style: 'cancel' },
     { text: 'Désactiver', style: 'destructive', onPress: () => { void security.removePin(); } },
   ]);
+  const handleToggleBiometric = async () => {
+    if (security.biometricEnabled) {
+      await security.setBiometricEnabled(false);
+      Alert.alert('Biométrie désactivée', 'Le code PIN reste disponible pour déverrouiller l’application.');
+      return;
+    }
+    if (!security.hasPin) {
+      Alert.alert('Code PIN requis', 'Activez d’abord un code PIN avant d’utiliser la biométrie.');
+      return;
+    }
+    if (!security.biometricAvailable) {
+      Alert.alert('Biométrie indisponible', 'Aucun visage ou aucune empreinte enregistrée n’est disponible sur cet appareil.');
+      return;
+    }
+    if (await security.authenticateBiometric()) {
+      await security.setBiometricEnabled(true);
+      Alert.alert('Biométrie activée', 'Vous pourrez utiliser votre visage ou votre empreinte pour ouvrir l’application.');
+    }
+  };
   const handleResetData = () => {
     Alert.alert(
       'Vider la base de données',
@@ -367,13 +386,15 @@ export default function SettingsScreen() {
         <View style={[styles.settingRowInner, { marginTop: 8 }]}>
           <View style={[styles.settingIcon, { backgroundColor: colors.accent }]}><Feather name="lock" size={18} color={colors.primary} /></View>
           <View style={styles.settingCopy}>
-            <Text style={[styles.value, { color: colors.foreground }]}>Code PIN d’accès</Text>
-            <Text style={[styles.help, { color: colors.mutedForeground }]}>{security.hasPin ? 'Activé : un code est demandé à l’ouverture et au retour dans l’application.' : 'Protégez l’accès à vos données avec un code de 4 à 6 chiffres.'}</Text>
+            <Text style={[styles.value, { color: colors.foreground }]}>Code PIN et biométrie</Text>
+            <Text style={[styles.help, { color: colors.mutedForeground }]}>{security.hasPin ? (security.biometricEnabled ? 'Activés : code PIN et visage / empreinte.' : 'Activé : un code PIN est demandé à l’ouverture et au retour dans l’application.') : 'Protégez l’accès à vos données avec un code PIN, puis ajoutez le visage ou l’empreinte.'}</Text>
           </View>
           <Text style={[styles.enabled, { color: security.hasPin ? colors.successForeground : colors.mutedForeground }]}>{security.hasPin ? 'Activé' : 'Désactivé'}</Text>
         </View>
         {!security.hasPin && !editingPin ? <Button label="Activer le code PIN" compact onPress={() => setEditingPin(true)} icon="lock" /> : null}
         {security.hasPin ? <Button label="Désactiver le code PIN" compact secondary onPress={handleRemovePin} icon="unlock" /> : null}
+        {security.hasPin && security.biometricAvailable ? <Button label={security.biometricEnabled ? 'Désactiver visage / empreinte' : 'Activer visage / empreinte'} compact secondary onPress={() => { void handleToggleBiometric(); }} icon={security.biometricEnabled ? 'shield-off' : 'shield'} /> : null}
+        {security.hasPin && !security.biometricAvailable ? <Text style={[styles.help, { color: colors.mutedForeground }]}>La biométrie sera disponible après l’enregistrement d’un visage ou d’une empreinte dans les réglages de l’appareil.</Text> : null}
         {editingPin ? <View style={[styles.editBox, { borderTopColor: colors.border }]}>
           <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>NOUVEAU CODE PIN</Text>
           <TextInput value={pinInput} onChangeText={(value) => setPinInput(value.replace(/\D/g, '').slice(0, 6))} keyboardType="number-pad" secureTextEntry placeholder="4 à 6 chiffres" placeholderTextColor={colors.mutedForeground} style={[styles.input, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]} />
