@@ -104,7 +104,7 @@ export default function SettingsScreen() {
     } catch { Alert.alert('Erreur', 'Le fichier sélectionné est invalide ou illisible.'); }
   };
   const handleSavePin = async () => {
-    if (!/^[0-9]{4,6}$/.test(pinInput)) return Alert.alert('Code PIN invalide', 'Utilisez un code de 4 à 6 chiffres.');
+    if (!/^[0-9]{4}$/.test(pinInput)) return Alert.alert('Code PIN invalide', 'Utilisez exactement 4 chiffres.');
     if (pinInput !== pinConfirmation) return Alert.alert('Codes différents', 'La confirmation du code PIN ne correspond pas.');
     await security.setPin(pinInput);
     setPinInput(''); setPinConfirmation(''); setEditingPin(false);
@@ -409,9 +409,9 @@ export default function SettingsScreen() {
         {security.hasPin && !security.biometricAvailable ? <Text style={[styles.help, { color: colors.mutedForeground }]}>La biométrie sera disponible après l’enregistrement d’un visage ou d’une empreinte dans les réglages de l’appareil.</Text> : null}
         {editingPin ? <View style={[styles.editBox, { borderTopColor: colors.border }]}>
           <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>NOUVEAU CODE PIN</Text>
-          <TextInput value={pinInput} onChangeText={(value) => setPinInput(value.replace(/\D/g, '').slice(0, 6))} keyboardType="number-pad" secureTextEntry placeholder="4 à 6 chiffres" placeholderTextColor={colors.mutedForeground} style={[styles.input, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]} />
+          <TextInput value={pinInput} onChangeText={(value) => setPinInput(value.replace(/\D/g, '').slice(0, 4))} keyboardType="number-pad" secureTextEntry placeholder="4 chiffres" placeholderTextColor={colors.mutedForeground} style={[styles.input, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]} />
           <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>CONFIRMER LE CODE PIN</Text>
-          <TextInput value={pinConfirmation} onChangeText={(value) => setPinConfirmation(value.replace(/\D/g, '').slice(0, 6))} keyboardType="number-pad" secureTextEntry placeholder="Répétez le code" placeholderTextColor={colors.mutedForeground} style={[styles.input, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]} />
+          <TextInput value={pinConfirmation} onChangeText={(value) => setPinConfirmation(value.replace(/\D/g, '').slice(0, 4))} keyboardType="number-pad" secureTextEntry placeholder="Répétez le code" placeholderTextColor={colors.mutedForeground} style={[styles.input, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]} />
           <View style={styles.buttonRow}><Button label="Activer" compact onPress={() => { void handleSavePin(); }} /><Button label="Annuler" compact secondary onPress={() => { setEditingPin(false); setPinInput(''); setPinConfirmation(''); }} /></View>
         </View> : null}
       </Surface>

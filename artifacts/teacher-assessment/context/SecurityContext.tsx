@@ -125,9 +125,9 @@ export function AppLockGate({ children }: PropsWithChildren) {
   }, [security.ready, security.locked, security.biometricEnabled, security.biometricAvailable, biometricAttempted]);
   if (!security.ready) return null;
   if (!security.hasPin || !security.locked) return <>{children}</>;
-  const handleUnlock = async () => {
-    if (pin.length < 4) return;
-    if (await security.unlock(pin)) {
+  const handleUnlock = async (value: string) => {
+    if (value.length !== 4) return;
+    if (await security.unlock(value)) {
       setPin('');
       setError('');
     } else {
@@ -136,9 +136,11 @@ export function AppLockGate({ children }: PropsWithChildren) {
     }
   };
   const handleKey = (key: string) => {
-    if (pin.length >= 6) return;
-    setPin((current) => `${current}${key}`);
+    if (pin.length >= 4) return;
+    const nextPin = `${pin}${key}`;
+    setPin(nextPin);
     setError('');
+    if (nextPin.length === 4) void handleUnlock(nextPin);
   };
   const handleBackspace = () => {
     setPin((current) => current.slice(0, -1));
@@ -153,14 +155,14 @@ export function AppLockGate({ children }: PropsWithChildren) {
         </View>
         <Text style={[styles.title, { color: colors.foreground }]}>Entrez le code PIN</Text>
         <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Saisissez votre code PIN pour accéder à vos données</Text>
-        <View style={styles.pinDots} accessibilityLabel={`${pin.length} chiffres saisis sur 6`}>
-          {[0, 1, 2, 3, 4, 5].map((index) => (
+        <View style={styles.pinDots} accessibilityLabel={`${pin.length} chiffres saisis sur 4`}>
+          {[0, 1, 2, 3].map((index) => (
             <View key={index} style={[styles.pinDot, { backgroundColor: index < pin.length ? colors.primary : colors.muted, borderColor: index < pin.length ? colors.primary : colors.border }]}>
               {index < pin.length ? <View style={[styles.pinDotInner, { backgroundColor: colors.primaryForeground }]} /> : null}
             </View>
           ))}
         </View>
-        {error ? <Text style={[styles.error, { color: colors.errorForeground }]}>{error}</Text> : <Text style={[styles.hint, { color: colors.mutedForeground }]}>Code de 4 à 6 chiffres</Text>}
+        {error ? <Text style={[styles.error, { color: colors.errorForeground }]}>{error}</Text> : <Text style={[styles.hint, { color: colors.mutedForeground }]}>Code de 4 chiffres</Text>}
         {security.biometricEnabled && security.biometricAvailable ? (
           <Pressable onPress={() => { void security.authenticateBiometric(); }} style={({ pressed }) => [styles.biometricButton, { borderColor: colors.border, backgroundColor: colors.card, opacity: pressed ? 0.7 : 1 }]}>
             <Feather name="shield" size={17} color={colors.primary} />
@@ -181,9 +183,6 @@ export function AppLockGate({ children }: PropsWithChildren) {
             <Feather name="delete" size={22} color={colors.foreground} />
           </Pressable>
         </View>
-        <Pressable onPress={() => { void handleUnlock(); }} disabled={pin.length < 4} style={({ pressed }) => [styles.submit, { backgroundColor: colors.primary, opacity: pin.length < 4 ? 0.35 : pressed ? 0.75 : 1 }]}>
-          <Feather name="arrow-right" size={24} color={colors.primaryForeground} />
-        </Pressable>
       </View>
     </View>
   );
@@ -203,7 +202,6 @@ const styles = StyleSheet.create({
   keyText: { fontSize: 23, fontWeight: '600' },
   biometricButton: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 9, marginTop: 10 },
   biometricText: { fontSize: 13, fontWeight: '700' },
-  submit: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', marginTop: 18 },
   error: { fontSize: 13, fontWeight: '700', minHeight: 18 },
   hint: { fontSize: 12, minHeight: 18 },
 });
