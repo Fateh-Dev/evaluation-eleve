@@ -2,7 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { AppHeader, Button, ProgressBar, Screen, SectionTitle, Surface, SyncPill } from '@/components/AppShell';
+import { AppHeader, Button, ProgressBar, Screen, SectionTitle, Surface } from '@/components/AppShell';
 import { useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
 
@@ -31,8 +31,6 @@ export default function DashboardScreen() {
   return (
     <Screen>
       <AppHeader eyebrow="Espace enseignant" title={teacherGreeting} />
-      <SyncPill status={data.syncStatus} />
-
       {/* HERO SECTION */}
       {!hasClasses ? (
         <View style={[styles.hero, { backgroundColor: colors.hero }]}>

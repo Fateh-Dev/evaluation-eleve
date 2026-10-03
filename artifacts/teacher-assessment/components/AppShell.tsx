@@ -29,7 +29,7 @@ export function AppHeader({ eyebrow, title, onBack, compact = false }: { eyebrow
           accessibilityLabel="Logo de l’établissement Chaibeddra"
         />
         <View style={styles.headerText}>
-          {eyebrow ? <Text style={[styles.eyebrow, { color: colors.primary }]}>{eyebrow.toUpperCase()}</Text> : null}
+          {eyebrow ? <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.eyebrow, { color: colors.primary }]}>{eyebrow.toUpperCase()}</Text> : null}
           <Text style={[styles.title, compact && styles.compactTitle, { color: colors.foreground }]}>{title}</Text>
         </View>
       </View>
@@ -38,19 +38,6 @@ export function AppHeader({ eyebrow, title, onBack, compact = false }: { eyebrow
           <Feather name="arrow-left" size={18} color={colors.foreground} />
         </Pressable>
       ) : null}
-    </View>
-  );
-}
-
-export function SyncPill({ status }: { status: 'synced' | 'pending' }) {
-  const colors = useColors();
-  const pending = status === 'pending';
-  return (
-    <View style={[styles.syncPill, { backgroundColor: pending ? colors.pendingSurface : colors.successSurface }]}>
-      <View style={[styles.syncDot, { backgroundColor: pending ? colors.primary : colors.successForeground }]} />
-      <Text style={[styles.syncText, { color: pending ? colors.pendingForeground : colors.successForeground }]}>
-        {pending ? 'Modifications non synchronisées' : 'Synchronisé'}
-      </Text>
     </View>
   );
 }
@@ -120,9 +107,6 @@ const styles = StyleSheet.create({
   title: { fontSize: 28, lineHeight: 34, fontWeight: '700', letterSpacing: -0.5 },
   compactTitle: { fontSize: 20, lineHeight: 25 },
   iconButton: { width: 42, height: 42, borderRadius: 21, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  syncPill: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 11, paddingVertical: 8, borderRadius: 20 },
-  syncDot: { width: 7, height: 7, borderRadius: 4 },
-  syncText: { fontSize: 12, fontWeight: '600' },
   button: { minHeight: 48, borderRadius: 14, borderWidth: 1, paddingHorizontal: 17, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   buttonCompact: { minHeight: 38, borderRadius: 11, paddingHorizontal: 12 },
   buttonText: { fontSize: 14, fontWeight: '700' },

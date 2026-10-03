@@ -168,9 +168,10 @@ export default function AssessmentDocumentScreen() {
   return (
     <Screen>
       <AppHeader
-        eyebrow={`${currentClass.name} · ${currentAssessment.competency}`}
+        eyebrow="Export"
         title="Document d’évaluation"
         onBack={() => router.back()}
+        compact
       />
 
       {/* Top Action Toolbar */}

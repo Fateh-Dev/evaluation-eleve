@@ -2,7 +2,6 @@ import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, StyleSheet, Text, TextInput, View } from 'react-native';
-import { useGetAssessmentStatistics } from '@workspace/api-client-react';
 import { AppHeader, Button, ProgressBar, Screen, SectionTitle, Surface } from '@/components/AppShell';
 import { useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
@@ -49,18 +48,13 @@ export default function AssessmentAnalysisScreen() {
     setClassRemediation(currentRemediation.classroom);
   }, [currentRemediation]);
 
-  const { data: serverStatistics } = useGetAssessmentStatistics(currentAssessment.id);
-
   const statistics = useMemo(
     () =>
-      currentObjectives.map((objective) => {
-        const local = localStatistics.find((item) => item.objectiveId === objective.id);
-        const remote = Array.isArray(serverStatistics)
-          ? serverStatistics.find((item) => item.objectiveId === objective.id)
-          : undefined;
-        return { objective, stat: remote ?? local };
-      }),
-    [currentObjectives, localStatistics, serverStatistics],
+      currentObjectives.map((objective) => ({
+        objective,
+        stat: localStatistics.find((item) => item.objectiveId === objective.id),
+      })),
+    [currentObjectives, localStatistics],
   );
 
   const evaluatedTotal = statistics.reduce((sum, item) => sum + (item.stat?.evaluated ?? 0), 0);
@@ -75,9 +69,10 @@ export default function AssessmentAnalysisScreen() {
   return (
     <Screen>
       <AppHeader
-        eyebrow={`${currentClass.name} · ${currentAssessment.competency}`}
+        eyebrow="Analyse"
         title={`Analyse — ${currentAssessment.title}`}
         onBack={() => router.back()}
+        compact
       />
 
       <Surface style={styles.summary}>

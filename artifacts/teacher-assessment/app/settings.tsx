@@ -392,25 +392,6 @@ export default function SettingsScreen() {
         </Text>
       </Surface>
 
-      {/* SYNCHRONIZATION */}
-      <SectionTitle title="Stockage & Synchronisation" />
-      <Surface style={styles.card}>
-        <Text style={[styles.value, { color: colors.foreground }]}>
-          Stockage local 100% hors-ligne
-        </Text>
-        <Text style={[styles.help, { color: colors.mutedForeground }]}>
-          Toutes les classes, élèves et évaluations sont stockés en sécurité sur
-          cet appareil et restent accessibles à tout moment.
-        </Text>
-        <Button
-          label="Marquer comme synchronisé"
-          compact
-          secondary
-          onPress={data.markSynced}
-          icon="refresh-cw"
-        />
-      </Surface>
-
       {/* BACKUP & SECURITY */}
       <SectionTitle title="Sauvegarde & sécurité" />
       <Surface style={styles.card}>

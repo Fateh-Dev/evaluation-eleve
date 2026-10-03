@@ -16,7 +16,7 @@ export default function PupilDetailScreen() {
   }
   return (
     <Screen>
-      <AppHeader eyebrow={`Élève · N° ${pupil.registrationNumber}`} title={`${pupil.firstName} ${pupil.lastName}`} onBack={() => router.back()} />
+      <AppHeader eyebrow="Élève" title={`${pupil.firstName} ${pupil.lastName}`} onBack={() => router.back()} compact />
       <Surface style={styles.profile}><View style={[styles.avatar, { backgroundColor: colors.accent }]}><Text style={[styles.avatarText, { color: colors.foreground }]}>{pupil.firstName.charAt(0)}{pupil.lastName.charAt(0)}</Text></View><View><Text style={[styles.profileName, { color: colors.foreground }]}>{pupil.firstName} {pupil.lastName}</Text><Text style={[styles.profileMeta, { color: colors.mutedForeground }]}>{data.className} · {data.academicYear}</Text></View></Surface>
       <Button label="Évaluer cet élève" icon="check-square" onPress={() => router.push(`/assessments/${data.assessment.id}?pupilId=${pupil.id}`)} />
       <SectionTitle title="Historique d’évaluation" />

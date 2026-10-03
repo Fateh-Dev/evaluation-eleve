@@ -14,7 +14,7 @@ export default function PupilsScreen() {
   const pupils = useMemo(() => data.pupils.filter((pupil) => `${pupil.firstName} ${pupil.lastName} ${pupil.registrationNumber}`.toLowerCase().includes(search.toLowerCase())).sort((a, b) => sortBy === 'name' ? `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`) : a.registrationNumber.localeCompare(b.registrationNumber, undefined, { numeric: true })), [data.pupils, search, sortBy]);
   return (
     <Screen>
-      <AppHeader eyebrow={`${data.className} · ${data.pupils.length} élèves`} title="Élèves" />
+      <AppHeader eyebrow="Classe" title="Élèves" compact />
       <View style={[styles.search, { backgroundColor: colors.card, borderColor: colors.border }]}><Feather name="search" size={17} color={colors.mutedForeground} /><TextInput value={search} onChangeText={setSearch} placeholder="Rechercher par nom ou matricule" placeholderTextColor={colors.mutedForeground} style={[styles.input, { color: colors.foreground }]} /></View>
       <Pressable onPress={() => setSortBy(sortBy === 'name' ? 'registration' : 'name')} style={[styles.sortButton, { borderColor: colors.border, backgroundColor: colors.card }]}><Feather name="filter" size={15} color={colors.primary} /><Text style={[styles.sortText, { color: colors.foreground }]}>Tri : {sortBy === 'name' ? 'nom' : 'matricule'}</Text></Pressable>
       <SectionTitle title={`${pupils.length} résultat${pupils.length > 1 ? 's' : ''}`} />

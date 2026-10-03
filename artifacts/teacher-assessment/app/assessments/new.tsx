@@ -161,9 +161,10 @@ export default function NewAssessmentScreen() {
   return (
     <Screen>
       <AppHeader
-        eyebrow={`${selectedClass.name} · ${selectedClass.level}`}
+        eyebrow="Nouvelle évaluation"
         title="Nouvelle Compétence / Évaluation"
         onBack={() => router.back()}
+        compact
       />
 
       {/* Class Selector */}

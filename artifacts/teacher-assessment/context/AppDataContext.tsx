@@ -127,8 +127,6 @@ export type AppDataContextValue = {
   allRemediations: Record<string, { individual: string; classroom: string }>; // alias
 
   hydrated: boolean;
-  isDirty: boolean;
-  syncStatus: 'synced' | 'pending';
   lastBackupAt: string | null;
 
   // Active shortcuts (backward compatibility for existing screens)
@@ -287,8 +285,7 @@ export type AppDataContextValue = {
 
   // Utilities
   clearAssessment: (assessmentId?: string) => void;
-  saveDraft: () => void;
-  markSynced: () => void;
+  saveLocally: () => Promise<void>;
 };
 
 const STORAGE_KEY = '@teacher-assessment/app-state-v4';
@@ -323,8 +320,6 @@ const AppDataContext = createContext<AppDataContextValue | null>(null);
 export function AppDataProvider({ children }: PropsWithChildren) {
   const [state, setState] = useState<AppState>(initialState);
   const [hydrated, setHydrated] = useState(false);
-  const [isDirty, setIsDirty] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<'synced' | 'pending'>('synced');
   const [lastBackupAt, setLastBackupAt] = useState<string | null>(null);
 
   useEffect(() => {
@@ -685,9 +680,6 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         },
       };
     });
-
-    setIsDirty(true);
-    setSyncStatus('pending');
     return newId;
   };
 
@@ -714,8 +706,6 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       ...prev,
       teacherName: name.trim(),
     }));
-    setIsDirty(true);
-    setSyncStatus('pending');
   };
 
   const updateSchool = (
@@ -756,8 +746,6 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         schoolYearConfigurations,
       };
     });
-    setIsDirty(true);
-    setSyncStatus('pending');
   };
 
   const setActiveAcademicYear = (year: string) => {
@@ -778,8 +766,6 @@ export function AppDataProvider({ children }: PropsWithChildren) {
             ],
       };
     });
-    setIsDirty(true);
-    setSyncStatus('pending');
   };
 
   const createAcademicYear = (year: string, copyFromYear?: string) => {
@@ -805,8 +791,6 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         configuration,
       ],
     }));
-    setIsDirty(true);
-    setSyncStatus('pending');
     return true;
   };
 
@@ -839,8 +823,6 @@ export function AppDataProvider({ children }: PropsWithChildren) {
           ? cleanName
           : prev.academicYear,
     }));
-    setIsDirty(true);
-    setSyncStatus('pending');
     return true;
   };
 
@@ -919,8 +901,6 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         ),
       };
     });
-    setIsDirty(true);
-    setSyncStatus('pending');
     return { ok: true, classCount, defaultYear };
   };
 
@@ -956,8 +936,6 @@ export function AppDataProvider({ children }: PropsWithChildren) {
           : [...prev.schoolYearConfigurations, updatedConfiguration],
       };
     });
-    setIsDirty(true);
-    setSyncStatus('pending');
     return level.id;
   };
 
@@ -1008,8 +986,6 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         classIds.has(item.classId) ? { ...item, level: cleanName } : item,
       ),
     }));
-    setIsDirty(true);
-    setSyncStatus('pending');
     return true;
   };
 
@@ -1048,8 +1024,6 @@ export function AppDataProvider({ children }: PropsWithChildren) {
           : item,
       ),
     }));
-    setIsDirty(true);
-    setSyncStatus('pending');
     return { ok: true, classCount: 0 };
   };
 
@@ -1124,8 +1098,6 @@ export function AppDataProvider({ children }: PropsWithChildren) {
           : [...prev.schoolYearConfigurations, updatedConfiguration],
       };
     });
-    setIsDirty(true);
-    setSyncStatus('pending');
     return competency.id;
   };
 
@@ -1189,8 +1161,6 @@ export function AppDataProvider({ children }: PropsWithChildren) {
           : item,
       ),
     }));
-    setIsDirty(true);
-    setSyncStatus('pending');
   };
 
   const setConfiguredObjectives = (
@@ -1235,8 +1205,6 @@ export function AppDataProvider({ children }: PropsWithChildren) {
           : item,
       ),
     }));
-    setIsDirty(true);
-    setSyncStatus('pending');
   };
 
   const getBackupState = () => state;
@@ -1266,8 +1234,6 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     };
     setState(restored);
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(restored));
-    setIsDirty(true);
-    setSyncStatus('pending');
   };
   const resetAllData = () => {
     void writeAutomaticBackup(state);
@@ -1276,8 +1242,6 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(empty)).catch(
       () => undefined,
     );
-    setIsDirty(false);
-    setSyncStatus('synced');
   };
 
   const deleteClass = (classId: string) => {
@@ -1332,8 +1296,6 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         remediations: nextRemediations,
       };
     });
-    setIsDirty(true);
-    setSyncStatus('pending');
   };
 
   // PUPIL ACTIONS
@@ -1396,8 +1358,6 @@ export function AppDataProvider({ children }: PropsWithChildren) {
 
     if (additions.length) {
       setState((prev) => ({ ...prev, pupils: [...prev.pupils, ...additions] }));
-      setIsDirty(true);
-      setSyncStatus('pending');
     }
     return { imported, skipped };
   };
@@ -1407,8 +1367,6 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       ...prev,
       pupils: prev.pupils.filter((p) => p.id !== pupilId),
     }));
-    setIsDirty(true);
-    setSyncStatus('pending');
   };
 
   // ASSESSMENT / COMPETENCY ACTIONS
@@ -1509,9 +1467,6 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         [newAssessmentId]: { individual: '', classroom: '' },
       },
     }));
-
-    setIsDirty(true);
-    setSyncStatus('pending');
     return newAssessmentId;
   };
 
@@ -1557,8 +1512,6 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         remediations: nextRemediations,
       };
     });
-    setIsDirty(true);
-    setSyncStatus('pending');
   };
 
   // OBJECTIVE ACTIONS
@@ -1584,8 +1537,6 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         },
       };
     });
-    setIsDirty(true);
-    setSyncStatus('pending');
     return newId;
   };
 
@@ -1619,8 +1570,6 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         },
       };
     });
-    setIsDirty(true);
-    setSyncStatus('pending');
   };
 
   const updateObjective = (
@@ -1641,8 +1590,6 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         },
       };
     });
-    setIsDirty(true);
-    setSyncStatus('pending');
   };
 
   // EVALUATION ACTIONS
@@ -1674,8 +1621,6 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         },
       };
     });
-    setIsDirty(true);
-    setSyncStatus('pending');
   };
 
   const cycleEvaluation = (
@@ -1728,8 +1673,6 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         },
       };
     });
-    setIsDirty(true);
-    setSyncStatus('pending');
   };
 
   const getStatisticsForAssessment = (assessmentId: string) => {
@@ -1790,8 +1733,6 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         },
       },
     }));
-    setIsDirty(true);
-    setSyncStatus('pending');
   };
 
   // CLEAR ASSESSMENT
@@ -1804,8 +1745,6 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         [targetAssessmentId]: {},
       },
     }));
-    setIsDirty(true);
-    setSyncStatus('pending');
   };
 
   // Active statistics helper
@@ -1817,8 +1756,6 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     () => ({
       ...state,
       hydrated,
-      isDirty,
-      syncStatus,
       lastBackupAt,
 
       // Aliases for full maps (all assessments)
@@ -1884,17 +1821,11 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       updateRemediation,
       getRemediationForAssessment,
       clearAssessment,
-      saveDraft: () => {
-        setIsDirty(false);
-        setSyncStatus('pending');
-      },
-      markSynced: () => setSyncStatus('synced'),
+      saveLocally: () => AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state)),
     }),
     [
       state,
       hydrated,
-      isDirty,
-      syncStatus,
       activeClass,
       activePupils,
       activeAssessment,

@@ -2,7 +2,6 @@ import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import { Alert, StyleSheet, Text, TextInput, View } from 'react-native';
-import { useImportClassPupils } from '@workspace/api-client-react';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { AppHeader, Button, Screen, SectionTitle, Surface } from '@/components/AppShell';
 import { useAppData } from '@/context/AppDataContext';
@@ -30,28 +29,18 @@ export default function PupilImportScreen() {
   const data = useAppData();
   const [text, setText] = useState('Matricule;Prénom;Nom\n25;Nadia;Khelifi\n26;Karim;Belaïd');
   const rows = useMemo(() => parseRows(text), [text]);
-  const importMutation = useImportClassPupils();
 
   const importRows = () => {
     if (rows.length === 0) {
       Alert.alert('Import impossible', 'Ajoutez au moins une ligne valide avant de confirmer.');
       return;
     }
-    importMutation.mutate(
-      { classId: data.classId, data: { rows } },
-      {
-        onSuccess: (result) => {
-          const localResult = data.addPupils(rows);
-          Alert.alert('Import terminé', `${result.imported} élève(s) importé(s), ${result.skipped} doublon(s).${localResult.skipped ? ` ${localResult.skipped} déjà présent(s) localement.` : ''}`);
-          router.back();
-        },
-        onError: () => {
-          const localResult = data.addPupils(rows);
-          if (localResult.imported > 0) router.back();
-          Alert.alert('Import local', `${localResult.imported} élève(s) ajouté(s) localement, ${localResult.skipped} doublon(s). Ils seront synchronisés au prochain envoi.`);
-        },
-      },
+    const localResult = data.addPupils(rows);
+    Alert.alert(
+      'Import terminé',
+      `${localResult.imported} élève(s) ajouté(s) localement, ${localResult.skipped} doublon(s).`,
     );
+    router.back();
   };
 
   return (
@@ -62,7 +51,7 @@ export default function PupilImportScreen() {
       contentContainerStyle={{ flexGrow: 1 }}
     >
       <Screen>
-        <AppHeader eyebrow={data.className} title="Importer des élèves" onBack={() => router.back()} />
+        <AppHeader eyebrow="Classe" title="Importer des élèves" onBack={() => router.back()} compact />
         <Surface style={styles.instructions}>
           <Feather name="info" size={17} color={colors.primary} />
           <Text style={[styles.instructionsText, { color: colors.foreground }]}>
@@ -91,7 +80,7 @@ export default function PupilImportScreen() {
           {rows.length === 0 ? <Text style={[styles.more, { color: colors.mutedForeground }]}>Aucune ligne valide détectée.</Text> : null}
         </Surface>
         <View style={styles.actions}>
-          <Button label={importMutation.isPending ? 'Import en cours…' : `Importer ${rows.length} élève${rows.length > 1 ? 's' : ''}`} icon="upload" onPress={importRows} />
+          <Button label={`Importer ${rows.length} élève${rows.length > 1 ? 's' : ''}`} icon="upload" onPress={importRows} />
           <Button label="Annuler" secondary onPress={() => router.back()} />
         </View>
       </Screen>

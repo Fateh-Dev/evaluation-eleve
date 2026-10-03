@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -17,16 +16,9 @@ import { AppDataProvider } from '@/context/AppDataContext';
 import { AppLockGate, SecurityProvider } from '@/context/SecurityContext';
 import { StorageProvider } from '@/context/StorageContext';
 import { ThemeProvider } from '@/context/ThemeContext';
-import { setBaseUrl } from '@workspace/api-client-react';
-
-if (process.env.EXPO_PUBLIC_DOMAIN) {
-  setBaseUrl(`https://${process.env.EXPO_PUBLIC_DOMAIN}`);
-}
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 void SplashScreen.preventAutoHideAsync().catch(() => undefined);
-
-const queryClient = new QueryClient();
 
 function RootLayoutNav() {
   return (
@@ -68,13 +60,11 @@ export default function RootLayout() {
             <AppLockGate>
               <AppDataProvider>
                 <StorageProvider>
-                  <QueryClientProvider client={queryClient}>
-                    <GestureHandlerRootView style={{ flex: 1 }}>
-                      <KeyboardProvider>
-                        <RootLayoutNav />
-                      </KeyboardProvider>
-                    </GestureHandlerRootView>
-                  </QueryClientProvider>
+                  <GestureHandlerRootView style={{ flex: 1 }}>
+                    <KeyboardProvider>
+                      <RootLayoutNav />
+                    </KeyboardProvider>
+                  </GestureHandlerRootView>
                 </StorageProvider>
               </AppDataProvider>
             </AppLockGate>

@@ -148,9 +148,10 @@ export default function ClassDetailScreen() {
   return (
     <Screen>
       <AppHeader
-        eyebrow={`${currentClass.level} · ${currentClass.academicYear}`}
+        eyebrow="Classe"
         title={currentClass.name}
         onBack={() => router.back()}
+        compact
       />
 
       {/* Class Overview Card */}

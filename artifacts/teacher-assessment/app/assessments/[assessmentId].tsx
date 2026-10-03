@@ -13,10 +13,9 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { AppHeader, Button, Screen, SectionTitle, Surface, SyncPill, ValueMark } from '@/components/AppShell';
+import { AppHeader, Button, Screen, SectionTitle, Surface, ValueMark } from '@/components/AppShell';
 import { EvaluationValue, useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
-import { useSaveBulkEvaluations } from '@workspace/api-client-react';
 
 function displayValue(value: EvaluationValue) {
   return value === 'Acquired' ? '+' : value === 'PartiallyAcquired' ? '±' : value === 'NotAcquired' ? '-' : '·';
@@ -58,6 +57,7 @@ export default function AssessmentEvaluationScreen() {
   const [objectivesModalVisible, setObjectivesModalVisible] = useState(false);
   const [newObjectiveText, setNewObjectiveText] = useState('');
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const [summaryExpanded, setSummaryExpanded] = useState(true);
   const mobileScrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
@@ -76,9 +76,10 @@ export default function AssessmentEvaluationScreen() {
     classId: currentClass.id,
   };
 
-  const saveMutation = useSaveBulkEvaluations();
   const evaluatedTotal = currentStatistics.reduce((sum, stat) => sum + stat.evaluated, 0);
-  const total = Math.max(currentPupils.length * currentObjectives.length, 1);
+  const total = currentPupils.length * currentObjectives.length;
+  const progressPercentage =
+    total > 0 ? Math.round((evaluatedTotal / total) * 100) : 0;
   const currentValues = useMemo(
     () => currentEvaluations[currentPupil.id] ?? {},
     [currentEvaluations, currentPupil.id],
@@ -136,32 +137,30 @@ export default function AssessmentEvaluationScreen() {
     setNewObjectiveText('');
   };
 
-  const save = (message = 'Évaluation enregistrée') => {
-    data.saveDraft();
-    const entries = currentPupils.flatMap((pupil) =>
-      currentObjectives.map((objective) => ({
-        pupilId: pupil.id,
-        objectiveId: objective.id,
-        value: currentEvaluations[pupil.id]?.[objective.id] ?? 'NotEvaluated',
-      })),
-    );
-    saveMutation.mutate(
-      { assessmentId: currentAssessment.id, data: entries },
-      {
-        onSuccess: () => data.markSynced(),
-        onError: () => {
-          if (Platform.OS !== 'web') {
-            Alert.alert('Enregistrement local', 'Le serveur est indisponible. Votre brouillon reste disponible hors connexion.');
-          }
-        },
-      },
-    );
+  const save = async (
+    message = 'Évaluation enregistrée sur cet appareil',
+  ): Promise<boolean> => {
+    try {
+      await data.saveLocally();
+    } catch {
+      Alert.alert(
+        'Enregistrement impossible',
+        'Les données n’ont pas pu être enregistrées sur cet appareil. Vérifiez l’espace de stockage disponible.',
+      );
+      return false;
+    }
     setSavedMessage(message);
+    return true;
   };
 
-  const saveAndNext = () => {
+  const saveAndNext = async () => {
     const isLastPupil = pupilIndex >= currentPupils.length - 1;
-    save(isLastPupil ? 'Dernière évaluation enregistrée' : 'Enregistré — passage à l’élève suivant');
+    const saved = await save(
+      isLastPupil
+        ? 'Dernière évaluation enregistrée sur cet appareil'
+        : 'Enregistré — passage à l’élève suivant',
+    );
+    if (!saved) return;
     if (!isLastPupil) {
       setPupilIndex((value) => Math.min(currentPupils.length - 1, value + 1));
       requestAnimationFrame(() => mobileScrollRef.current?.scrollTo({ y: 0, animated: true }));
@@ -189,47 +188,51 @@ export default function AssessmentEvaluationScreen() {
   return (
     <Screen scroll={false} bottomPadding={20}>
       <AppHeader
-        eyebrow={`${currentClass.name || 'Classe'} · ${currentAssessment.competency}`}
+        eyebrow="Évaluation"
         title={currentAssessment.title}
         onBack={() => router.back()}
+        compact
       />
-
-      <View style={styles.syncRow}>
-        <SyncPill status={data.isDirty || saveMutation.isPending ? 'pending' : data.syncStatus} />
-      </View>
 
       <View style={styles.topLine}>
         <View style={styles.topActions}>
           <Button
-            label={saveMutation.isPending ? 'Envoi…' : 'Enregistrer'}
+            label="Enregistrer"
             icon="save"
             compact
-            onPress={save}
+            onPress={() => {
+              void save();
+            }}
           />
-          <Button
-            label="Objectifs"
-            icon="list"
-            compact
-            secondary
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Objectifs"
             onPress={() => setObjectivesModalVisible(true)}
-          />
-          <Button
-            label="Analyse"
-            icon="bar-chart-2"
-            compact
-            secondary
+            style={[styles.topIconBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+          >
+            <Feather name="list" size={16} color={colors.foreground} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Analyse"
             onPress={() => router.push(`/assessments/${currentAssessment.id}/analysis`)}
-          />
-          <Button
-            label="Export"
-            icon="file-text"
-            compact
-            secondary
+            style={[styles.topIconBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+          >
+            <Feather name="bar-chart-2" size={16} color={colors.foreground} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Exporter"
             onPress={() => router.push(`/assessments/${currentAssessment.id}/document`)}
-          />
+            style={[styles.topIconBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+          >
+            <Feather name="file-text" size={16} color={colors.foreground} />
+          </Pressable>
           <Pressable
             onPress={handleDeleteAssessment}
             hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Supprimer l’évaluation"
             style={[styles.deleteTopBtn, { backgroundColor: colors.errorSurface }]}
           >
             <Feather name="trash-2" size={16} color={colors.errorForeground} />
@@ -244,24 +247,90 @@ export default function AssessmentEvaluationScreen() {
       ) : null}
 
       <Surface style={styles.metaCard}>
-        <View style={styles.metaItem}>
-          <Text style={[styles.metaLabel, { color: colors.mutedForeground }]}>CLASSE</Text>
-          <Text style={[styles.metaValue, { color: colors.foreground }]}>{currentClass.name}</Text>
-        </View>
-        <View style={styles.metaItem}>
-          <Text style={[styles.metaLabel, { color: colors.mutedForeground }]}>COMPÉTENCE</Text>
-          <Text style={[styles.metaValue, { color: colors.foreground }]}>{currentAssessment.competency}</Text>
-        </View>
-        <View style={styles.metaItem}>
-          <Text style={[styles.metaLabel, { color: colors.mutedForeground }]}>OBJECTIFS</Text>
-          <Text style={[styles.metaValue, { color: colors.foreground }]}>{currentObjectives.length}</Text>
-        </View>
-        <View style={styles.metaItem}>
-          <Text style={[styles.metaLabel, { color: colors.mutedForeground }]}>PROGRESSION</Text>
-          <Text style={[styles.metaValue, { color: colors.primary }]}>
-            {Math.round((evaluatedTotal / total) * 100)}%
-          </Text>
-        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={
+            summaryExpanded
+              ? 'Réduire le résumé de l’évaluation'
+              : 'Afficher le résumé de l’évaluation'
+          }
+          accessibilityState={{ expanded: summaryExpanded }}
+          onPress={() => setSummaryExpanded((expanded) => !expanded)}
+          style={styles.metaHeader}
+        >
+          <View style={styles.metaHeaderCopy}>
+            <View style={[styles.metaIcon, { backgroundColor: colors.accent }]}>
+              <Feather name="activity" size={16} color={colors.primary} />
+            </View>
+            <View style={styles.metaHeaderText}>
+              <Text style={[styles.metaHeading, { color: colors.foreground }]}>
+                Résumé de l’évaluation
+              </Text>
+              {!summaryExpanded && (
+                <Text style={[styles.metaCollapsedText, { color: colors.mutedForeground }]}>
+                  {currentClass.name} · {currentAssessment.competency}
+                </Text>
+              )}
+            </View>
+          </View>
+          <View style={styles.metaHeaderTrailing}>
+            <Text style={[styles.metaProgressBadge, { color: colors.primary }]}>
+              {progressPercentage}%
+            </Text>
+            <Feather
+              name={summaryExpanded ? 'chevron-up' : 'chevron-down'}
+              size={18}
+              color={colors.mutedForeground}
+            />
+          </View>
+        </Pressable>
+        {summaryExpanded && (
+          <View style={styles.metaDetails}>
+            <View style={styles.metaInfoRow}>
+              <View style={[styles.metaInfoItem, { backgroundColor: colors.background }]}>
+                <Text style={[styles.metaLabel, { color: colors.mutedForeground }]}>CLASSE</Text>
+                <Text style={[styles.metaValue, { color: colors.foreground }]} numberOfLines={2}>
+                  {currentClass.name}
+                </Text>
+              </View>
+              <View style={[styles.metaInfoItem, { backgroundColor: colors.background }]}>
+                <Text style={[styles.metaLabel, { color: colors.mutedForeground }]}>COMPÉTENCE</Text>
+                <Text style={[styles.metaValue, { color: colors.foreground }]} numberOfLines={2}>
+                  {currentAssessment.competency}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.metaProgress}>
+              <View style={styles.metaProgressTop}>
+                <View>
+                  <Text style={[styles.metaLabel, { color: colors.mutedForeground }]}>
+                    PROGRESSION
+                  </Text>
+                  <Text style={[styles.metaProgressCount, { color: colors.foreground }]}>
+                    {evaluatedTotal} / {total} évaluations complétées
+                  </Text>
+                </View>
+                <View style={[styles.metaObjectivesBadge, { backgroundColor: colors.secondary }]}>
+                  <Feather name="list" size={13} color={colors.mutedForeground} />
+                  <Text style={[styles.metaObjectivesText, { color: colors.foreground }]}>
+                    {currentObjectives.length} objectif{currentObjectives.length !== 1 ? 's' : ''}
+                  </Text>
+                </View>
+              </View>
+              <View style={[styles.metaProgressTrack, { backgroundColor: colors.muted }]}>
+                <View
+                  style={[
+                    styles.metaProgressFill,
+                    {
+                      width: `${Math.max(0, Math.min(100, progressPercentage))}%`,
+                      backgroundColor: colors.primary,
+                    },
+                  ]}
+                />
+              </View>
+            </View>
+          </View>
+        )}
       </Surface>
 
       {/* Empty pupils banner */}
@@ -478,8 +547,8 @@ export default function AssessmentEvaluationScreen() {
           </View>
 
           <View style={styles.mobileFooter}>
-            <Button label="Enregistrer" icon="save" onPress={save} />
-            <Button label={pupilIndex === currentPupils.length - 1 ? 'Terminer' : 'Enregistrer et suivant'} icon="arrow-right" secondary onPress={saveAndNext} />
+            <Button label="Enregistrer" icon="save" onPress={() => { void save(); }} />
+            <Button label={pupilIndex === currentPupils.length - 1 ? 'Terminer' : 'Enregistrer et suivant'} icon="arrow-right" secondary onPress={() => { void saveAndNext(); }} />
           </View>
         </ScrollView>
       )}
@@ -569,10 +638,10 @@ export default function AssessmentEvaluationScreen() {
 
 const styles = StyleSheet.create({
   topLine: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12 },
-  syncRow: { marginBottom: 10 },
   savedBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, marginBottom: 10 },
   savedBannerText: { fontSize: 12, fontWeight: '700' },
-  topActions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, flexShrink: 1 },
+  topActions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 4, flexShrink: 1 },
+  topIconBtn: { width: 32, height: 32, borderWidth: 1, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
   deleteTopBtn: {
     width: 32,
     height: 32,
@@ -580,10 +649,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  metaCard: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 12, padding: 12, marginBottom: 12 },
-  metaItem: { gap: 3, minWidth: 70, flex: 1 },
+  metaCard: { gap: 14, padding: 14, marginBottom: 12 },
+  metaHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, minHeight: 36 },
+  metaHeaderCopy: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 },
+  metaIcon: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  metaHeaderText: { flex: 1, minWidth: 0, gap: 2 },
+  metaHeading: { fontSize: 13, fontWeight: '800' },
+  metaCollapsedText: { fontSize: 10, lineHeight: 14 },
+  metaHeaderTrailing: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  metaProgressBadge: { fontSize: 13, fontWeight: '800' },
+  metaDetails: { gap: 12 },
+  metaInfoRow: { flexDirection: 'row', gap: 8 },
+  metaInfoItem: { flex: 1, minWidth: 0, gap: 4, borderRadius: 11, padding: 10 },
   metaLabel: { fontSize: 9, letterSpacing: 1, fontWeight: '800' },
   metaValue: { fontSize: 13, fontWeight: '700' },
+  metaProgress: { gap: 9, paddingHorizontal: 2 },
+  metaProgressTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  metaProgressCount: { fontSize: 11, fontWeight: '600', marginTop: 3 },
+  metaObjectivesBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 9, paddingHorizontal: 9, paddingVertical: 7 },
+  metaObjectivesText: { fontSize: 10, fontWeight: '700' },
+  metaProgressTrack: { height: 7, borderRadius: 5, overflow: 'hidden' },
+  metaProgressFill: { height: '100%', borderRadius: 5 },
   gridScroll: { paddingBottom: 24 },
   grid: { minWidth: 740, borderWidth: 1, borderRadius: 14, overflow: 'hidden' },
   gridRow: { flexDirection: 'row', borderBottomWidth: 1, minHeight: 53, alignItems: 'stretch' },
