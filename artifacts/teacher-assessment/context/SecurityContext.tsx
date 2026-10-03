@@ -6,8 +6,8 @@ import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { Button } from '@/components/AppShell';
 
-const PIN_KEY = '@teacher-assessment/app-pin-v1';
-const BIOMETRIC_KEY = '@teacher-assessment/biometric-enabled-v1';
+const PIN_KEY = 'teacher-assessment-app-pin-v1';
+const BIOMETRIC_KEY = 'teacher-assessment-biometric-enabled-v1';
 type SecurityContextValue = {
   ready: boolean;
   hasPin: boolean;
