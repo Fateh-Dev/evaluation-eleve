@@ -11,6 +11,7 @@ import {
 import { Button, SectionTitle, Surface } from '@/components/AppShell';
 import { useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
+import { normalizeLabel } from '@/services/pedagogicalConfiguration';
 
 export default function PedagogicalConfigurationManager() {
   const colors = useColors();
@@ -22,6 +23,10 @@ export default function PedagogicalConfigurationManager() {
   const [selectedLevelId, setSelectedLevelId] = useState('');
   const [selectedCompetencyId, setSelectedCompetencyId] = useState('');
   const [objectiveDraft, setObjectiveDraft] = useState<string[]>([]);
+  const [editingYear, setEditingYear] = useState<string | null>(null);
+  const [yearNameDraft, setYearNameDraft] = useState('');
+  const [editingLevelId, setEditingLevelId] = useState<string | null>(null);
+  const [levelNameDraft, setLevelNameDraft] = useState('');
 
   const configuration = data.getSchoolYearConfiguration(selectedYear);
   const selectedLevel = configuration?.levels.find(
@@ -89,6 +94,8 @@ export default function PedagogicalConfigurationManager() {
     setSelectedYear(year);
     setSelectedLevelId(nextLevel?.id ?? '');
     setSelectedCompetencyId(nextCompetency?.id ?? '');
+    setEditingYear(null);
+    setEditingLevelId(null);
   };
 
   const selectLevel = (levelId: string) => {
@@ -98,6 +105,7 @@ export default function PedagogicalConfigurationManager() {
     )[0];
     setSelectedLevelId(levelId);
     setSelectedCompetencyId(nextCompetency?.id ?? '');
+    if (editingLevelId !== levelId) setEditingLevelId(null);
   };
 
   const createYear = (copyConfiguration: boolean) => {
@@ -125,6 +133,71 @@ export default function PedagogicalConfigurationManager() {
     setSelectedCompetencyId('');
     setObjectiveDraft([]);
     setNewYearName('');
+    setEditingYear(null);
+    setEditingLevelId(null);
+  };
+
+  const startEditYear = (year: string) => {
+    selectYear(year);
+    setEditingYear(year);
+    setYearNameDraft(year);
+  };
+
+  const saveYearName = () => {
+    if (!editingYear) return;
+    const nextName = yearNameDraft.trim();
+    if (!data.renameAcademicYear(editingYear, nextName)) {
+      Alert.alert(
+        'Nom d’année invalide',
+        'Saisissez un nom non vide qui n’est pas déjà utilisé par une autre année.',
+      );
+      return;
+    }
+    setSelectedYear(nextName);
+    setEditingYear(null);
+    setYearNameDraft('');
+  };
+
+  const requestDeleteYear = (year: string) => {
+    const classCount = data.classes.filter(
+      (item) => normalizeLabel(item.academicYear) === normalizeLabel(year),
+    ).length;
+    const consequence = classCount
+      ? `Cela supprimera aussi ${classCount} classe${classCount > 1 ? 's' : ''}, leurs élèves, évaluations, objectifs et notes. Cette action est irréversible.`
+      : 'La configuration pédagogique de cette année sera supprimée. Cette action est irréversible.';
+    Alert.alert(`Supprimer l’année ${year} ?`, consequence, [
+      { text: 'Annuler', style: 'cancel' },
+      {
+        text: 'Supprimer',
+        style: 'destructive',
+        onPress: () => {
+          const result = data.deleteAcademicYear(year);
+          if (!result.ok) {
+            Alert.alert(
+              'Suppression impossible',
+              result.reason === 'last-year'
+                ? 'Conservez au moins une année scolaire configurée.'
+                : 'Cette année n’existe plus.',
+            );
+            return;
+          }
+          if (selectedYear === year) {
+            setSelectedYear(result.defaultYear ?? data.academicYear);
+            setSelectedLevelId('');
+            setSelectedCompetencyId('');
+            setObjectiveDraft([]);
+            setEditingLevelId(null);
+          }
+          if (editingYear === year) setEditingYear(null);
+          Alert.alert(
+            'Année supprimée',
+            result.classCount
+              ? `${year} et ses ${result.classCount} classe${result.classCount > 1 ? 's' : ''} ont été supprimées.`
+              : `${year} a été supprimée.`,
+          );
+        },
+      },
+    ]);
   };
 
   const addLevel = () => {
@@ -134,6 +207,77 @@ export default function PedagogicalConfigurationManager() {
     setSelectedCompetencyId('');
     setObjectiveDraft([]);
     setNewLevelName('');
+  };
+
+  const startEditLevel = (levelId: string, levelName: string) => {
+    selectLevel(levelId);
+    setEditingLevelId(levelId);
+    setLevelNameDraft(levelName);
+  };
+
+  const saveLevelName = () => {
+    if (!editingLevelId) return;
+    if (!data.renameSchoolLevel(selectedYear, editingLevelId, levelNameDraft)) {
+      Alert.alert(
+        'Nom de niveau invalide',
+        'Saisissez un nom non vide qui n’est pas déjà utilisé par un autre niveau de cette année.',
+      );
+      return;
+    }
+    setEditingLevelId(null);
+    setLevelNameDraft('');
+  };
+
+  const requestDeleteLevel = (levelId: string, levelName: string) => {
+    const classCount = data.classes.filter(
+      (item) =>
+        normalizeLabel(item.academicYear) === normalizeLabel(selectedYear) &&
+        (item.levelId === levelId ||
+          normalizeLabel(item.level) === normalizeLabel(levelName)),
+    ).length;
+    if (classCount) {
+      Alert.alert(
+        'Niveau utilisé',
+        `« ${levelName} » est associé à ${classCount} classe${classCount > 1 ? 's' : ''}. Supprimez ou déplacez ces classes avant de supprimer le niveau. Aucune donnée n’a été modifiée.`,
+      );
+      return;
+    }
+    Alert.alert(
+      `Supprimer le niveau ${levelName} ?`,
+      'Les associations de compétences et les objectifs propres à ce niveau seront supprimés. Les compétences réutilisées par d’autres niveaux seront conservées.',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: () => {
+            const result = data.deleteSchoolLevel(selectedYear, levelId);
+            if (!result.ok) {
+              Alert.alert(
+                'Suppression impossible',
+                result.reason === 'in-use'
+                  ? `Ce niveau est encore utilisé par ${result.classCount} classe${result.classCount > 1 ? 's' : ''}.`
+                  : 'Ce niveau n’existe plus.',
+              );
+              return;
+            }
+            if (selectedLevelId === levelId) {
+              const nextLevel = configuration?.levels.find(
+                (item) => item.id !== levelId,
+              );
+              setSelectedLevelId(nextLevel?.id ?? '');
+              setSelectedCompetencyId(
+                nextLevel
+                  ? (data.getCompetenciesForLevel(selectedYear, nextLevel.id)[0]
+                      ?.id ?? '')
+                  : '',
+              );
+            }
+            if (editingLevelId === levelId) setEditingLevelId(null);
+          },
+        },
+      ],
+    );
   };
 
   const addCompetency = () => {
@@ -210,60 +354,144 @@ export default function PedagogicalConfigurationManager() {
           <View style={styles.chips}>
             {data.schoolYearConfigurations.map((item) => {
               const selected = item.year === selectedYear;
-              const active = item.year === data.academicYear;
+              const isDefault = item.year === data.academicYear;
+              const canDelete = data.schoolYearConfigurations.length > 1;
               return (
-                <Pressable
-                  key={item.year}
-                  accessibilityRole="button"
-                  onPress={() => selectYear(item.year)}
-                  style={[
-                    styles.chip,
-                    {
-                      backgroundColor: selected
-                        ? colors.primary
-                        : colors.secondary,
-                      borderColor: selected ? colors.primary : colors.border,
-                    },
-                  ]}
-                >
-                  <Text
+                <View key={item.year} style={styles.manageRow}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Sélectionner l’année ${item.year}`}
+                    onPress={() => selectYear(item.year)}
                     style={[
-                      styles.chipText,
+                      styles.chip,
+                      styles.manageChip,
                       {
-                        color: selected
-                          ? colors.primaryForeground
-                          : colors.foreground,
+                        backgroundColor: selected
+                          ? colors.primary
+                          : colors.secondary,
+                        borderColor: selected ? colors.primary : colors.border,
                       },
                     ]}
                   >
-                    {item.year}
-                  </Text>
-                  {active && (
                     <Text
+                      numberOfLines={1}
                       style={[
-                        styles.activeMark,
+                        styles.chipText,
                         {
                           color: selected
                             ? colors.primaryForeground
-                            : colors.primary,
+                            : colors.foreground,
                         },
                       ]}
                     >
-                      Active
+                      {item.year}
                     </Text>
-                  )}
-                </Pressable>
+                    {isDefault && (
+                      <Text
+                        style={[
+                          styles.activeMark,
+                          {
+                            color: selected
+                              ? colors.primaryForeground
+                              : colors.primary,
+                          },
+                        ]}
+                      >
+                        Défaut
+                      </Text>
+                    )}
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Modifier l’année ${item.year}`}
+                    onPress={() => startEditYear(item.year)}
+                    style={[
+                      styles.iconButton,
+                      {
+                        borderColor: colors.border,
+                        backgroundColor: colors.card,
+                      },
+                    ]}
+                  >
+                    <Feather name="edit-2" size={15} color={colors.primary} />
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Supprimer l’année ${item.year}`}
+                    accessibilityState={{ disabled: !canDelete }}
+                    disabled={!canDelete}
+                    onPress={() => requestDeleteYear(item.year)}
+                    style={[
+                      styles.iconButton,
+                      styles.dangerIconButton,
+                      {
+                        borderColor: colors.border,
+                        backgroundColor: colors.errorSurface,
+                      },
+                      !canDelete && styles.disabledButton,
+                    ]}
+                  >
+                    <Feather
+                      name="trash-2"
+                      size={15}
+                      color={colors.errorForeground}
+                    />
+                  </Pressable>
+                </View>
               );
             })}
           </View>
+          <Text style={[styles.help, { color: colors.mutedForeground }]}>
+            Année par défaut pour les nouvelles classes : {data.academicYear}.
+          </Text>
+          {data.schoolYearConfigurations.length === 1 && (
+            <Text style={[styles.help, { color: colors.mutedForeground }]}>
+              Conservez au moins une année scolaire configurée.
+            </Text>
+          )}
           {selectedYear !== data.academicYear && (
             <Button
-              label={`Définir ${selectedYear} comme année active`}
+              label={`Définir ${selectedYear} comme année par défaut`}
               icon="check"
               compact
               secondary
               onPress={() => data.setActiveAcademicYear(selectedYear)}
             />
+          )}
+          {editingYear === selectedYear && (
+            <View style={[styles.editForm, { borderColor: colors.border }]}>
+              <Text
+                style={[styles.fieldLabel, { color: colors.mutedForeground }]}
+              >
+                RENOMMER L’ANNÉE SCOLAIRE
+              </Text>
+              <TextInput
+                value={yearNameDraft}
+                onChangeText={setYearNameDraft}
+                placeholder="Ex. 2026/2027"
+                placeholderTextColor={colors.mutedForeground}
+                style={[
+                  styles.input,
+                  {
+                    color: colors.foreground,
+                    borderColor: colors.border,
+                    backgroundColor: colors.background,
+                  },
+                ]}
+              />
+              <View style={styles.buttonStack}>
+                <Button
+                  label="Enregistrer le nom"
+                  icon="check"
+                  onPress={saveYearName}
+                />
+                <Button
+                  label="Annuler"
+                  secondary
+                  onPress={() => setEditingYear(null)}
+                />
+              </View>
+            </View>
           )}
         </View>
 
@@ -304,6 +532,11 @@ export default function PedagogicalConfigurationManager() {
               onPress={() => createYear(false)}
             />
           </View>
+          <Text style={[styles.help, { color: colors.mutedForeground }]}>
+            Créer une année ne change pas l’année par défaut. Sélectionnez-la
+            puis choisissez « Définir comme année par défaut » pour l’utiliser
+            lors de la création des prochaines classes.
+          </Text>
         </View>
 
         <View
@@ -320,36 +553,108 @@ export default function PedagogicalConfigurationManager() {
             {(configuration?.levels ?? []).map((level) => {
               const selected = level.id === selectedLevelId;
               return (
-                <Pressable
-                  key={level.id}
-                  accessibilityRole="button"
-                  onPress={() => selectLevel(level.id)}
-                  style={[
-                    styles.chip,
-                    {
-                      backgroundColor: selected
-                        ? colors.primary
-                        : colors.secondary,
-                      borderColor: selected ? colors.primary : colors.border,
-                    },
-                  ]}
-                >
-                  <Text
+                <View key={level.id} style={styles.manageRow}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Sélectionner le niveau ${level.name}`}
+                    onPress={() => selectLevel(level.id)}
                     style={[
-                      styles.chipText,
+                      styles.chip,
+                      styles.manageChip,
                       {
-                        color: selected
-                          ? colors.primaryForeground
-                          : colors.foreground,
+                        backgroundColor: selected
+                          ? colors.primary
+                          : colors.secondary,
+                        borderColor: selected ? colors.primary : colors.border,
                       },
                     ]}
                   >
-                    {level.name}
-                  </Text>
-                </Pressable>
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        styles.chipText,
+                        {
+                          color: selected
+                            ? colors.primaryForeground
+                            : colors.foreground,
+                        },
+                      ]}
+                    >
+                      {level.name}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Modifier le niveau ${level.name}`}
+                    onPress={() => startEditLevel(level.id, level.name)}
+                    style={[
+                      styles.iconButton,
+                      {
+                        borderColor: colors.border,
+                        backgroundColor: colors.card,
+                      },
+                    ]}
+                  >
+                    <Feather name="edit-2" size={15} color={colors.primary} />
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Supprimer le niveau ${level.name}`}
+                    onPress={() => requestDeleteLevel(level.id, level.name)}
+                    style={[
+                      styles.iconButton,
+                      styles.dangerIconButton,
+                      {
+                        borderColor: colors.border,
+                        backgroundColor: colors.errorSurface,
+                      },
+                    ]}
+                  >
+                    <Feather
+                      name="trash-2"
+                      size={15}
+                      color={colors.errorForeground}
+                    />
+                  </Pressable>
+                </View>
               );
             })}
           </View>
+          {editingLevelId && (
+            <View style={[styles.editForm, { borderColor: colors.border }]}>
+              <Text
+                style={[styles.fieldLabel, { color: colors.mutedForeground }]}
+              >
+                RENOMMER LE NIVEAU
+              </Text>
+              <TextInput
+                value={levelNameDraft}
+                onChangeText={setLevelNameDraft}
+                placeholder="Nom du niveau"
+                placeholderTextColor={colors.mutedForeground}
+                style={[
+                  styles.input,
+                  {
+                    color: colors.foreground,
+                    borderColor: colors.border,
+                    backgroundColor: colors.background,
+                  },
+                ]}
+              />
+              <View style={styles.buttonStack}>
+                <Button
+                  label="Enregistrer le niveau"
+                  icon="check"
+                  onPress={saveLevelName}
+                />
+                <Button
+                  label="Annuler"
+                  secondary
+                  onPress={() => setEditingLevelId(null)}
+                />
+              </View>
+            </View>
+          )}
           <View style={styles.inlineRow}>
             <TextInput
               value={newLevelName}
@@ -596,6 +901,13 @@ const styles = StyleSheet.create({
   fieldLabel: { fontSize: 10, letterSpacing: 1, fontWeight: '800' },
   help: { fontSize: 12, lineHeight: 18 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  manageRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  manageChip: { flex: 1, minWidth: 0 },
   chip: {
     minHeight: 40,
     flexDirection: 'row',
@@ -608,6 +920,17 @@ const styles = StyleSheet.create({
   },
   chipText: { fontSize: 12, fontWeight: '700' },
   activeMark: { fontSize: 9, fontWeight: '800' },
+  iconButton: {
+    width: 44,
+    height: 44,
+    borderWidth: 1,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dangerIconButton: {},
+  disabledButton: { opacity: 0.4 },
+  editForm: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 10 },
   input: {
     minHeight: 44,
     borderWidth: 1,

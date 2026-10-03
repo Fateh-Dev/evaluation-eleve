@@ -192,7 +192,7 @@ export default function SettingsScreen() {
           <Feather name="calendar" size={17} color={colors.primary} />
           <View>
             <Text style={[styles.label, { color: colors.mutedForeground }]}>
-              ANNÉE ACTIVE
+              ANNÉE PAR DÉFAUT POUR LES NOUVELLES CLASSES
             </Text>
             <Text style={[styles.value, { color: colors.foreground }]}>
               {data.academicYear}

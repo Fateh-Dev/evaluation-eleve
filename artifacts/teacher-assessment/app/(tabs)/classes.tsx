@@ -258,7 +258,9 @@ export default function ClassesScreen() {
                   ]}
                 >
                   {configuration.year}
-                  {configuration.year === data.academicYear ? ' · Active' : ''}
+                  {configuration.year === data.academicYear
+                    ? ' · Par défaut'
+                    : ''}
                 </Text>
               </Pressable>
             );

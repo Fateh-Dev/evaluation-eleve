@@ -95,6 +95,19 @@ export type AppState = {
   remediations: Record<string, { individual: string; classroom: string }>; // keyed by assessmentId
 };
 
+type DeleteYearResult = {
+  ok: boolean;
+  reason?: 'not-found' | 'last-year';
+  classCount: number;
+  defaultYear?: string;
+};
+
+type DeleteLevelResult = {
+  ok: boolean;
+  reason?: 'not-found' | 'in-use';
+  classCount: number;
+};
+
 export type AppDataContextValue = {
   school: School;
   teacherName: string;
@@ -133,7 +146,15 @@ export type AppDataContextValue = {
   updateSchool: (school: Partial<School> & { academicYear?: string }) => void;
   setActiveAcademicYear: (year: string) => void;
   createAcademicYear: (year: string, copyFromYear?: string) => boolean;
+  renameAcademicYear: (year: string, newName: string) => boolean;
+  deleteAcademicYear: (year: string) => DeleteYearResult;
   addSchoolLevel: (year: string, name: string) => string | undefined;
+  renameSchoolLevel: (
+    year: string,
+    levelId: string,
+    newName: string,
+  ) => boolean;
+  deleteSchoolLevel: (year: string, levelId: string) => DeleteLevelResult;
   addOrAssociateCompetency: (
     year: string,
     levelId: string,
@@ -753,7 +774,6 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       : createDefaultSchoolYearConfiguration(requestedYear);
     setState((prev) => ({
       ...prev,
-      academicYear: requestedYear,
       schoolYearConfigurations: [
         ...prev.schoolYearConfigurations,
         configuration,
@@ -762,6 +782,120 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     setIsDirty(true);
     setSyncStatus('pending');
     return true;
+  };
+
+  const renameAcademicYear = (year: string, newName: string) => {
+    const configuration = getSchoolYearConfiguration(year);
+    const cleanName = newName.trim();
+    if (!configuration || !cleanName) return false;
+    const duplicate = state.schoolYearConfigurations.some(
+      (item) =>
+        normalizeLabel(item.year) === normalizeLabel(cleanName) &&
+        normalizeLabel(item.year) !== normalizeLabel(configuration.year),
+    );
+    if (duplicate) return false;
+    if (configuration.year === cleanName) return true;
+
+    setState((prev) => ({
+      ...prev,
+      schoolYearConfigurations: prev.schoolYearConfigurations.map((item) =>
+        normalizeLabel(item.year) === normalizeLabel(configuration.year)
+          ? { ...item, year: cleanName }
+          : item,
+      ),
+      classes: prev.classes.map((item) =>
+        normalizeLabel(item.academicYear) === normalizeLabel(configuration.year)
+          ? { ...item, academicYear: cleanName }
+          : item,
+      ),
+      academicYear:
+        normalizeLabel(prev.academicYear) === normalizeLabel(configuration.year)
+          ? cleanName
+          : prev.academicYear,
+    }));
+    setIsDirty(true);
+    setSyncStatus('pending');
+    return true;
+  };
+
+  const deleteAcademicYear = (year: string): DeleteYearResult => {
+    const configuration = getSchoolYearConfiguration(year);
+    if (!configuration)
+      return { ok: false, reason: 'not-found', classCount: 0 };
+    if (state.schoolYearConfigurations.length <= 1) {
+      return { ok: false, reason: 'last-year', classCount: 0 };
+    }
+
+    const yearKey = normalizeLabel(configuration.year);
+    const classIds = new Set(
+      state.classes
+        .filter((item) => normalizeLabel(item.academicYear) === yearKey)
+        .map((item) => item.id),
+    );
+    const classCount = classIds.size;
+    const remainingConfigurations = state.schoolYearConfigurations.filter(
+      (item) => normalizeLabel(item.year) !== yearKey,
+    );
+    const defaultYear =
+      normalizeLabel(state.academicYear) === yearKey
+        ? (remainingConfigurations[0]?.year ?? '')
+        : state.academicYear;
+
+    setState((prev) => {
+      const schoolYearConfigurations = prev.schoolYearConfigurations.filter(
+        (item) => normalizeLabel(item.year) !== yearKey,
+      );
+      const classes = prev.classes.filter((item) => !classIds.has(item.id));
+      const deletedAssessmentIds = new Set(
+        prev.assessments
+          .filter((item) => classIds.has(item.classId))
+          .map((item) => item.id),
+      );
+      const assessments = prev.assessments.filter(
+        (item) => !deletedAssessmentIds.has(item.id),
+      );
+      const activeClassId = classes.some(
+        (item) => item.id === prev.activeClassId,
+      )
+        ? prev.activeClassId
+        : (classes[0]?.id ?? '');
+      const activeAssessmentId = assessments.some(
+        (item) => item.id === prev.activeAssessmentId,
+      )
+        ? prev.activeAssessmentId
+        : (assessments.find((item) => item.classId === activeClassId)?.id ??
+          assessments[0]?.id ??
+          '');
+
+      return {
+        ...prev,
+        schoolYearConfigurations,
+        academicYear: defaultYear,
+        classes,
+        activeClassId,
+        pupils: prev.pupils.filter((item) => !classIds.has(item.classId)),
+        assessments,
+        activeAssessmentId,
+        objectives: Object.fromEntries(
+          Object.entries(prev.objectives).filter(
+            ([assessmentId]) => !deletedAssessmentIds.has(assessmentId),
+          ),
+        ),
+        evaluations: Object.fromEntries(
+          Object.entries(prev.evaluations).filter(
+            ([assessmentId]) => !deletedAssessmentIds.has(assessmentId),
+          ),
+        ),
+        remediations: Object.fromEntries(
+          Object.entries(prev.remediations).filter(
+            ([assessmentId]) => !deletedAssessmentIds.has(assessmentId),
+          ),
+        ),
+      };
+    });
+    setIsDirty(true);
+    setSyncStatus('pending');
+    return { ok: true, classCount, defaultYear };
   };
 
   const addSchoolLevel = (year: string, name: string) => {
@@ -799,6 +933,98 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     setIsDirty(true);
     setSyncStatus('pending');
     return level.id;
+  };
+
+  const renameSchoolLevel = (
+    year: string,
+    levelId: string,
+    newName: string,
+  ) => {
+    const configuration = getSchoolYearConfiguration(year);
+    const level = configuration?.levels.find((item) => item.id === levelId);
+    const cleanName = newName.trim();
+    if (!configuration || !level || !cleanName) return false;
+    const duplicate = configuration.levels.some(
+      (item) =>
+        item.id !== levelId &&
+        normalizeLabel(item.name) === normalizeLabel(cleanName),
+    );
+    if (duplicate) return false;
+    if (level.name === cleanName) return true;
+
+    const classIds = new Set(
+      state.classes
+        .filter(
+          (item) =>
+            normalizeLabel(item.academicYear) ===
+              normalizeLabel(configuration.year) &&
+            (item.levelId === levelId ||
+              normalizeLabel(item.level) === normalizeLabel(level.name)),
+        )
+        .map((item) => item.id),
+    );
+    setState((prev) => ({
+      ...prev,
+      schoolYearConfigurations: prev.schoolYearConfigurations.map((item) =>
+        normalizeLabel(item.year) === normalizeLabel(configuration.year)
+          ? {
+              ...item,
+              levels: item.levels.map((entry) =>
+                entry.id === levelId ? { ...entry, name: cleanName } : entry,
+              ),
+            }
+          : item,
+      ),
+      classes: prev.classes.map((item) =>
+        classIds.has(item.id) ? { ...item, level: cleanName } : item,
+      ),
+      assessments: prev.assessments.map((item) =>
+        classIds.has(item.classId) ? { ...item, level: cleanName } : item,
+      ),
+    }));
+    setIsDirty(true);
+    setSyncStatus('pending');
+    return true;
+  };
+
+  const deleteSchoolLevel = (
+    year: string,
+    levelId: string,
+  ): DeleteLevelResult => {
+    const configuration = getSchoolYearConfiguration(year);
+    const level = configuration?.levels.find((item) => item.id === levelId);
+    if (!configuration || !level) {
+      return { ok: false, reason: 'not-found', classCount: 0 };
+    }
+    const classCount = state.classes.filter(
+      (item) =>
+        normalizeLabel(item.academicYear) ===
+          normalizeLabel(configuration.year) &&
+        (item.levelId === levelId ||
+          normalizeLabel(item.level) === normalizeLabel(level.name)),
+    ).length;
+    if (classCount) return { ok: false, reason: 'in-use', classCount };
+
+    setState((prev) => ({
+      ...prev,
+      schoolYearConfigurations: prev.schoolYearConfigurations.map((item) =>
+        normalizeLabel(item.year) === normalizeLabel(configuration.year)
+          ? {
+              ...item,
+              levels: item.levels.filter((entry) => entry.id !== levelId),
+              associations: item.associations.filter(
+                (entry) => entry.levelId !== levelId,
+              ),
+              objectives: item.objectives.filter(
+                (entry) => entry.levelId !== levelId,
+              ),
+            }
+          : item,
+      ),
+    }));
+    setIsDirty(true);
+    setSyncStatus('pending');
+    return { ok: true, classCount: 0 };
   };
 
   const addOrAssociateCompetency = (
@@ -1552,7 +1778,11 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       updateSchool,
       setActiveAcademicYear,
       createAcademicYear,
+      renameAcademicYear,
+      deleteAcademicYear,
       addSchoolLevel,
+      renameSchoolLevel,
+      deleteSchoolLevel,
       addOrAssociateCompetency,
       setCompetencyAssociation,
       setConfiguredObjectives,
