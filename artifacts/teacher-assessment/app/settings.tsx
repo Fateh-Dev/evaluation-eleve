@@ -22,14 +22,17 @@ import {
   Surface,
 } from '@/components/AppShell';
 import PedagogicalConfigurationManager from '@/components/PedagogicalConfigurationManager';
+import { themeOptions } from '@/constants/colors';
 import { useAppData } from '@/context/AppDataContext';
 import { useSecurity } from '@/context/SecurityContext';
+import { useTheme } from '@/context/ThemeContext';
 import { useColors } from '@/hooks/useColors';
 
 export default function SettingsScreen() {
   const colors = useColors();
   const data = useAppData();
   const security = useSecurity();
+  const { theme, setTheme } = useTheme();
   const [pinInput, setPinInput] = useState('');
   const [pinConfirmation, setPinConfirmation] = useState('');
   const [editingPin, setEditingPin] = useState(false);
@@ -341,6 +344,33 @@ export default function SettingsScreen() {
         )}
       </Surface>
 
+      {/* COLOR THEME */}
+      <SectionTitle title="Palette de couleurs" />
+      <Surface style={styles.card}>
+        <Text style={[styles.help, { color: colors.mutedForeground }]}>Choisissez l’ambiance visuelle de l’application. Le choix est mémorisé sur cet appareil.</Text>
+        <View style={styles.themeGrid}>
+          {themeOptions.map((option) => {
+            const selected = theme === option.id;
+            return (
+              <Pressable
+                key={option.id}
+                onPress={() => setTheme(option.id)}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                style={[styles.themeOption, { borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? colors.accent : colors.card }]}
+              >
+                <View style={styles.swatchRow}>
+                  {option.swatches.map((swatch) => <View key={swatch} style={[styles.swatch, { backgroundColor: swatch }]} />)}
+                  {selected ? <Feather name="check-circle" size={16} color={colors.primary} /> : null}
+                </View>
+                <Text style={[styles.themeName, { color: colors.foreground }]}>{option.label}</Text>
+                <Text style={[styles.themeDescription, { color: colors.mutedForeground }]}>{option.description}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </Surface>
+
       <PedagogicalConfigurationManager />
 
       {/* DOCUMENTS SPEC */}
@@ -501,6 +531,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   buttonRow: { flexDirection: 'row', gap: 10, marginTop: 4 },
+  themeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  themeOption: { width: '48%', minHeight: 96, borderWidth: 1.5, borderRadius: 14, padding: 11, gap: 5 },
+  swatchRow: { flexDirection: 'row', alignItems: 'center', gap: 5, minHeight: 20 },
+  swatch: { width: 17, height: 17, borderRadius: 9 },
+  themeName: { fontSize: 14, fontWeight: '800' },
+  themeDescription: { fontSize: 11, lineHeight: 15 },
   dangerHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   dangerTitle: { fontSize: 15, fontWeight: '800' },
   dangerButton: {
