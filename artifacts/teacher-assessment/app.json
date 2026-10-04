@@ -1,48 +1,27 @@
 {
   "expo": {
-    "name": "Chaibeddra Evaluation",
-    "slug": "teacher-assessment",
+    "name": "جدولي الدراسي",
+    "slug": "school-schedule-pdf",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "splash": {
       "image": "./assets/images/icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#f7f4ef"
+      "backgroundColor": "#f7f5f0"
     },
-    "scheme": "chaibeddra-evaluation",
-    "userInterfaceStyle": "automatic",
-    "ios": {
-      "supportsTablet": false
-    },
+    "scheme": "school-schedule-pdf",
+    "userInterfaceStyle": "light",
     "android": {
-      "package": "com.fatehdev.teachercompetencyassessment",
-      "versionCode": 1,
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/images/icon.png",
-        "backgroundColor": "#FFFFFF"
-      },
-      "permissions": [
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE"
-      ]
+      "package": "com.fatehdev.schoolschedulepdf",
+      "versionCode": 1
     },
     "web": {
       "favicon": "./assets/images/icon.png"
     },
-    "plugins": [
-      "expo-router",
-      "expo-secure-store",
-      "expo-notifications"
-    ],
+    "plugins": ["expo-router"],
     "experiments": {
-      "typedRoutes": true,
-      "reactCompiler": true
-    },
-    "extra": {
-      "eas": {
-        "projectId": "9ba40799-e5b4-498d-8e8d-0ecc8c9b0ade"
-      }
+      "typedRoutes": true
     }
   }
 }
