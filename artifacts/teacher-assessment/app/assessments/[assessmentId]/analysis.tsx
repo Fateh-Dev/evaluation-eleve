@@ -1,10 +1,30 @@
 import { Feather } from '@expo/vector-icons';
+import Svg, { Circle, Path } from 'react-native-svg';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, StyleSheet, Text, TextInput, View } from 'react-native';
-import { AppHeader, Button, ProgressBar, Screen, SectionTitle, Surface } from '@/components/AppShell';
+import { AppHeader, Button, ProgressBar, Screen, Surface } from '@/components/AppShell';
 import { useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
+
+function pieSlicePath(cx: number, cy: number, radius: number, startAngle: number, endAngle: number) {
+  const toPoint = (angle: number) => {
+    const radians = ((angle - 90) * Math.PI) / 180;
+    return {
+      x: cx + radius * Math.cos(radians),
+      y: cy + radius * Math.sin(radians),
+    };
+  };
+  const start = toPoint(startAngle);
+  const end = toPoint(endAngle);
+  const largeArc = endAngle - startAngle > 180 ? 1 : 0;
+  return `M ${cx} ${cy} L ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArc} 1 ${end.x} ${end.y} Z`;
+}
+
+function AnalysisSectionTitle({ title }: { title: string }) {
+  const colors = useColors();
+  return <Text style={[styles.sectionTitle, { color: colors.foreground }]}>{title}</Text>;
+}
 
 export default function AssessmentAnalysisScreen() {
   const colors = useColors();
@@ -23,6 +43,15 @@ export default function AssessmentAnalysisScreen() {
     return data.getPupilsForClass(currentAssessment.classId);
   }, [data.pupils, currentAssessment.classId]);
 
+  const absentPupilIds = useMemo(() => {
+    const classPupilIds = new Set(currentPupils.map((pupil) => pupil.id));
+    return new Set(
+      data.getAbsentPupilIdsForAssessment(currentAssessment.id)
+        .filter((pupilId) => classPupilIds.has(pupilId)),
+    );
+  }, [data.absentPupilIds, currentAssessment.id, currentPupils]);
+  const presentPupilCount = currentPupils.length - absentPupilIds.size;
+
   const currentObjectives = useMemo(() => {
     return data.getObjectivesForAssessment(currentAssessment.id);
   }, [data.objectives, currentAssessment.id]);
@@ -33,7 +62,7 @@ export default function AssessmentAnalysisScreen() {
 
   const localStatistics = useMemo(() => {
     return data.getStatisticsForAssessment(currentAssessment.id);
-  }, [data.pupils, data.objectives, data.evaluations, currentAssessment.id]);
+  }, [data.pupils, data.objectives, data.evaluations, data.absentPupilIds, currentAssessment.id]);
 
   const [editingRemediation, setEditingRemediation] = useState(false);
   const [individualRemediation, setIndividualRemediation] = useState(
@@ -58,7 +87,10 @@ export default function AssessmentAnalysisScreen() {
   );
 
   const evaluatedTotal = statistics.reduce((sum, item) => sum + (item.stat?.evaluated ?? 0), 0);
-  const total = Math.max(currentPupils.length * currentObjectives.length, 1);
+  const total = Math.max(presentPupilCount * currentObjectives.length, 1);
+  const pieSize = 112;
+  const pieRadius = 58;
+  const presentAngle = currentPupils.length ? presentPupilCount / currentPupils.length * 360 : 0;
 
   const handleSaveRemediation = () => {
     data.updateRemediation(individualRemediation, classRemediation, currentAssessment.id);
@@ -90,7 +122,85 @@ export default function AssessmentAnalysisScreen() {
         </View>
       </Surface>
 
-      <SectionTitle title={`Résultats par objectif (${currentObjectives.length})`} />
+      <AnalysisSectionTitle title="Statistiques visuelles" />
+      <Surface style={styles.chartsCard}>
+        <Text style={[styles.chartTitle, { color: colors.foreground }]}>Présence à l’évaluation</Text>
+        <View style={styles.attendanceChart}>
+          <View
+            accessible
+            accessibilityLabel={`${presentPupilCount} présents, ${absentPupilIds.size} absents sur ${currentPupils.length} élèves`}
+          >
+            <Svg width={pieSize} height={pieSize} viewBox="0 0 132 132" accessibilityElementsHidden>
+              {currentPupils.length === 0 ? (
+                <Circle cx={66} cy={66} r={pieRadius} fill={colors.muted} />
+              ) : presentPupilCount === 0 ? (
+                <Circle cx={66} cy={66} r={pieRadius} fill={colors.errorForeground} />
+              ) : absentPupilIds.size === 0 ? (
+                <Circle cx={66} cy={66} r={pieRadius} fill={colors.successForeground} />
+              ) : (
+                <>
+                  <Path d={pieSlicePath(66, 66, pieRadius, 0, presentAngle)} fill={colors.successForeground} />
+                  <Path d={pieSlicePath(66, 66, pieRadius, presentAngle, 360)} fill={colors.errorForeground} />
+                </>
+              )}
+            </Svg>
+          </View>
+          <View style={styles.pieLegend}>
+            <View style={styles.pieLegendItem}>
+              <View style={[styles.legendSwatch, { backgroundColor: colors.successForeground }]} />
+              <Text style={[styles.pieLegendLabel, { color: colors.mutedForeground }]}>Présents</Text>
+              <Text style={[styles.pieLegendValue, { color: colors.foreground }]}>{presentPupilCount}</Text>
+            </View>
+            <View style={styles.pieLegendItem}>
+              <View style={[styles.legendSwatch, { backgroundColor: colors.errorForeground }]} />
+              <Text style={[styles.pieLegendLabel, { color: colors.mutedForeground }]}>Absents</Text>
+              <Text style={[styles.pieLegendValue, { color: colors.foreground }]}>{absentPupilIds.size}</Text>
+            </View>
+            <Text style={[styles.chartSubtitle, { color: colors.mutedForeground }]}>
+              {currentPupils.length} élèves au total
+            </Text>
+          </View>
+        </View>
+
+        <View style={[styles.chartDivider, { backgroundColor: colors.border }]} />
+        <Text style={[styles.chartTitle, { color: colors.foreground }]}>Taux d’acquisition par objectif</Text>
+        <Text style={[styles.chartSubtitle, { color: colors.mutedForeground }]}>
+          Pourcentage d’élèves présents ayant acquis chaque objectif.
+        </Text>
+        {statistics.length > 0 && presentPupilCount > 0 ? (
+          <View style={styles.barChart}>
+            {statistics.map(({ objective, stat }) => {
+              const acquiredPercent = stat?.acquiredPercent ?? 0;
+              return (
+                <View key={objective.id} style={styles.barRow}>
+                  <View style={styles.barLabelRow}>
+                    <Text style={[styles.barObjectiveNumber, { color: colors.primary }]}>
+                      {String(objective.order).padStart(2, '0')}
+                    </Text>
+                    <Text numberOfLines={1} style={[styles.barObjectiveDescription, { color: colors.foreground }]}>
+                      {objective.description}
+                    </Text>
+                    <Text style={[styles.barPercent, { color: colors.primary }]}>{acquiredPercent}%</Text>
+                  </View>
+                  <View
+                    accessible
+                    accessibilityLabel={`Objectif ${objective.order} : ${acquiredPercent}% acquis`}
+                    style={[styles.barTrack, { backgroundColor: colors.muted }]}
+                  >
+                    <View style={[styles.barFill, { width: `${acquiredPercent}%`, backgroundColor: colors.successForeground }]} />
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        ) : (
+          <Text style={[styles.chartSubtitle, { color: colors.mutedForeground }]}>
+            {statistics.length === 0 ? 'Ajoutez des objectifs pour afficher le graphique.' : 'Aucun élève présent pour cette évaluation.'}
+          </Text>
+        )}
+      </Surface>
+
+      <AnalysisSectionTitle title={`Résultats par objectif (${currentObjectives.length})`} />
       <View style={styles.objectives}>
         {statistics.map(({ objective, stat }) => (
           <Surface key={objective.id} style={styles.objectiveCard}>
@@ -123,7 +233,7 @@ export default function AssessmentAnalysisScreen() {
         ))}
       </View>
 
-      <SectionTitle title="Remédiation pédagogique" />
+      <AnalysisSectionTitle title="Remédiation pédagogique" />
       {editingRemediation ? (
         <Surface style={styles.editor}>
           <Text style={[styles.editorLabel, { color: colors.mutedForeground }]}>DÉCISION INDIVIDUELLE</Text>
@@ -173,6 +283,11 @@ export default function AssessmentAnalysisScreen() {
               </Text>
             </View>
           </Surface>
+        </>
+      )}
+
+      <View style={styles.footerActions}>
+        {!editingRemediation && (
           <Button
             label="Modifier les décisions"
             icon="edit-3"
@@ -180,28 +295,46 @@ export default function AssessmentAnalysisScreen() {
             secondary
             onPress={() => setEditingRemediation(true)}
           />
-        </>
-      )}
-
-      <Button
-        label="Exporter"
-        icon="file-text"
-        onPress={() => router.push(`/assessments/${currentAssessment.id}/document`)}
-      />
-      <Button label="Retour à l’évaluation" icon="arrow-left" secondary onPress={() => router.back()} />
+        )}
+        <Button
+          label="Exporter"
+          icon="file-text"
+          onPress={() => router.push(`/assessments/${currentAssessment.id}/document`)}
+        />
+        <Button label="Retour à l’évaluation" icon="arrow-left" secondary onPress={() => router.back()} />
+      </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  summary: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  summary: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14 },
   summaryCopy: { gap: 4 },
   summaryLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 1.1 },
   summaryValue: { fontSize: 34, lineHeight: 38, fontWeight: '800' },
   summaryNote: { fontSize: 12 },
   summaryIcon: { width: 54, height: 54, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  sectionTitle: { fontSize: 17, fontWeight: '700', letterSpacing: -0.2, marginTop: 19, marginBottom: 10 },
+  chartsCard: { gap: 10, padding: 14 },
+  chartTitle: { fontSize: 14, fontWeight: '800' },
+  chartSubtitle: { fontSize: 11, lineHeight: 16 },
+  attendanceChart: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, paddingVertical: 2 },
+  pieLegend: { gap: 9, minWidth: 108 },
+  pieLegendItem: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  legendSwatch: { width: 9, height: 9, borderRadius: 3 },
+  pieLegendLabel: { flex: 1, fontSize: 11, fontWeight: '600' },
+  pieLegendValue: { fontSize: 12, fontWeight: '800' },
+  chartDivider: { height: StyleSheet.hairlineWidth, marginVertical: 1 },
+  barChart: { gap: 12, paddingTop: 3 },
+  barRow: { gap: 5 },
+  barLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  barObjectiveNumber: { width: 21, fontSize: 10, fontWeight: '800' },
+  barObjectiveDescription: { flex: 1, fontSize: 11, fontWeight: '600' },
+  barPercent: { width: 38, fontSize: 11, fontWeight: '800', textAlign: 'right' },
+  barTrack: { height: 9, borderRadius: 6, overflow: 'hidden' },
+  barFill: { height: '100%', borderRadius: 6 },
   objectives: { gap: 10 },
-  objectiveCard: { gap: 12 },
+  objectiveCard: { gap: 9, padding: 13 },
   objectiveHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   objectiveCopy: { flex: 1, gap: 5 },
   objectiveNumber: { fontSize: 10, fontWeight: '800', letterSpacing: 1 },
@@ -209,13 +342,14 @@ const styles = StyleSheet.create({
   percent: { fontSize: 20, fontWeight: '800' },
   statLine: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   statText: { fontSize: 11, fontWeight: '600' },
-  remediation: { flexDirection: 'row', gap: 11, marginBottom: 10 },
+  remediation: { flexDirection: 'row', gap: 10, marginBottom: 10, padding: 14 },
   remediationIcon: { width: 34, height: 34, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
   remediationCopy: { flex: 1, gap: 4 },
   remediationTitle: { fontSize: 14, fontWeight: '700' },
   remediationText: { fontSize: 13, lineHeight: 19 },
-  editor: { gap: 9, marginBottom: 10 },
+  editor: { gap: 10, marginBottom: 10, padding: 14 },
   editorLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 1 },
   editorInput: { minHeight: 76, borderWidth: 1, borderRadius: 11, padding: 10, fontSize: 13, lineHeight: 18, textAlignVertical: 'top' },
-  editorActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 3 },
+  editorActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 6 },
+  footerActions: { gap: 12, marginTop: 16 },
 });
