@@ -22,8 +22,11 @@ type ReminderContextValue = {
   minutesBefore: number;
   ready: boolean;
   available: boolean;
+  permissionStatus: 'granted' | 'denied' | 'undetermined' | 'unavailable';
+  nextReminder: UpcomingReminder | null;
   setEnabled: (enabled: boolean) => Promise<boolean>;
   setMinutesBefore: (minutes: number) => void;
+  sendTestNotification: () => Promise<boolean>;
 };
 
 type UpcomingReminder = {
@@ -113,19 +116,34 @@ export function ReminderProvider({ children }: PropsWithChildren) {
   const [enabled, setEnabledState] = useState(false);
   const [minutesBefore, setMinutesBeforeState] = useState(15);
   const [ready, setReady] = useState(false);
+  const [permissionStatus, setPermissionStatus] = useState<ReminderContextValue['permissionStatus']>(Platform.OS === 'web' ? 'unavailable' : 'undetermined');
+  const [previewNow, setPreviewNow] = useState(() => new Date());
   const [refreshVersion, setRefreshVersion] = useState(0);
   const scheduleGeneration = useRef(0);
   const available = Platform.OS !== 'web';
 
   useEffect(() => {
-    void AsyncStorage.getItem(SETTINGS_KEY).then((stored) => {
-      if (!stored) return;
-      const settings = JSON.parse(stored) as { enabled?: unknown; minutesBefore?: unknown };
-      if (typeof settings.enabled === 'boolean') setEnabledState(settings.enabled);
-      if (typeof settings.minutesBefore === 'number' && [5, 10, 15, 30, 60].includes(settings.minutesBefore)) {
-        setMinutesBeforeState(settings.minutesBefore);
+    const initialize = async () => {
+      try {
+        const stored = await AsyncStorage.getItem(SETTINGS_KEY);
+        if (stored) {
+          const settings = JSON.parse(stored) as { enabled?: unknown; minutesBefore?: unknown };
+          if (typeof settings.enabled === 'boolean') setEnabledState(settings.enabled);
+          if (typeof settings.minutesBefore === 'number' && [5, 10, 15, 30, 60].includes(settings.minutesBefore)) {
+            setMinutesBeforeState(settings.minutesBefore);
+          }
+        }
+        if (available) {
+          const permission = await getPermissionsAsync();
+          setPermissionStatus(permission.granted ? 'granted' : permission.canAskAgain ? 'undetermined' : 'denied');
+        }
+      } catch {
+        if (available) setPermissionStatus('denied');
+      } finally {
+        setReady(true);
       }
-    }).catch(() => undefined).finally(() => setReady(true));
+    };
+    void initialize();
   }, []);
 
   useEffect(() => {
@@ -136,10 +154,24 @@ export function ReminderProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active') setRefreshVersion((version) => version + 1);
+      if (state === 'active') {
+        setPreviewNow(new Date());
+        setRefreshVersion((version) => version + 1);
+        if (available) {
+          void getPermissionsAsync()
+            .then((permission) => setPermissionStatus(permission.granted ? 'granted' : permission.canAskAgain ? 'undetermined' : 'denied'))
+            .catch(() => setPermissionStatus('denied'));
+        }
+      }
     });
-    return () => subscription.remove();
-  }, []);
+    const timer = setInterval(() => setPreviewNow(new Date()), 60_000);
+    return () => { subscription.remove(); clearInterval(timer); };
+  }, [available]);
+
+  const nextReminder = useMemo(() => {
+    if (!enabled || permissionStatus !== 'granted') return null;
+    return getUpcomingReminders(data.scheduleSessions, data.assessments, data.classes, minutesBefore, previewNow)[0] ?? null;
+  }, [data.assessments, data.classes, data.scheduleSessions, enabled, minutesBefore, permissionStatus, previewNow]);
 
   useEffect(() => {
     if (!ready) return;
@@ -152,6 +184,7 @@ export function ReminderProvider({ children }: PropsWithChildren) {
       if (!enabled || !available || generation !== scheduleGeneration.current) return;
 
       const permission = await getPermissionsAsync();
+      setPermissionStatus(permission.granted ? 'granted' : permission.canAskAgain ? 'undetermined' : 'denied');
       if (!permission.granted || generation !== scheduleGeneration.current) return;
       if (Platform.OS === 'android') {
         await setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
@@ -203,8 +236,10 @@ export function ReminderProvider({ children }: PropsWithChildren) {
       try {
         let permission = await getPermissionsAsync();
         if (!permission.granted) permission = await requestPermissionsAsync();
+        setPermissionStatus(permission.granted ? 'granted' : permission.canAskAgain ? 'undetermined' : 'denied');
         if (!permission.granted) return false;
       } catch {
+        setPermissionStatus('denied');
         return false;
       }
     }
@@ -212,14 +247,48 @@ export function ReminderProvider({ children }: PropsWithChildren) {
     return true;
   };
 
+  const sendTestNotification = async () => {
+    if (!available) return false;
+    try {
+      let permission = await getPermissionsAsync();
+      if (!permission.granted) permission = await requestPermissionsAsync();
+      setPermissionStatus(permission.granted ? 'granted' : permission.canAskAgain ? 'undetermined' : 'denied');
+      if (!permission.granted) return false;
+      if (Platform.OS === 'android') {
+        await setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
+          name: 'Rappels de cours et évaluations',
+          importance: AndroidImportance.DEFAULT,
+        });
+      }
+      await scheduleNotificationAsync({
+        content: {
+          title: 'Rappel de test',
+          body: 'Les notifications de l’application fonctionnent.',
+          sound: true,
+        },
+        trigger: {
+          type: SchedulableTriggerInputTypes.TIME_INTERVAL,
+          seconds: 3,
+          ...(Platform.OS === 'android' ? { channelId: ANDROID_CHANNEL_ID } : {}),
+        },
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   const value = useMemo<ReminderContextValue>(() => ({
     enabled,
     minutesBefore,
     ready,
     available,
+    permissionStatus,
+    nextReminder,
     setEnabled,
     setMinutesBefore: setMinutesBeforeState,
-  }), [available, enabled, minutesBefore, ready]);
+    sendTestNotification,
+  }), [available, enabled, minutesBefore, nextReminder, permissionStatus, ready]);
 
   return <ReminderContext.Provider value={value}>{children}</ReminderContext.Provider>;
 }

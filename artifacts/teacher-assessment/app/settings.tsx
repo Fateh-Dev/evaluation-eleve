@@ -90,6 +90,16 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleTestReminder = async () => {
+    const scheduled = await reminders.sendTestNotification();
+    Alert.alert(
+      scheduled ? 'Notification de test programmée' : 'Test impossible',
+      scheduled
+        ? 'Une notification de test devrait apparaître dans quelques secondes.'
+        : 'Vérifiez l’autorisation des notifications et les réglages de votre appareil.',
+    );
+  };
+
   const handleCreateBackup = async () => {
     try {
       const timestamp = new Date().toISOString().slice(0, 10);
@@ -312,27 +322,59 @@ export default function SettingsScreen() {
             accessibilityLabel="Activer les rappels de cours et d’évaluations"
           />
         </View>
+        <View style={[styles.reminderStatus, { borderTopColor: colors.border }]}>
+          <Feather
+            name={reminders.permissionStatus === 'granted' ? 'check-circle' : reminders.permissionStatus === 'denied' ? 'slash' : 'info'}
+            size={15}
+            color={reminders.permissionStatus === 'granted' ? colors.successForeground : colors.mutedForeground}
+          />
+          <Text style={[styles.help, styles.reminderStatusText, { color: colors.mutedForeground }]}>
+            {reminders.permissionStatus === 'granted'
+              ? 'Autorisation de notification accordée'
+              : reminders.permissionStatus === 'denied'
+                ? 'Notifications refusées. Autorisez-les dans les réglages Android.'
+                : reminders.permissionStatus === 'unavailable'
+                  ? 'Notifications indisponibles sur cette plateforme'
+                  : 'Autorisation de notification non accordée'}
+          </Text>
+        </View>
         {reminders.enabled ? (
-          <View style={[styles.reminderTiming, { borderTopColor: colors.border }]}>
-            <Text style={[styles.label, { color: colors.mutedForeground }]}>ME RAPPELER</Text>
-            <View style={styles.reminderOptions}>
-              {[5, 10, 15, 30, 60].map((minutes) => {
-                const selected = reminders.minutesBefore === minutes;
-                return (
-                  <Pressable
-                    key={minutes}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected }}
-                    onPress={() => reminders.setMinutesBefore(minutes)}
-                    style={[styles.reminderOption, { backgroundColor: selected ? colors.primary : colors.card, borderColor: selected ? colors.primary : colors.border }]}
-                  >
-                    <Text style={{ color: selected ? colors.primaryForeground : colors.foreground, fontSize: 12, fontWeight: '700' }}>{minutes} min</Text>
-                  </Pressable>
-                );
-              })}
+          <>
+            <View style={[styles.reminderTiming, { borderTopColor: colors.border }]}>
+              <Text style={[styles.label, { color: colors.mutedForeground }]}>ME RAPPELER</Text>
+              <View style={styles.reminderOptions}>
+                {[5, 10, 15, 30, 60].map((minutes) => {
+                  const selected = reminders.minutesBefore === minutes;
+                  return (
+                    <Pressable
+                      key={minutes}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected }}
+                      onPress={() => reminders.setMinutesBefore(minutes)}
+                      style={[styles.reminderOption, { backgroundColor: selected ? colors.primary : colors.card, borderColor: selected ? colors.primary : colors.border }]}
+                    >
+                      <Text style={{ color: selected ? colors.primaryForeground : colors.foreground, fontSize: 12, fontWeight: '700' }}>{minutes} min</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
             </View>
-          </View>
+            <View style={[styles.reminderNext, { backgroundColor: colors.background, borderColor: colors.border }]}>
+              <Text style={[styles.label, { color: colors.mutedForeground }]}>PROCHAIN RAPPEL</Text>
+              {reminders.nextReminder ? (
+                <>
+                  <Text style={[styles.value, { color: colors.foreground }]}>
+                    {reminders.nextReminder.title} · {reminders.nextReminder.triggerAt.toLocaleString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}
+                  </Text>
+                  <Text style={[styles.help, { color: colors.mutedForeground }]}>{reminders.nextReminder.body}</Text>
+                </>
+              ) : (
+                <Text style={[styles.help, { color: colors.mutedForeground }]}>Aucune séance ou évaluation à rappeler dans les 7 prochains jours.</Text>
+              )}
+            </View>
+          </>
         ) : null}
+        <Button label="Tester la notification" icon="bell" secondary compact disabled={!reminders.available || !reminders.ready} onPress={() => { void handleTestReminder(); }} />
       </Surface>
 
       {/* PROFESSOR / TEACHER PROFILE */}
@@ -861,6 +903,9 @@ const styles = StyleSheet.create({
   reminderTiming: { gap: 9, paddingTop: 14, borderTopWidth: 1 },
   reminderOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   reminderOption: { minHeight: 36, borderWidth: 1, borderRadius: 9, paddingHorizontal: 11, alignItems: 'center', justifyContent: 'center' },
+  reminderStatus: { minHeight: 34, borderTopWidth: 1, paddingTop: 10, flexDirection: 'row', alignItems: 'center', gap: 7 },
+  reminderStatusText: { flex: 1 },
+  reminderNext: { borderWidth: 1, borderRadius: 10, padding: 11, gap: 5 },
   settingRowInner: { flexDirection: 'row', alignItems: 'flex-start', gap: 11 },
   help: { fontSize: 12, lineHeight: 18 },
   enabled: { fontSize: 12, fontWeight: '800' },
