@@ -13,7 +13,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { AppHeader, Button, GuideAnchor, Screen, SectionTitle, Surface, ValueMark } from '@/components/AppShell';
+import { AppHeader, Button, GuideAnchor, KeyboardAvoidingViewCompat, Screen, SectionTitle, Surface, ValueMark } from '@/components/AppShell';
 import { EvaluationValue, useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
 
@@ -634,7 +634,7 @@ export default function AssessmentEvaluationScreen() {
         animationType="slide"
         onRequestClose={() => setObjectivesModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingViewCompat style={styles.modalOverlay}>
           <Surface style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.modalHeader}>
               <View>
@@ -704,7 +704,7 @@ export default function AssessmentEvaluationScreen() {
               onPress={() => setObjectivesModalVisible(false)}
             />
           </Surface>
-        </View>
+        </KeyboardAvoidingViewCompat>
       </Modal>
     </Screen>
   );

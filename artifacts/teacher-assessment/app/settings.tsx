@@ -17,6 +17,7 @@ import {
 import {
   AppHeader,
   Button,
+  KeyboardAvoidingViewCompat,
   Screen,
   SectionTitle,
   Surface,
@@ -640,6 +641,7 @@ export default function SettingsScreen() {
         animationType="fade"
         onRequestClose={closeResetModal}
       >
+        <KeyboardAvoidingViewCompat style={{ flex: 1 }}>
         {resetStage === 'pin' ? (
           <PinEntryScreen
             title="Confirmez votre identité"
@@ -746,6 +748,7 @@ export default function SettingsScreen() {
             </View>
           </View>
         )}
+        </KeyboardAvoidingViewCompat>
       </Modal>
     </Screen>
   );

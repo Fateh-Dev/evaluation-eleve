@@ -1,14 +1,39 @@
 import { Feather } from '@expo/vector-icons';
 import { Redirect, router } from 'expo-router';
-import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
 import { AppHeader, Button, ProgressBar, Screen, SectionTitle, Surface } from '@/components/AppShell';
 import { useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
+import { getScheduleTimeline, WEEKDAYS } from '@/services/schedule';
 
 export default function DashboardScreen() {
   const colors = useColors();
   const data = useAppData();
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 30_000);
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') setNow(new Date());
+    });
+    return () => {
+      clearInterval(timer);
+      subscription.remove();
+    };
+  }, []);
+
+  const { current: currentSession, next: nextSession } = getScheduleTimeline(data.scheduleSessions, now);
+  const currentSessionClass = currentSession
+    ? data.classes.find((item) => item.id === currentSession.classId)
+    : undefined;
+  const nextSessionClass = nextSession
+    ? data.classes.find((item) => item.id === nextSession.classId)
+    : undefined;
+
+  useEffect(() => {
+    if (data.hydrated && currentSessionClass) data.setActiveClass(currentSessionClass.id);
+  }, [currentSession?.id, currentSessionClass?.id, data.hydrated]);
 
   const hasClasses = data.classes.length > 0;
   const hasAssessments = data.assessments.length > 0;
@@ -36,6 +61,57 @@ export default function DashboardScreen() {
   return (
     <Screen>
       <AppHeader eyebrow="Espace enseignant" title={teacherGreeting} />
+      <SectionTitle title="Emploi du temps" action="Gérer" onAction={() => router.push('/schedule')} />
+      <Surface style={styles.scheduleCard}>
+        <View style={styles.scheduleHeading}>
+          <View style={[styles.scheduleIcon, { backgroundColor: currentSessionClass ? colors.successSurface : colors.muted }]}>
+            <Feather name={currentSessionClass ? 'clock' : 'calendar'} size={18} color={currentSessionClass ? colors.successForeground : colors.mutedForeground} />
+          </View>
+          <View style={styles.rowCopy}>
+            <Text style={[styles.scheduleLabel, { color: colors.foreground }]}>
+              {currentSessionClass ? 'Séance actuelle' : 'Aucune séance actuellement'}
+            </Text>
+            {currentSessionClass ? (
+              <>
+                <Text style={[styles.scheduleClass, { color: colors.successForeground }]}>{currentSessionClass.name}</Text>
+                <Text style={[styles.rowSubtitle, { color: colors.mutedForeground }]}>
+                  {WEEKDAYS[currentSession!.dayOfWeek]} · {currentSession!.startTime} – {currentSession!.endTime}
+                  {currentSession!.subject ? ` · ${currentSession!.subject}` : ''}
+                </Text>
+              </>
+            ) : (
+              <Text style={[styles.rowSubtitle, { color: colors.mutedForeground }]}>Aucune classe n’est sélectionnée par l’emploi du temps.</Text>
+            )}
+          </View>
+        </View>
+        {currentSessionClass ? (
+          <Button
+            label="Continuer la séance"
+            icon="arrow-right"
+            compact
+            onPress={() => {
+              data.setActiveClass(currentSessionClass.id);
+              router.push(`/classes/${currentSessionClass.id}`);
+            }}
+          />
+        ) : null}
+        <View style={[styles.nextSession, { borderTopColor: colors.border }]}>
+          <Feather name="info" size={15} color={colors.mutedForeground} />
+          <View style={styles.rowCopy}>
+            <Text style={[styles.nextLabel, { color: colors.mutedForeground }]}>Prochaine séance</Text>
+            {nextSession && nextSessionClass ? (
+              <Text style={[styles.rowSubtitle, { color: colors.foreground }]}>
+                <Text style={{ fontWeight: '700' }}>{nextSessionClass.name}</Text>
+                {' · '}{WEEKDAYS[nextSession.dayOfWeek]} · {nextSession.startTime} – {nextSession.endTime}
+                {nextSession.room ? ` · ${nextSession.room}` : ''}
+              </Text>
+            ) : (
+              <Text style={[styles.rowSubtitle, { color: colors.mutedForeground }]}>Aucune autre séance programmée</Text>
+            )}
+          </View>
+        </View>
+        <Button label="Gérer l’emploi du temps" secondary compact icon="calendar" onPress={() => router.push('/schedule')} />
+      </Surface>
       {/* HERO SECTION */}
       {!hasClasses ? (
         <View style={[styles.hero, { backgroundColor: colors.hero }]}>
@@ -216,6 +292,13 @@ export default function DashboardScreen() {
 
 const styles = StyleSheet.create({
   hero: { marginTop: 18, borderRadius: 22, padding: 20, flexDirection: 'row', gap: 20, overflow: 'hidden' },
+  scheduleCard: { gap: 13, padding: 14 },
+  scheduleHeading: { flexDirection: 'row', alignItems: 'center', gap: 11 },
+  scheduleIcon: { width: 38, height: 38, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  scheduleLabel: { fontSize: 13, fontWeight: '700' },
+  scheduleClass: { fontSize: 17, lineHeight: 21, fontWeight: '800', marginTop: 2 },
+  nextSession: { borderTopWidth: 1, paddingTop: 12, flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  nextLabel: { fontSize: 11, fontWeight: '700', marginBottom: 3 },
   heroCopy: { flex: 1, gap: 10 },
   heroKicker: { fontSize: 11, fontWeight: '800', letterSpacing: 1.2, textTransform: 'uppercase' },
   heroTitle: { fontSize: 24, lineHeight: 29, fontWeight: '700' },

@@ -11,7 +11,8 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { AppHeader, Button, Screen, SectionTitle, Surface } from '@/components/AppShell';
+import { AppHeader, Button, KeyboardAvoidingViewCompat, Screen, SectionTitle, Surface } from '@/components/AppShell';
+import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
 
@@ -454,7 +455,7 @@ export default function ClassDetailScreen() {
         transparent
         onRequestClose={() => setClassNameModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingViewCompat style={styles.modalOverlay}>
           <Surface style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.modalHeader}>
               <View>
@@ -497,7 +498,7 @@ export default function ClassDetailScreen() {
               <Button label="Enregistrer" icon="check" onPress={handleRenameClass} />
             </View>
           </Surface>
-        </View>
+        </KeyboardAvoidingViewCompat>
       </Modal>
 
       {/* Modal: Ajouter un élève */}
@@ -507,7 +508,7 @@ export default function ClassDetailScreen() {
         transparent
         onRequestClose={() => setPupilModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingViewCompat style={styles.modalOverlay}>
           <Surface style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.modalHeader}>
               <View>
@@ -526,7 +527,7 @@ export default function ClassDetailScreen() {
               </Pressable>
             </View>
 
-            <ScrollView contentContainerStyle={styles.modalForm} showsVerticalScrollIndicator={false}>
+            <KeyboardAwareScrollViewCompat bottomOffset={100} contentContainerStyle={styles.modalForm} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               <View style={styles.fieldGroup}>
                 <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>
                   NOM DE FAMILLE *
@@ -604,9 +605,9 @@ export default function ClassDetailScreen() {
                   onPress={handleAddPupil}
                 />
               </View>
-            </ScrollView>
+            </KeyboardAwareScrollViewCompat>
           </Surface>
-        </View>
+        </KeyboardAvoidingViewCompat>
       </Modal>
     </Screen>
   );

@@ -14,10 +14,12 @@ import {
 import {
   AppHeader,
   Button,
+  KeyboardAvoidingViewCompat,
   Screen,
   SectionTitle,
   Surface,
 } from '@/components/AppShell';
+import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
 
@@ -450,14 +452,15 @@ export default function ClassesScreen() {
 
       {/* Creation Modal */}
       <Modal visible={modalVisible} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingViewCompat style={styles.modalOverlay}>
           <Surface
             style={[
               styles.modalCard,
               { backgroundColor: colors.card, borderColor: colors.border },
             ]}
           >
-            <ScrollView
+            <KeyboardAwareScrollViewCompat
+              bottomOffset={100}
               contentContainerStyle={styles.modalContent}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
@@ -873,9 +876,9 @@ export default function ClassesScreen() {
                 />
                 <Button label="Annuler" secondary onPress={resetModal} />
               </View>
-            </ScrollView>
+            </KeyboardAwareScrollViewCompat>
           </Surface>
-        </View>
+        </KeyboardAvoidingViewCompat>
       </Modal>
     </Screen>
   );

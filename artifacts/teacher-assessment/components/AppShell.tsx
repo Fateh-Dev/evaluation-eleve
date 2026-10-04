@@ -1,6 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import React, { createContext, PropsWithChildren, useContext, useState } from 'react';
-import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 
@@ -60,12 +61,26 @@ export function Screen({ children, scroll = true, bottomPadding }: PropsWithChil
   );
   if (!scroll) return content;
   return (
-    <ScrollView
+    <KeyboardAwareScrollViewCompat
+      style={{ flex: 1, backgroundColor: colors.background }}
+      bottomOffset={80}
+      keyboardShouldPersistTaps="handled"
       contentContainerStyle={styles.scrollContent}
       showsVerticalScrollIndicator={false}
     >
       {content}
-    </ScrollView>
+    </KeyboardAwareScrollViewCompat>
+  );
+}
+
+export function KeyboardAvoidingViewCompat({ children, style }: PropsWithChildren<{ style?: object }>) {
+  return (
+    <KeyboardAvoidingView
+      style={style}
+      behavior={Platform.OS === 'ios' ? 'padding' : Platform.OS === 'android' ? 'height' : undefined}
+    >
+      {children}
+    </KeyboardAvoidingView>
   );
 }
 

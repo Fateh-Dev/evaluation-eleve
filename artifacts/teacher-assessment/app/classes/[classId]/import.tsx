@@ -3,7 +3,6 @@ import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
-import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { AppHeader, Button, Screen, SectionTitle, Surface } from '@/components/AppShell';
 import { useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
@@ -45,12 +44,6 @@ export default function PupilImportScreen() {
   };
 
   return (
-    <KeyboardAwareScrollViewCompat
-      bottomOffset={80}
-      keyboardShouldPersistTaps="handled"
-      style={{ backgroundColor: colors.background }}
-      contentContainerStyle={{ flexGrow: 1 }}
-    >
       <Screen>
         <AppHeader eyebrow="Classe" title="Importer des élèves" onBack={() => router.back()} compact />
         <Surface style={styles.instructions}>
@@ -85,7 +78,6 @@ export default function PupilImportScreen() {
           <Button label="Annuler" secondary onPress={() => router.back()} />
         </View>
       </Screen>
-    </KeyboardAwareScrollViewCompat>
   );
 }
 
