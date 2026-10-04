@@ -3,7 +3,7 @@ import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { AppHeader, Button, Screen, SectionTitle, Surface, ValueMark } from '@/components/AppShell';
+import { AppHeader, Button, KeyboardAvoidingViewCompat, Screen, SectionTitle, Surface, ValueMark } from '@/components/AppShell';
 import { useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
 
@@ -184,7 +184,7 @@ export default function PupilDetailScreen() {
         transparent
         onRequestClose={() => setDecisionModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingViewCompat style={styles.modalOverlay}>
           <Surface style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.modalHeader}>
               <View style={styles.modalHeaderCopy}>
@@ -226,7 +226,7 @@ export default function PupilDetailScreen() {
               <Button label="Enregistrer" icon="check" onPress={saveIndividualDecision} />
             </View>
           </Surface>
-        </View>
+        </KeyboardAvoidingViewCompat>
       </Modal>
       <Modal
         visible={editModalVisible}
@@ -234,7 +234,7 @@ export default function PupilDetailScreen() {
         transparent
         onRequestClose={() => setEditModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingViewCompat style={styles.modalOverlay}>
           <Surface style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.modalHeader}>
               <View>
@@ -284,7 +284,7 @@ export default function PupilDetailScreen() {
               <Button label="Enregistrer" icon="check" onPress={savePupilName} />
             </View>
           </Surface>
-        </View>
+        </KeyboardAvoidingViewCompat>
       </Modal>
     </Screen>
   );

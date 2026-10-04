@@ -11,9 +11,11 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { AppHeader, Button, Screen, SectionTitle, Surface } from '@/components/AppShell';
+import { AppHeader, Button, KeyboardAvoidingViewCompat, ListSelectionToolbar, Screen, SectionTitle, SelectionCheckbox, Surface } from '@/components/AppShell';
+import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
+import { useListSelection } from '@/hooks/useListSelection';
 
 export default function ClassDetailScreen() {
   const colors = useColors();
@@ -34,6 +36,9 @@ export default function ClassDetailScreen() {
   }, [data.assessments, currentClass.id]);
 
   const [activeTab, setActiveTab] = useState<'competencies' | 'pupils'>('competencies');
+  const assessmentSelection = useListSelection();
+  const pupilSelection = useListSelection();
+  const [classDeleteArmed, setClassDeleteArmed] = useState(false);
 
   const [classNameModalVisible, setClassNameModalVisible] = useState(false);
   const [classNameInput, setClassNameInput] = useState('');
@@ -94,21 +99,13 @@ export default function ClassDetailScreen() {
     }
   };
 
-  const handleDeletePupil = (pupilId: string, pupilName: string) => {
-    Alert.alert(
-      'Supprimer l’élève',
-      `Êtes-vous sûr de vouloir retirer ${pupilName} de la classe ${currentClass.name} ?`,
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Supprimer',
-          style: 'destructive',
-          onPress: () => {
-            data.deletePupil(pupilId);
-          },
-        },
-      ],
-    );
+  const deleteSelectedPupils = () => {
+    const selected = classPupils.filter((pupil) => pupilSelection.selectedIds.includes(pupil.id));
+    if (selected.length === 0) return;
+    Alert.alert('Supprimer les élèves sélectionnés ?', `Retirer ${selected.length} élève${selected.length > 1 ? 's' : ''} de ${currentClass.name} ?`, [
+      { text: 'Annuler', style: 'cancel' },
+      { text: 'Supprimer', style: 'destructive', onPress: () => { selected.forEach((pupil) => data.deletePupil(pupil.id)); pupilSelection.cancelSelection(); } },
+    ]);
   };
 
   const handleDeleteClass = () => {
@@ -130,22 +127,13 @@ export default function ClassDetailScreen() {
     );
   };
 
-  const handleDeleteAssessment = (assessmentId: string, assessmentTitle: string) => {
-    Alert.alert(
-      'Supprimer la compétence',
-      `Êtes-vous sûr de vouloir supprimer l’évaluation "${assessmentTitle}" ?\n\nToutes les notes et objectifs associés seront définitivement effacés.`,
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Supprimer',
-          style: 'destructive',
-          onPress: () => {
-            data.deleteAssessment(assessmentId);
-            Alert.alert('Compétence supprimée', 'L’évaluation a été supprimée.');
-          },
-        },
-      ],
-    );
+  const deleteSelectedAssessments = () => {
+    const selected = classAssessments.filter((item) => assessmentSelection.selectedIds.includes(item.id));
+    if (selected.length === 0) return;
+    Alert.alert('Supprimer les compétences sélectionnées ?', `Supprimer ${selected.length} compétence${selected.length > 1 ? 's' : ''} de cette classe ?`, [
+      { text: 'Annuler', style: 'cancel' },
+      { text: 'Supprimer', style: 'destructive', onPress: () => { selected.forEach((item) => data.deleteAssessment(item.id)); assessmentSelection.cancelSelection(); } },
+    ]);
   };
 
   if (!currentClass || !currentClass.id) {
@@ -165,11 +153,13 @@ export default function ClassDetailScreen() {
   }
 
   return (
-    <Screen>
+    <Screen onTouchStart={() => setClassDeleteArmed(false)}>
       <AppHeader
         eyebrow="Classe"
         title={currentClass.name}
         onBack={() => router.back()}
+        onTitleLongPress={() => setClassDeleteArmed(true)}
+        titleActionArmed={classDeleteArmed}
         compact
       />
 
@@ -258,6 +248,14 @@ export default function ClassDetailScreen() {
             action="+ Ajouter"
             onAction={() => router.push(`/assessments/new?classId=${currentClass.id}`)}
           />
+          <ListSelectionToolbar
+            style={{ marginBottom: 0 }}
+            active={assessmentSelection.isSelecting}
+            selectedCount={assessmentSelection.selectedIds.length}
+            onStart={() => assessmentSelection.startSelecting()}
+            onCancel={assessmentSelection.cancelSelection}
+            onDelete={deleteSelectedAssessments}
+          />
 
           {classAssessments.length === 0 ? (
             <Surface style={styles.emptyCard}>
@@ -284,7 +282,27 @@ export default function ClassDetailScreen() {
                 const progressPercent = Math.round((evaluatedTotal / totalPossible) * 100);
 
                 return (
-                  <Surface key={item.id} style={styles.assessmentCard}>
+                  <Pressable
+                    key={item.id}
+                    disabled={!assessmentSelection.isSelecting}
+                    onTouchStart={(event) => {
+                      if (assessmentSelection.isSelecting) event.stopPropagation();
+                    }}
+                    onPress={() => {
+                      if (assessmentSelection.isSelecting) assessmentSelection.toggleSelection(item.id);
+                    }}
+                  >
+                  <Surface
+                    style={[
+                      styles.assessmentCard,
+                      assessmentSelection.selectedIds.includes(item.id) && {
+                        backgroundColor: colors.card,
+                        borderColor: colors.destructive,
+                        borderWidth: 2,
+                      },
+                    ]}
+                  >
+                    <View style={{ gap: 10 }}>
                     <View style={styles.assessmentCardHeader}>
                       <View style={styles.headerLeft}>
                         <View style={[styles.competencyBadge, { backgroundColor: colors.accent }]}>
@@ -292,9 +310,7 @@ export default function ClassDetailScreen() {
                             {item.competency}
                           </Text>
                         </View>
-                        <Text style={[styles.assessmentTitle, { color: colors.foreground }]}>
-                          {item.title}
-                        </Text>
+                        <Text style={[styles.assessmentTitle, { color: colors.foreground }]}>{item.title}</Text>
                       </View>
                       <Text style={[styles.progressNumber, { color: colors.primary }]}>
                         {progressPercent}%
@@ -314,8 +330,13 @@ export default function ClassDetailScreen() {
                         {item.date}
                       </Text>
                     </View>
+                    </View>
 
                     <View style={styles.cardActions}>
+                      {assessmentSelection.isSelecting ? (
+                        <SelectionCheckbox checked={assessmentSelection.selectedIds.includes(item.id)} />
+                      ) : (
+                        <>
                       <Button
                         label="Évaluer"
                         icon="check-square"
@@ -335,15 +356,11 @@ export default function ClassDetailScreen() {
                           router.push(`/assessments/${item.id}/document`);
                         }}
                       />
-                      <Pressable
-                        onPress={() => handleDeleteAssessment(item.id, item.title)}
-                        hitSlop={8}
-                        style={[styles.deleteAssessBtn, { backgroundColor: colors.errorSurface }]}
-                      >
-                        <Feather name="trash-2" size={15} color={colors.errorForeground} />
-                      </Pressable>
+                        </>
+                      )}
                     </View>
                   </Surface>
+                  </Pressable>
                 );
               })}
             </View>
@@ -368,6 +385,14 @@ export default function ClassDetailScreen() {
             action="+ Ajouter un élève"
             onAction={openAddPupilModal}
           />
+          <ListSelectionToolbar
+            style={{ marginBottom: 0 }}
+            active={pupilSelection.isSelecting}
+            selectedCount={pupilSelection.selectedIds.length}
+            onStart={() => pupilSelection.startSelecting()}
+            onCancel={pupilSelection.cancelSelection}
+            onDelete={deleteSelectedPupils}
+          />
 
           <View style={styles.pupilList}>
             {classPupils.length === 0 ? (
@@ -382,8 +407,17 @@ export default function ClassDetailScreen() {
               classPupils.map((pupil, index) => (
                 <Pressable
                   key={pupil.id}
-                  onPress={() => router.push(`/pupils/${pupil.id}`)}
-                  style={[styles.pupilRow, { borderBottomColor: colors.border }]}
+                  onTouchStart={(event) => event.stopPropagation()}
+                  onPress={() => {
+                    if (pupilSelection.isSelecting) pupilSelection.toggleSelection(pupil.id);
+                    else router.push(`/pupils/${pupil.id}`);
+                  }}
+                  style={[
+                    styles.pupilRow,
+                    pupilSelection.selectedIds.includes(pupil.id)
+                      ? { backgroundColor: colors.card, borderColor: colors.primary, borderWidth: 2, borderRadius: 10, paddingHorizontal: 8 }
+                      : { borderBottomColor: colors.border },
+                  ]}
                 >
                   <View
                     style={[
@@ -405,17 +439,9 @@ export default function ClassDetailScreen() {
                     </Text>
                   </View>
                   <View style={styles.rowRight}>
-                    <Pressable
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        handleDeletePupil(pupil.id, `${pupil.lastName} ${pupil.firstName}`);
-                      }}
-                      style={styles.deletePupilBtn}
-                      hitSlop={10}
-                    >
-                      <Feather name="trash-2" size={16} color={colors.destructive} />
-                    </Pressable>
-                    <Feather name="chevron-right" size={17} color={colors.mutedForeground} />
+                    {pupilSelection.isSelecting ? (
+                      <SelectionCheckbox checked={pupilSelection.selectedIds.includes(pupil.id)} />
+                    ) : <Feather name="chevron-right" size={17} color={colors.mutedForeground} />}
                   </View>
                 </Pressable>
               ))
@@ -440,12 +466,9 @@ export default function ClassDetailScreen() {
 
       {/* Delete Class Section */}
       <View style={styles.deleteClassSection}>
-        <Button
-          label="Supprimer cette classe"
-          icon="trash-2"
-          secondary
-          onPress={handleDeleteClass}
-        />
+        {classDeleteArmed ? (
+          <Button label="Supprimer cette classe" icon="trash-2" secondary onTouchStart={(event) => event.stopPropagation()} onPress={() => { setClassDeleteArmed(false); handleDeleteClass(); }} />
+        ) : null}
       </View>
 
       <Modal
@@ -454,7 +477,7 @@ export default function ClassDetailScreen() {
         transparent
         onRequestClose={() => setClassNameModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingViewCompat style={styles.modalOverlay}>
           <Surface style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.modalHeader}>
               <View>
@@ -497,7 +520,7 @@ export default function ClassDetailScreen() {
               <Button label="Enregistrer" icon="check" onPress={handleRenameClass} />
             </View>
           </Surface>
-        </View>
+        </KeyboardAvoidingViewCompat>
       </Modal>
 
       {/* Modal: Ajouter un élève */}
@@ -507,7 +530,7 @@ export default function ClassDetailScreen() {
         transparent
         onRequestClose={() => setPupilModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingViewCompat style={styles.modalOverlay}>
           <Surface style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.modalHeader}>
               <View>
@@ -526,7 +549,7 @@ export default function ClassDetailScreen() {
               </Pressable>
             </View>
 
-            <ScrollView contentContainerStyle={styles.modalForm} showsVerticalScrollIndicator={false}>
+            <KeyboardAwareScrollViewCompat bottomOffset={100} contentContainerStyle={styles.modalForm} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               <View style={styles.fieldGroup}>
                 <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>
                   NOM DE FAMILLE *
@@ -604,9 +627,9 @@ export default function ClassDetailScreen() {
                   onPress={handleAddPupil}
                 />
               </View>
-            </ScrollView>
+            </KeyboardAwareScrollViewCompat>
           </Surface>
-        </View>
+        </KeyboardAvoidingViewCompat>
       </Modal>
     </Screen>
   );
@@ -761,8 +784,12 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   deletePupilBtn: {
-    padding: 6,
+    minHeight: 34,
+    paddingHorizontal: 8,
     borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
   },
   emptyPupils: {
     padding: 24,
@@ -848,12 +875,15 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   deleteAssessBtn: {
-    width: 32,
-    height: 32,
+    minHeight: 36,
     borderRadius: 8,
+    paddingHorizontal: 9,
+    flexDirection: 'row',
+    gap: 5,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  deleteActionText: { fontSize: 11, fontWeight: '700' },
   deleteClassSection: {
     marginTop: 24,
     marginBottom: 16,

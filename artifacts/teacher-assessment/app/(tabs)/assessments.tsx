@@ -3,31 +3,35 @@ import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { AppHeader, Button, Screen, SectionTitle, Surface } from '@/components/AppShell';
+import { AppHeader, Button, ListSelectionToolbar, Screen, SectionTitle, SelectionCheckbox, Surface } from '@/components/AppShell';
 import { useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
+import { useListSelection } from '@/hooks/useListSelection';
 
 export default function AssessmentsScreen() {
   const colors = useColors();
   const data = useAppData();
+  const selection = useListSelection();
   const [selectedClassId, setSelectedClassId] = useState<string>('all');
 
   const filteredAssessments = selectedClassId === 'all'
     ? data.assessments
     : data.assessments.filter((a) => a.classId === selectedClassId);
 
-  const handleDeleteAssessment = (assessmentId: string, assessmentTitle: string) => {
+  const handleDeleteSelectedAssessments = () => {
+    const selected = data.assessments.filter((item) => selection.selectedIds.includes(item.id));
+    if (selected.length === 0) return;
     Alert.alert(
-      'Supprimer la compétence',
-      `Êtes-vous sûr de vouloir supprimer l’évaluation "${assessmentTitle}" ?\n\nToutes les notes et objectifs associés seront définitivement effacés.`,
+      'Supprimer les compétences sélectionnées',
+      `Supprimer ${selected.length} compétence${selected.length > 1 ? 's' : ''} ? Toutes les notes et tous les objectifs associés seront également effacés.`,
       [
         { text: 'Annuler', style: 'cancel' },
         {
           text: 'Supprimer',
           style: 'destructive',
           onPress: () => {
-            data.deleteAssessment(assessmentId);
-            Alert.alert('Compétence supprimée', 'L’évaluation a été supprimée.');
+            selected.forEach((item) => data.deleteAssessment(item.id));
+            selection.cancelSelection();
           },
         },
       ],
@@ -106,6 +110,13 @@ export default function AssessmentsScreen() {
         action={data.classes.length > 0 ? '+ Ajouter' : undefined}
         onAction={() => router.push('/assessments/new')}
       />
+      <ListSelectionToolbar
+        active={selection.isSelecting}
+        selectedCount={selection.selectedIds.length}
+        onStart={() => selection.startSelecting()}
+        onCancel={selection.cancelSelection}
+        onDelete={handleDeleteSelectedAssessments}
+      />
 
       {/* List of Assessments / Competencies / Empty State */}
       {data.classes.length === 0 ? (
@@ -152,7 +163,17 @@ export default function AssessmentsScreen() {
             const progressPercent = Math.round((evaluatedTotal / totalPossible) * 100);
 
             return (
-              <Surface key={item.id} style={styles.assessmentCard}>
+              <Surface
+                key={item.id}
+                style={[
+                  styles.assessmentCard,
+                  selection.selectedIds.includes(item.id) && {
+                    backgroundColor: colors.card,
+                    borderColor: colors.destructive,
+                    borderWidth: 2,
+                  },
+                ]}
+              >
                 <View style={styles.cardTop}>
                   <View style={styles.badgeRow}>
                     <View style={[styles.classPill, { backgroundColor: colors.secondary }]}>
@@ -171,9 +192,15 @@ export default function AssessmentsScreen() {
                   </Text>
                 </View>
 
-                <Text style={[styles.assessmentTitle, { color: colors.foreground }]}>
-                  {item.title}
-                </Text>
+                <Pressable
+                  onTouchStart={(event) => event.stopPropagation()}
+                  onPress={() => {
+                    if (selection.isSelecting) selection.toggleSelection(item.id);
+                  }}
+                  accessibilityHint={selection.isSelecting ? 'Touchez pour sélectionner cette compétence.' : undefined}
+                >
+                  <Text style={[styles.assessmentTitle, { color: colors.foreground }]}>{item.title}</Text>
+                </Pressable>
 
                 <View style={styles.metaRow}>
                   <Text style={[styles.metaText, { color: colors.mutedForeground }]}>
@@ -190,32 +217,31 @@ export default function AssessmentsScreen() {
                 </View>
 
                 <View style={styles.cardActions}>
-                  <Button
-                    label="Évaluer"
-                    icon="check-square"
-                    compact
-                    onPress={() => {
-                      data.setActiveAssessment(item.id);
-                      router.push(`/assessments/${item.id}`);
-                    }}
-                  />
-                  <Button
-                    label="Exporter"
-                    icon="file-text"
-                    compact
-                    secondary
-                    onPress={() => {
-                      data.setActiveAssessment(item.id);
-                      router.push(`/assessments/${item.id}/document`);
-                    }}
-                  />
-                  <Pressable
-                    onPress={() => handleDeleteAssessment(item.id, item.title)}
-                    hitSlop={8}
-                    style={[styles.deleteBtn, { backgroundColor: colors.errorSurface }]}
-                  >
-                    <Feather name="trash-2" size={15} color={colors.errorForeground} />
-                  </Pressable>
+                  {selection.isSelecting ? (
+                    <SelectionCheckbox checked={selection.selectedIds.includes(item.id)} />
+                  ) : (
+                    <>
+                      <Button
+                        label="Évaluer"
+                        icon="check-square"
+                        compact
+                        onPress={() => {
+                          data.setActiveAssessment(item.id);
+                          router.push(`/assessments/${item.id}`);
+                        }}
+                      />
+                      <Button
+                        label="Exporter"
+                        icon="file-text"
+                        compact
+                        secondary
+                        onPress={() => {
+                          data.setActiveAssessment(item.id);
+                          router.push(`/assessments/${item.id}/document`);
+                        }}
+                      />
+                    </>
+                  )}
                 </View>
               </Surface>
             );
@@ -314,12 +340,15 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   deleteBtn: {
-    width: 32,
-    height: 32,
+    minHeight: 36,
     borderRadius: 8,
+    paddingHorizontal: 9,
+    flexDirection: 'row',
+    gap: 5,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  deleteActionText: { fontSize: 11, fontWeight: '700' },
   emptyContainer: {
     padding: 24,
     alignItems: 'center',

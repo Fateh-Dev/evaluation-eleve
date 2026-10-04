@@ -14,16 +14,22 @@ import {
 import {
   AppHeader,
   Button,
+  KeyboardAvoidingViewCompat,
+  ListSelectionToolbar,
+  SelectionCheckbox,
   Screen,
   SectionTitle,
   Surface,
 } from '@/components/AppShell';
+import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
+import { useListSelection } from '@/hooks/useListSelection';
 
 export default function ClassesScreen() {
   const colors = useColors();
   const data = useAppData();
+  const selection = useListSelection();
 
   const [modalVisible, setModalVisible] = useState(false);
   const [newClassName, setNewClassName] = useState('');
@@ -177,21 +183,21 @@ export default function ClassesScreen() {
     router.push(`/classes/${createdId}`);
   };
 
-  const handleDeleteClass = (classId: string, className: string) => {
+  const handleDeleteSelectedClasses = () => {
+    const selectedClasses = data.classes.filter((item) => selection.selectedIds.includes(item.id));
+    if (selectedClasses.length === 0) return;
+    const names = selectedClasses.map((item) => item.name).join(', ');
     Alert.alert(
-      'Supprimer la classe',
-      `Êtes-vous sûr de vouloir supprimer la classe "${className}" ?\n\nAttention : Tous les élèves, évaluations et notes de cette classe seront définitivement supprimés.`,
+      'Supprimer les classes sélectionnées',
+      `Supprimer ${selectedClasses.length} classe${selectedClasses.length > 1 ? 's' : ''} (${names}) ? Tous les élèves, évaluations et notes associés seront également supprimés.`,
       [
         { text: 'Annuler', style: 'cancel' },
         {
           text: 'Supprimer',
           style: 'destructive',
           onPress: () => {
-            data.deleteClass(classId);
-            Alert.alert(
-              'Classe supprimée',
-              `La classe ${className} a été supprimée.`,
-            );
+            selectedClasses.forEach((item) => data.deleteClass(item.id));
+            selection.cancelSelection();
           },
         },
       ],
@@ -277,6 +283,13 @@ export default function ClassesScreen() {
         action="+ Nouvelle classe"
         onAction={openCreateModal}
       />
+      <ListSelectionToolbar
+        active={selection.isSelecting}
+        selectedCount={selection.selectedIds.length}
+        onStart={() => selection.startSelecting()}
+        onCancel={selection.cancelSelection}
+        onDelete={handleDeleteSelectedClasses}
+      />
 
       {/* Classes List / Empty State */}
       {visibleClasses.length === 0 ? (
@@ -308,13 +321,20 @@ export default function ClassesScreen() {
             return (
               <Pressable
                 key={cls.id}
-                onPress={() => handleSelectClass(cls.id)}
+                onTouchStart={(event) => event.stopPropagation()}
+                onPress={() => {
+                  if (selection.isSelecting) {
+                    selection.toggleSelection(cls.id);
+                    return;
+                  }
+                  handleSelectClass(cls.id);
+                }}
                 style={({ pressed }) => [
                   styles.classCard,
                   {
                     backgroundColor: colors.card,
-                    borderColor: isActive ? colors.primary : colors.border,
-                    borderWidth: isActive ? 2 : 1,
+                    borderColor: selection.selectedIds.includes(cls.id) ? colors.primary : isActive ? colors.primary : colors.border,
+                    borderWidth: selection.selectedIds.includes(cls.id) || isActive ? 2 : 1,
                     opacity: pressed ? 0.85 : 1,
                   },
                 ]}
@@ -411,28 +431,9 @@ export default function ClassesScreen() {
                 </View>
 
                 <View style={styles.cardActionsRow}>
-                  <Pressable
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      handleDeleteClass(cls.id, cls.name);
-                    }}
-                    hitSlop={8}
-                    style={[
-                      styles.deleteButton,
-                      { backgroundColor: colors.errorSurface },
-                    ]}
-                  >
-                    <Feather
-                      name="trash-2"
-                      size={16}
-                      color={colors.errorForeground}
-                    />
-                  </Pressable>
-                  <Feather
-                    name="chevron-right"
-                    size={20}
-                    color={colors.mutedForeground}
-                  />
+                  {selection.isSelecting ? (
+                    <SelectionCheckbox checked={selection.selectedIds.includes(cls.id)} />
+                  ) : <Feather name="chevron-right" size={20} color={colors.mutedForeground} />}
                 </View>
               </Pressable>
             );
@@ -450,14 +451,15 @@ export default function ClassesScreen() {
 
       {/* Creation Modal */}
       <Modal visible={modalVisible} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingViewCompat style={styles.modalOverlay}>
           <Surface
             style={[
               styles.modalCard,
               { backgroundColor: colors.card, borderColor: colors.border },
             ]}
           >
-            <ScrollView
+            <KeyboardAwareScrollViewCompat
+              bottomOffset={100}
               contentContainerStyle={styles.modalContent}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
@@ -873,9 +875,9 @@ export default function ClassesScreen() {
                 />
                 <Button label="Annuler" secondary onPress={resetModal} />
               </View>
-            </ScrollView>
+            </KeyboardAwareScrollViewCompat>
           </Surface>
-        </View>
+        </KeyboardAvoidingViewCompat>
       </Modal>
     </Screen>
   );
@@ -1166,12 +1168,15 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   deleteButton: {
-    width: 32,
-    height: 32,
+    minHeight: 36,
     borderRadius: 8,
+    paddingHorizontal: 9,
+    flexDirection: 'row',
+    gap: 5,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  deleteActionText: { fontSize: 11, fontWeight: '700' },
   emptyContainer: {
     padding: 24,
     alignItems: 'center',

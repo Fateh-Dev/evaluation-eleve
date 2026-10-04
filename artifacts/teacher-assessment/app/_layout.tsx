@@ -14,6 +14,7 @@ import {
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { AppDataProvider } from '@/context/AppDataContext';
+import { ReminderProvider } from '@/context/ReminderContext';
 import { AppLockGate, SecurityProvider } from '@/context/SecurityContext';
 import { StorageProvider } from '@/context/StorageContext';
 import { ThemeProvider } from '@/context/ThemeContext';
@@ -63,13 +64,15 @@ export default function RootLayout() {
           <SecurityProvider>
             <AppLockGate>
               <AppDataProvider>
-                <StorageProvider>
-                  <GestureHandlerRootView style={{ flex: 1 }}>
-                    <KeyboardProvider>
-                      <RootLayoutNav />
-                    </KeyboardProvider>
-                  </GestureHandlerRootView>
-                </StorageProvider>
+                <ReminderProvider>
+                  <StorageProvider>
+                    <GestureHandlerRootView style={{ flex: 1 }}>
+                      <KeyboardProvider>
+                        <RootLayoutNav />
+                      </KeyboardProvider>
+                    </GestureHandlerRootView>
+                  </StorageProvider>
+                </ReminderProvider>
               </AppDataProvider>
             </AppLockGate>
           </SecurityProvider>

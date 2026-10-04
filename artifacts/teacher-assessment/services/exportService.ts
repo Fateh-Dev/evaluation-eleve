@@ -983,3 +983,90 @@ export function generateAssessmentPdfHtml(data: AssessmentExportData): string {
     </html>
   `;
 }
+
+export type SchedulePdfEntry = {
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  className: string;
+  subject?: string;
+  room?: string;
+  notes?: string;
+};
+
+export function generateSchedulePdfHtml(data: {
+  teacherName?: string;
+  schoolName?: string;
+  sessions: SchedulePdfEntry[];
+}): string {
+  const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[character] ?? character);
+  const days = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
+  const dayOrder = [6, 0, 1, 2, 3, 4, 5];
+  const daySections = dayOrder.map((dayOfWeek) => {
+    const sessions = data.sessions
+      .filter((session) => session.dayOfWeek === dayOfWeek)
+      .sort((left, right) => left.startTime.localeCompare(right.startTime));
+    const rows = sessions.length
+      ? sessions.map((session) => `
+          <tr>
+            <td>${escapeHtml(session.startTime)} – ${escapeHtml(session.endTime)}</td>
+            <td><strong>${escapeHtml(session.className)}</strong></td>
+            <td>${escapeHtml(session.subject || '—')}</td>
+            <td>${escapeHtml(session.room || '—')}</td>
+            <td>${escapeHtml(session.notes || '—')}</td>
+          </tr>`).join('')
+      : '<tr><td colspan="5" class="empty">Aucune séance programmée</td></tr>';
+    return `<section><h2>${days[dayOfWeek]}</h2><table><thead><tr><th>Horaire</th><th>Classe ou groupe</th><th>Matière</th><th>Salle</th><th>Informations</th></tr></thead><tbody>${rows}</tbody></table></section>`;
+  }).join('');
+
+  return `<!DOCTYPE html>
+    <html lang="fr"><head><meta charset="UTF-8"><title>Emploi du temps</title>
+    <style>
+      @page { size: A4 portrait; margin: 12mm; }
+      body { font-family: Arial, sans-serif; color: #1f2933; font-size: 10pt; }
+      h1 { margin: 0 0 5px; color: #183143; font-size: 22pt; }
+      .meta { margin-bottom: 18px; color: #52616b; font-size: 10pt; }
+      section { margin: 0 0 14px; break-inside: avoid; }
+      h2 { margin: 0; padding: 6px 9px; background: #e9eef2; color: #183143; font-size: 12pt; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { border: 1px solid #cbd5dc; padding: 6px 7px; text-align: left; vertical-align: top; }
+      th { background: #f3f6f8; font-size: 8pt; }
+      td { font-size: 9pt; }
+      .empty { color: #687782; font-style: italic; }
+      @media print { body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
+    </style></head><body>
+    <h1>Emploi du temps hebdomadaire</h1>
+    <div class="meta">${escapeHtml(data.schoolName || '')}${data.schoolName && data.teacherName ? ' · ' : ''}${data.teacherName ? `Enseignant(e) : ${escapeHtml(data.teacherName)}` : ''} · Édité le ${new Date().toLocaleDateString('fr-FR')}</div>
+    ${daySections}</body></html>`;
+}
+
+export async function exportSchedulePdf(data: {
+  teacherName?: string;
+  schoolName?: string;
+  sessions: SchedulePdfEntry[];
+}): Promise<void> {
+  const html = generateSchedulePdfHtml(data);
+  if (Platform.OS === 'web') {
+    await Print.printAsync({ html });
+    return;
+  }
+
+  const { base64 } = await Print.printToFileAsync({ html, base64: true });
+  if (!base64) throw new Error('Expo Print n’a pas fourni le contenu du PDF.');
+  const cacheDirectory = LegacyFS.cacheDirectory ?? Paths.cache.uri;
+  const targetUri = `${cacheDirectory.endsWith('/') ? cacheDirectory : `${cacheDirectory}/`}${Date.now()}-Emploi_du_temps.pdf`;
+  await LegacyFS.writeAsStringAsync(targetUri, base64, { encoding: LegacyFS.EncodingType.Base64 });
+  const fileInfo = await LegacyFS.getInfoAsync(targetUri);
+  if (!fileInfo.exists || fileInfo.size === 0) throw new Error('Le PDF n’a pas été enregistré correctement.');
+  if (!(await Sharing.isAvailableAsync())) {
+    Alert.alert('PDF généré', 'Le fichier a été créé dans le cache de l’application.');
+    return;
+  }
+  await Sharing.shareAsync(targetUri, {
+    mimeType: 'application/pdf',
+    dialogTitle: 'Enregistrer ou partager l’emploi du temps',
+    UTI: 'com.adobe.pdf',
+  });
+}
