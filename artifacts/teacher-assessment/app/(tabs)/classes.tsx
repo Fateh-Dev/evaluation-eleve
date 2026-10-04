@@ -1,8 +1,8 @@
+import { Alert } from '@/components/AppDialog';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
   Modal,
   Pressable,
   ScrollView,

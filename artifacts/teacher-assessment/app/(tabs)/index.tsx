@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { AppHeader, Button, ProgressBar, Screen, SectionTitle, Surface } from '@/components/AppShell';
@@ -27,6 +27,11 @@ export default function DashboardScreen() {
     : -1;
 
   const teacherGreeting = data.teacherName ? `Bonjour, ${data.teacherName}` : 'Bonjour, Enseignant';
+
+  if (!data.hydrated) return null;
+  if (!data.teacherName && !data.school.name && !hasClasses) {
+    return <Redirect href="/onboarding" />;
+  }
 
   return (
     <Screen>

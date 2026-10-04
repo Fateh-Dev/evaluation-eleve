@@ -1,9 +1,10 @@
+import { Alert } from '@/components/AppDialog';
 import { Feather } from '@expo/vector-icons';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, StyleSheet, Text, TextInput, View } from 'react-native';
-import { AppHeader, Button, ProgressBar, Screen, Surface } from '@/components/AppShell';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { AppHeader, Button, GuideAnchor, ProgressBar, Screen, Surface } from '@/components/AppShell';
 import { useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
 
@@ -107,7 +108,11 @@ export default function AssessmentAnalysisScreen() {
         compact
       />
 
-      <Surface style={styles.summary}>
+      <Surface
+        style={styles.summary}
+        guideTitle="Progression globale"
+        guideDescription={`${evaluatedTotal} réponses évaluées sur ${total}. Ce résumé donne l’avancement de l’évaluation.`}
+      >
         <View style={styles.summaryCopy}>
           <Text style={[styles.summaryLabel, { color: colors.mutedForeground }]}>PROGRESSION GLOBALE</Text>
           <Text style={[styles.summaryValue, { color: colors.foreground }]}>
@@ -123,7 +128,11 @@ export default function AssessmentAnalysisScreen() {
       </Surface>
 
       <AnalysisSectionTitle title="Statistiques visuelles" />
-      <Surface style={styles.chartsCard}>
+      <Surface
+        style={styles.chartsCard}
+        guideTitle="Statistiques visuelles"
+        guideDescription="Cette zone compare les présences et les taux d’acquisition par objectif."
+      >
         <Text style={[styles.chartTitle, { color: colors.foreground }]}>Présence à l’évaluation</Text>
         <View style={styles.attendanceChart}>
           <View
@@ -203,7 +212,12 @@ export default function AssessmentAnalysisScreen() {
       <AnalysisSectionTitle title={`Résultats par objectif (${currentObjectives.length})`} />
       <View style={styles.objectives}>
         {statistics.map(({ objective, stat }) => (
-          <Surface key={objective.id} style={styles.objectiveCard}>
+          <Surface
+            key={objective.id}
+            style={styles.objectiveCard}
+            guideTitle={`Objectif ${objective.order}`}
+            guideDescription="Cette carte détaille le taux d’acquisition et le nombre d’élèves dans chaque catégorie de résultat."
+          >
             <View style={styles.objectiveHeader}>
               <View style={styles.objectiveCopy}>
                 <Text style={[styles.objectiveNumber, { color: colors.primary }]}>
@@ -235,7 +249,11 @@ export default function AssessmentAnalysisScreen() {
 
       <AnalysisSectionTitle title="Remédiation pédagogique" />
       {editingRemediation ? (
-        <Surface style={styles.editor}>
+        <Surface
+          style={styles.editor}
+          guideTitle="Modifier les décisions"
+          guideDescription="Saisissez les décisions individuelles et celles prévues pour la classe, puis enregistrez-les."
+        >
           <Text style={[styles.editorLabel, { color: colors.mutedForeground }]}>DÉCISION INDIVIDUELLE</Text>
           <TextInput
             multiline
@@ -257,6 +275,12 @@ export default function AssessmentAnalysisScreen() {
         </Surface>
       ) : (
         <>
+          <GuideAnchor
+            id="analysis-remediation"
+            title="Décisions de remédiation"
+            description="Consultez les recommandations individuelles et celles prévues pour la classe."
+          >
+          <View>
           <Surface style={styles.remediation}>
             <View style={[styles.remediationIcon, { backgroundColor: colors.accent }]}>
               <Feather name="user" size={17} color={colors.primary} />
@@ -283,6 +307,8 @@ export default function AssessmentAnalysisScreen() {
               </Text>
             </View>
           </Surface>
+          </View>
+          </GuideAnchor>
         </>
       )}
 
@@ -291,7 +317,6 @@ export default function AssessmentAnalysisScreen() {
           <Button
             label="Modifier les décisions"
             icon="edit-3"
-            compact
             secondary
             onPress={() => setEditingRemediation(true)}
           />

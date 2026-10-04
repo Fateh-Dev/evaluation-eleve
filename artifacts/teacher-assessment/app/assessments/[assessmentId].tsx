@@ -1,8 +1,8 @@
+import { Alert } from '@/components/AppDialog';
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert,
   Dimensions,
   Modal,
   Platform,
@@ -13,7 +13,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { AppHeader, Button, Screen, SectionTitle, Surface, ValueMark } from '@/components/AppShell';
+import { AppHeader, Button, GuideAnchor, Screen, SectionTitle, Surface, ValueMark } from '@/components/AppShell';
 import { EvaluationValue, useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
 
@@ -203,23 +203,31 @@ export default function AssessmentEvaluationScreen() {
         compact
       />
 
-      <View style={styles.topLine}>
+      <GuideAnchor
+        id="evaluation-actions"
+        title="Actions de l’évaluation"
+        description="Enregistrez les résultats, gérez les objectifs, ouvrez l’analyse ou exportez la grille."
+        style={styles.topLine}
+      >
         <View style={styles.topActions}>
-          <Button
-            label="Enregistrer"
-            icon="save"
-            compact
-            onPress={() => {
-              void save();
-            }}
-          />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Enregistrer"
+            onPress={() => { void save(); }}
+            style={({ pressed }) => [
+              styles.topIconBtn,
+              { backgroundColor: colors.primary, borderColor: colors.primary, opacity: pressed ? 0.8 : 1 },
+            ]}
+          >
+            <Feather name="save" size={20} color={colors.primaryForeground} />
+          </Pressable>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Objectifs"
             onPress={() => setObjectivesModalVisible(true)}
             style={[styles.topIconBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
           >
-            <Feather name="list" size={16} color={colors.foreground} />
+            <Feather name="list" size={20} color={colors.foreground} />
           </Pressable>
           <Pressable
             accessibilityRole="button"
@@ -227,7 +235,7 @@ export default function AssessmentEvaluationScreen() {
             onPress={() => router.push(`/assessments/${currentAssessment.id}/analysis`)}
             style={[styles.topIconBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
           >
-            <Feather name="bar-chart-2" size={16} color={colors.foreground} />
+            <Feather name="bar-chart-2" size={20} color={colors.foreground} />
           </Pressable>
           <Pressable
             accessibilityRole="button"
@@ -235,27 +243,31 @@ export default function AssessmentEvaluationScreen() {
             onPress={() => router.push(`/assessments/${currentAssessment.id}/document`)}
             style={[styles.topIconBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
           >
-            <Feather name="file-text" size={16} color={colors.foreground} />
-          </Pressable>
-          <Pressable
-            onPress={handleDeleteAssessment}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Supprimer l’évaluation"
-            style={[styles.deleteTopBtn, { backgroundColor: colors.errorSurface }]}
-          >
-            <Feather name="trash-2" size={16} color={colors.errorForeground} />
+            <Feather name="file-text" size={20} color={colors.foreground} />
           </Pressable>
         </View>
-      </View>
-      {savedMessage ? (
+        <Pressable
+          onPress={handleDeleteAssessment}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Supprimer l’évaluation"
+          style={[styles.deleteTopBtn, { backgroundColor: colors.errorSurface, borderColor: colors.errorForeground }]}
+        >
+          <Feather name="trash-2" size={20} color={colors.errorForeground} />
+        </Pressable>
+      </GuideAnchor>
+        {savedMessage ? (
         <View style={[styles.savedBanner, { backgroundColor: colors.successSurface, borderColor: colors.successForeground }]} accessibilityLiveRegion="polite">
           <Feather name="check-circle" size={16} color={colors.successForeground} />
           <Text style={[styles.savedBannerText, { color: colors.successForeground }]}>{savedMessage}</Text>
         </View>
       ) : null}
 
-      <Surface style={styles.metaCard}>
+      <Surface
+        style={styles.metaCard}
+        guideTitle="Résumé de l’évaluation"
+        guideDescription="Affiche les informations de la classe, de la compétence et de la séance."
+      >
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={
@@ -606,7 +618,11 @@ export default function AssessmentEvaluationScreen() {
           </View>
 
           <View style={styles.mobileFooter}>
-            <Button label={pupilIndex === currentPupils.length - 1 ? 'Terminer' : 'Enregistrer et suivant'} icon="arrow-right" secondary onPress={() => { void saveAndNext(); }} />
+            <Button
+              label={pupilIndex === currentPupils.length - 1 ? 'Terminer' : 'Enregistrer et suivant'}
+              icon={pupilIndex === currentPupils.length - 1 ? 'check' : 'arrow-right'}
+              onPress={() => { void saveAndNext(); }}
+            />
           </View>
         </ScrollView>
       )}
@@ -695,17 +711,19 @@ export default function AssessmentEvaluationScreen() {
 }
 
 const styles = StyleSheet.create({
-  topLine: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12 },
+  topLine: { flexDirection: 'row', flexWrap: 'nowrap', alignItems: 'center', justifyContent: 'space-between', gap: 14, marginBottom: 12 },
   savedBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, marginBottom: 10 },
   savedBannerText: { fontSize: 12, fontWeight: '700' },
-  topActions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 4, flexShrink: 1 },
-  topIconBtn: { width: 32, height: 32, borderWidth: 1, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  topActions: { flex: 1, minWidth: 0, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
+  topIconBtn: { width: 48, height: 48, borderWidth: 1, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   deleteTopBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+    width: 48,
+    height: 48,
+    borderWidth: 1,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
+    marginLeft: 4,
   },
   metaCard: { gap: 14, padding: 14, marginBottom: 12 },
   metaHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, minHeight: 36 },

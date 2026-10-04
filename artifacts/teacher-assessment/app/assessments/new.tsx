@@ -1,8 +1,8 @@
+import { Alert } from '@/components/AppDialog';
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -168,7 +168,11 @@ export default function NewAssessmentScreen() {
       />
 
       {/* Class Selector */}
-      <Surface style={styles.sectionCard}>
+      <Surface
+        style={styles.sectionCard}
+        guideTitle="Choisir la classe"
+        guideDescription="Sélectionnez le groupe d’élèves et vérifiez le niveau associé avant de créer l’évaluation."
+      >
         <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>
           1. CHOISIR LA CLASSE
         </Text>
@@ -212,7 +216,11 @@ export default function NewAssessmentScreen() {
       </Surface>
 
       {/* Competencies configured for this school year and level */}
-      <Surface style={styles.sectionCard}>
+      <Surface
+        style={styles.sectionCard}
+        guideTitle="Compétences associées"
+        guideDescription="Choisissez une compétence disponible pour le niveau et l’année scolaire de la classe."
+      >
         <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>
           2. COMPÉTENCES ASSOCIÉES À {selectedClass.level.toLocaleUpperCase()}
         </Text>
@@ -286,7 +294,11 @@ export default function NewAssessmentScreen() {
       </Surface>
 
       {/* Details Form */}
-      <Surface style={styles.sectionCard}>
+      <Surface
+        style={styles.sectionCard}
+        guideTitle="Détails de la séance"
+        guideDescription="Renseignez le titre, le support, l’objectif de séance et la date de l’évaluation."
+      >
         <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>
           3. DÉTAILS DE LA SÉANCE
         </Text>
@@ -361,7 +373,11 @@ export default function NewAssessmentScreen() {
       </Surface>
 
       {/* Objectives Configuration Section */}
-      <Surface style={styles.sectionCard}>
+      <Surface
+        style={styles.sectionCard}
+        guideTitle="Objectifs de la compétence"
+        guideDescription="Vérifiez ou adaptez les objectifs qui seront évalués pour cette séance."
+      >
         <View style={styles.objectivesHeader}>
           <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>
             4. OBJECTIFS DE CETTE COMPÉTENCE ({objectives.length})

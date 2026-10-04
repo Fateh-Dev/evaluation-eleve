@@ -1,6 +1,7 @@
+import { Alert } from '@/components/AppDialog';
 import { Feather } from '@expo/vector-icons';
 import React, { useMemo, useState } from 'react';
-import { Alert, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { AppHeader, Button, Screen, SectionTitle, Surface } from '@/components/AppShell';
 import { useColors } from '@/hooks/useColors';
 import { useStorage } from '@/context/StorageContext';

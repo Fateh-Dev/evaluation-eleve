@@ -1,8 +1,9 @@
+import { Alert } from '@/components/AppDialog';
 import { Paths } from 'expo-file-system';
 import * as LegacyFS from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import { Alert, Platform } from 'react-native';
+import { Platform } from 'react-native';
 import JSZip from 'jszip';
 
 export type AssessmentExportData = {

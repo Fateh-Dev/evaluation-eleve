@@ -1,7 +1,8 @@
+import { Alert } from '@/components/AppDialog';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
-import { Alert, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { AppHeader, Button, Screen, SectionTitle, Surface } from '@/components/AppShell';
 import { useAppData } from '@/context/AppDataContext';

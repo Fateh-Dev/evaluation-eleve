@@ -1,3 +1,4 @@
+import { Alert } from '@/components/AppDialog';
 import { Feather } from '@expo/vector-icons';
 import { File } from 'expo-file-system';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -5,7 +6,6 @@ import * as Sharing from 'expo-sharing';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
-  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -22,6 +22,7 @@ import {
   Surface,
 } from '@/components/AppShell';
 import { PinEntryScreen } from '@/components/PinEntryScreen';
+import { RecoveryCodeDialog } from '@/components/RecoveryCodeDialog';
 import { useAppData } from '@/context/AppDataContext';
 import { useSecurity } from '@/context/SecurityContext';
 import { useColors } from '@/hooks/useColors';
@@ -35,6 +36,10 @@ export default function SettingsScreen() {
   const [editingPin, setEditingPin] = useState(false);
   const [confirmingPin, setConfirmingPin] = useState(false);
   const [pinError, setPinError] = useState('');
+  const [recoveryCode, setRecoveryCode] = useState('');
+  const [creatingRecoveryCode, setCreatingRecoveryCode] = useState(false);
+  const [recoveryPinInput, setRecoveryPinInput] = useState('');
+  const [recoveryPinError, setRecoveryPinError] = useState('');
   const [resetModalVisible, setResetModalVisible] = useState(false);
   const [resetStage, setResetStage] = useState<'confirm' | 'pin' | 'type'>('confirm');
   const [resetPin, setResetPin] = useState('');
@@ -121,9 +126,9 @@ export default function SettingsScreen() {
   };
   const handleSavePin = async (pin: string) => {
     try {
-      await security.setPin(pin);
+      const code = await security.setPin(pin);
       closePinSetup();
-      Alert.alert('Code PIN activé', 'Le code PIN sera demandé à chaque ouverture de l’application.');
+      setRecoveryCode(code);
     } catch {
       setPinError('Impossible d’enregistrer le code PIN. Réessayez.');
       setPinConfirmation('');
@@ -162,6 +167,26 @@ export default function SettingsScreen() {
     { text: 'Annuler', style: 'cancel' },
     { text: 'Désactiver', style: 'destructive', onPress: () => { void security.removePin(); } },
   ]);
+  const handleRecoveryPinDigit = (digit: string) => {
+    if (recoveryPinInput.length >= 4) return;
+    const nextPin = `${recoveryPinInput}${digit}`;
+    setRecoveryPinInput(nextPin);
+    setRecoveryPinError('');
+    if (nextPin.length !== 4) return;
+    void security.createRecoveryCode(nextPin).then((code) => {
+      setRecoveryPinInput('');
+      if (!code) {
+        setRecoveryPinError('Code PIN incorrect.');
+        return;
+      }
+      setCreatingRecoveryCode(false);
+      setRecoveryPinError('');
+      setRecoveryCode(code);
+    }).catch(() => {
+      setRecoveryPinInput('');
+      setRecoveryPinError('Impossible de générer le code sécurisé. Réessayez.');
+    });
+  };
   const handleToggleBiometric = async () => {
     if (security.biometricEnabled) {
       await security.setBiometricEnabled(false);
@@ -520,6 +545,7 @@ export default function SettingsScreen() {
           <Text style={[styles.enabled, { color: security.hasPin ? colors.successForeground : colors.mutedForeground }]}>{security.hasPin ? 'Activé' : 'Désactivé'}</Text>
         </View>
         {!security.hasPin && !editingPin ? <Button label="Activer le code PIN" compact onPress={() => { setPinInput(''); setPinConfirmation(''); setPinError(''); setConfirmingPin(false); setEditingPin(true); }} icon="lock" /> : null}
+        {security.hasPin ? <Button label="Créer / remplacer le code de récupération" compact secondary onPress={() => { setRecoveryPinInput(''); setRecoveryPinError(''); setCreatingRecoveryCode(true); }} icon="key" /> : null}
         {security.hasPin ? <Button label="Désactiver le code PIN" compact secondary onPress={handleRemovePin} icon="unlock" /> : null}
         {security.hasPin && security.biometricAvailable ? <Button label={security.biometricEnabled ? 'Désactiver visage / empreinte' : 'Activer visage / empreinte'} compact secondary onPress={() => { void handleToggleBiometric(); }} icon={security.biometricEnabled ? 'shield-off' : 'shield'} /> : null}
         {security.hasPin && !security.biometricAvailable ? <Text style={[styles.help, { color: colors.mutedForeground }]}>La biométrie sera disponible après l’enregistrement d’un visage ou d’une empreinte dans les réglages de l’appareil.</Text> : null}
@@ -536,6 +562,31 @@ export default function SettingsScreen() {
           footer={
             <Pressable
               onPress={closePinSetup}
+              style={({ pressed }) => [styles.cancelPinButton, { borderColor: colors.border, opacity: pressed ? 0.65 : 1 }]}
+              accessibilityRole="button"
+            >
+              <Text style={[styles.cancelPinText, { color: colors.mutedForeground }]}>Annuler</Text>
+            </Pressable>
+          }
+        />
+      </Modal>
+      <RecoveryCodeDialog code={recoveryCode} onDone={() => setRecoveryCode('')} />
+      <Modal
+        visible={creatingRecoveryCode}
+        animationType="fade"
+        onRequestClose={() => { setCreatingRecoveryCode(false); setRecoveryPinInput(''); setRecoveryPinError(''); }}
+      >
+        <PinEntryScreen
+          title="Confirmez votre identité"
+          subtitle="Saisissez le PIN actuel pour générer un nouveau code de récupération"
+          pin={recoveryPinInput}
+          error={recoveryPinError}
+          hint="Votre ancien code de récupération sera remplacé"
+          onDigit={handleRecoveryPinDigit}
+          onBackspace={() => { setRecoveryPinInput((value) => value.slice(0, -1)); setRecoveryPinError(''); }}
+          footer={
+            <Pressable
+              onPress={() => { setCreatingRecoveryCode(false); setRecoveryPinInput(''); setRecoveryPinError(''); }}
               style={({ pressed }) => [styles.cancelPinButton, { borderColor: colors.border, opacity: pressed ? 0.65 : 1 }]}
               accessibilityRole="button"
             >

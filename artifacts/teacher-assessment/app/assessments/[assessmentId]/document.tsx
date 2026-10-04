@@ -1,9 +1,9 @@
+import { Alert } from '@/components/AppDialog';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Platform,
   Pressable,
   ScrollView,
@@ -12,7 +12,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { AppHeader, Screen, Surface } from '@/components/AppShell';
+import { AppHeader, GuideAnchor, Screen, Surface } from '@/components/AppShell';
 import { useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
 import {
@@ -213,6 +213,11 @@ export default function AssessmentDocumentScreen() {
         compact
       />
 
+      <GuideAnchor
+        id="document-export-actions"
+        title="Exporter ou partager"
+        description="Choisissez Excel, Word ou PDF, ou partagez le rapport généré."
+      >
       <View style={[styles.actionsBar, { borderColor: colors.border, backgroundColor: colors.card }]}>
         <Pressable
           onPress={handleExportExcel}
@@ -272,6 +277,7 @@ export default function AssessmentDocumentScreen() {
           <Feather name="share-2" size={19} color={colors.primary} />
         </Pressable>
       </View>
+      </GuideAnchor>
 
       {exportingFormat && (
         <Surface style={styles.loadingBanner}>
@@ -285,6 +291,11 @@ export default function AssessmentDocumentScreen() {
       {/* The Printable Document Container */}
       <Surface style={[styles.sheet, { backgroundColor: '#FFFFFF', borderColor: colors.border }]}>
         {/* Document Header */}
+        <GuideAnchor
+          id="document-school-details"
+          title="Informations de l’évaluation"
+          description="Vérifiez l’établissement, la classe, l’enseignant, la compétence et le support avant l’export."
+        >
         <Text style={styles.docHeaderLine1}>
           Établissement : <Text style={styles.bold}>{data.school.name || '—'}</Text> | Niveau :{' '}
           <Text style={styles.bold}>{currentClass.level || '—'}</Text>
@@ -303,11 +314,18 @@ export default function AssessmentDocumentScreen() {
           <Text style={styles.bold}>Support : </Text>
           {currentAssessment.support || 'Support pédagogique'}
         </Text>
+        </GuideAnchor>
 
         {/* Objectives Section */}
-        <Text style={styles.objectivesHeading}>
-          Objectifs d’évaluation ({currentObjectives.length} Objectifs) :
-        </Text>
+        <GuideAnchor
+          id="document-objectives"
+          title="Objectifs d’évaluation"
+          description="Cette partie du rapport présente les objectifs utilisés pour noter les élèves."
+        >
+          <Text style={styles.objectivesHeading}>
+            Objectifs d’évaluation ({currentObjectives.length} Objectifs) :
+          </Text>
+        </GuideAnchor>
         <View style={styles.objectivesList}>
           {currentObjectives.map((obj, index) => (
             <View key={obj.id} style={styles.objectiveItem}>
@@ -318,9 +336,15 @@ export default function AssessmentDocumentScreen() {
         </View>
 
         {/* Results Grid Section Title */}
-        <Text style={styles.gridTitle}>
-          Grille d’analyse des résultats — Classe : {currentClass.name}
-        </Text>
+        <GuideAnchor
+          id="document-results-grid"
+          title="Grille des résultats"
+          description="La grille regroupe les élèves, leur présence et leurs résultats par objectif."
+        >
+          <Text style={styles.gridTitle}>
+            Grille d’analyse des résultats — Classe : {currentClass.name}
+          </Text>
+        </GuideAnchor>
 
         {/* Scrollable Table Container */}
         <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={styles.tableScroll}>

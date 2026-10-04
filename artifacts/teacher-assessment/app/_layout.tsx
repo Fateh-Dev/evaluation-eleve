@@ -3,6 +3,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { AppDialogHost } from '@/components/AppDialog';
 import {
   Inter_400Regular,
   Inter_500Medium,
@@ -22,9 +23,12 @@ void SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 function RootLayoutNav() {
   return (
-    <Stack screenOptions={{ headerShown: false, headerBackTitle: 'Back' }}>
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-    </Stack>
+    <>
+      <Stack screenOptions={{ headerShown: false, headerBackTitle: 'Back' }}>
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      </Stack>
+      <AppDialogHost />
+    </>
   );
 }
 

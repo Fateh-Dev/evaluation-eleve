@@ -1,7 +1,8 @@
+import { Alert } from '@/components/AppDialog';
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useState } from 'react';
-import { Alert, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { AppHeader, Button, Screen, SectionTitle, Surface, ValueMark } from '@/components/AppShell';
 import { useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';

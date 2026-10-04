@@ -1,7 +1,7 @@
+import { Alert } from '@/components/AppDialog';
 import { Feather } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
   Pressable,
   StyleSheet,
   Text,
@@ -356,7 +356,11 @@ export default function PedagogicalConfigurationManager() {
   return (
     <>
       <SectionTitle title="Configuration pédagogique par année" />
-      <Surface style={[styles.card, { borderColor: colors.border }]}>
+      <Surface
+        style={[styles.card, { borderColor: colors.border }]}
+        guideTitle={stepTitles[step]}
+        guideDescription="Le guide de configuration suit l’ordre année scolaire, niveaux, compétences puis objectifs."
+      >
         <Text style={[styles.help, { color: colors.mutedForeground }]}>
           Configurez progressivement chaque année. Les changements restent
           indépendants d’une année scolaire à l’autre.
