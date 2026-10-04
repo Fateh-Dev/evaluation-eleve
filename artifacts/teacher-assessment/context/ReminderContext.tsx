@@ -39,7 +39,7 @@ setNotificationHandler({
   handleNotification: async () => ({
     shouldShowBanner: true,
     shouldShowList: true,
-    shouldPlaySound: false,
+    shouldPlaySound: true,
     shouldSetBadge: false,
   }),
 });
@@ -175,7 +175,7 @@ export function ReminderProvider({ children }: PropsWithChildren) {
             title: reminder.title,
             body: reminder.body,
             data: reminder.data,
-            sound: false,
+            sound: true,
           },
           trigger: {
             type: SchedulableTriggerInputTypes.DATE,
