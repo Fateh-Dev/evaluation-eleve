@@ -42,6 +42,7 @@ export default function SettingsScreen() {
   const [recoveryPinInput, setRecoveryPinInput] = useState('');
   const [recoveryPinError, setRecoveryPinError] = useState('');
   const [resetModalVisible, setResetModalVisible] = useState(false);
+  const [resetActionArmed, setResetActionArmed] = useState(false);
   const [resetStage, setResetStage] = useState<'confirm' | 'pin' | 'type'>('confirm');
   const [resetPin, setResetPin] = useState('');
   const [resetPinError, setResetPinError] = useState('');
@@ -271,7 +272,7 @@ export default function SettingsScreen() {
   };
 
   return (
-    <Screen>
+    <Screen onTouchStart={() => setResetActionArmed(false)}>
       <AppHeader
         eyebrow="Configuration & Profil"
         title="Paramètres"
@@ -613,28 +614,40 @@ export default function SettingsScreen() {
           Vider l'ensemble des données enregistrées (classes, compétences,
           évaluations et élèves) pour repartir d'une base vierge.
         </Text>
-        <Pressable
-          onPress={() => {
-            setResetStage('confirm');
-            setResetConfirmation('');
-            setResetError('');
-            setResetModalVisible(true);
-          }}
-          style={({ pressed }) => [
-            styles.dangerButton,
-            {
-              backgroundColor: colors.errorSurface,
-              opacity: pressed ? 0.7 : 1,
-            },
-          ]}
-        >
-          <Feather name="trash-2" size={16} color={colors.errorForeground} />
-          <Text
-            style={[styles.dangerButtonText, { color: colors.errorForeground }]}
+        {resetActionArmed ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Ouvrir la confirmation de réinitialisation"
+            onTouchStart={(event) => event.stopPropagation()}
+            onPress={() => {
+              setResetActionArmed(false);
+              setResetStage('confirm');
+              setResetConfirmation('');
+              setResetError('');
+              setResetModalVisible(true);
+            }}
+            style={({ pressed }) => [
+              styles.dangerButton,
+              { backgroundColor: colors.card, borderColor: colors.destructive, borderWidth: 2, opacity: pressed ? 0.7 : 1 },
+            ]}
           >
-            Vider toute la base de données
-          </Text>
-        </Pressable>
+            <Feather name="trash-2" size={16} color={colors.errorForeground} />
+            <Text style={[styles.dangerButtonText, { color: colors.errorForeground }]}>Vider toute la base de données</Text>
+          </Pressable>
+        ) : (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityHint="Maintenez appuyé pour afficher l’action de réinitialisation."
+            onLongPress={() => setResetActionArmed(true)}
+            style={({ pressed }) => [
+              styles.dangerButton,
+              { backgroundColor: colors.errorSurface, opacity: pressed ? 0.7 : 1 },
+            ]}
+          >
+            <Feather name="trash-2" size={16} color={colors.errorForeground} />
+            <Text style={[styles.dangerButtonText, { color: colors.errorForeground }]}>Maintenir pour réinitialiser</Text>
+          </Pressable>
+        )}
       </Surface>
       <Modal
         visible={resetModalVisible}

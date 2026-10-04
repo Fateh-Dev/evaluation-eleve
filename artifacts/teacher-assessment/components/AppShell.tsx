@@ -11,7 +11,7 @@ type ScreenGuideValue = {
 
 const ScreenGuideContext = createContext<ScreenGuideValue | null>(null);
 
-export function Screen({ children, scroll = true, bottomPadding }: PropsWithChildren<{ scroll?: boolean; bottomPadding?: number }>) {
+export function Screen({ children, scroll = true, bottomPadding, onTouchStart }: PropsWithChildren<{ scroll?: boolean; bottomPadding?: number; onTouchStart?: () => void }>) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const [guideMessage, setGuideMessage] = useState<{ title: string; description: string } | null>(null);
@@ -23,6 +23,7 @@ export function Screen({ children, scroll = true, bottomPadding }: PropsWithChil
   const content = (
     <ScreenGuideContext.Provider value={guideContext}>
       <View
+        onTouchStart={onTouchStart}
         style={[styles.screen, { backgroundColor: colors.background, paddingTop: insets.top + 18, paddingBottom: insets.bottom + (bottomPadding ?? 120) }]}
       >
         {children}
@@ -84,7 +85,7 @@ export function KeyboardAvoidingViewCompat({ children, style }: PropsWithChildre
   );
 }
 
-export function AppHeader({ eyebrow, title, onBack, compact = true }: { eyebrow?: string; title: string; onBack?: () => void; compact?: boolean }) {
+export function AppHeader({ eyebrow, title, onBack, onTitleLongPress, titleActionArmed = false, compact = true }: { eyebrow?: string; title: string; onBack?: () => void; onTitleLongPress?: () => void; titleActionArmed?: boolean; compact?: boolean }) {
   const colors = useColors();
   const guide = useContext(ScreenGuideContext);
   return (
@@ -97,9 +98,17 @@ export function AppHeader({ eyebrow, title, onBack, compact = true }: { eyebrow?
           accessible
           accessibilityLabel="Logo de l’établissement Chaibeddra"
         />
-        <View style={styles.headerText}>
+        <View style={[styles.headerText, titleActionArmed && { borderWidth: 2, borderColor: colors.destructive, backgroundColor: colors.card, borderRadius: 8, padding: 4 }]}>
           {eyebrow ? <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.eyebrow, { color: colors.primary }]}>{eyebrow.toUpperCase()}</Text> : null}
-          <Text numberOfLines={2} ellipsizeMode="tail" style={[styles.title, compact && styles.compactTitle, { color: colors.foreground }]}>{title}</Text>
+          <Text
+            numberOfLines={2}
+            ellipsizeMode="tail"
+            onLongPress={onTitleLongPress}
+            accessibilityHint={onTitleLongPress ? 'Maintenez appuyé pour afficher les actions de suppression.' : undefined}
+            style={[styles.title, compact && styles.compactTitle, { color: colors.foreground }]}
+          >
+            {title}
+          </Text>
         </View>
       </View>
       <View style={styles.headerActions}>
@@ -123,13 +132,14 @@ export function AppHeader({ eyebrow, title, onBack, compact = true }: { eyebrow?
   );
 }
 
-export function Button({ label, onPress, secondary = false, compact = false, icon, disabled = false }: {
-  label: string; onPress: () => void; secondary?: boolean; compact?: boolean; icon?: keyof typeof Feather.glyphMap; disabled?: boolean;
+export function Button({ label, onPress, secondary = false, compact = false, icon, disabled = false, onTouchStart }: {
+  label: string; onPress: () => void; secondary?: boolean; compact?: boolean; icon?: keyof typeof Feather.glyphMap; disabled?: boolean; onTouchStart?: (event: import('react-native').GestureResponderEvent) => void;
 }) {
   const colors = useColors();
   return (
     <Pressable
       onPress={disabled ? undefined : () => onPress()}
+      onTouchStart={onTouchStart}
       disabled={disabled}
       accessibilityRole="button"
       style={({ pressed }) => [

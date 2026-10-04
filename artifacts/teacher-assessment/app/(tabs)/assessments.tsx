@@ -11,6 +11,7 @@ export default function AssessmentsScreen() {
   const colors = useColors();
   const data = useAppData();
   const [selectedClassId, setSelectedClassId] = useState<string>('all');
+  const [deleteArmedAssessmentId, setDeleteArmedAssessmentId] = useState<string | null>(null);
 
   const filteredAssessments = selectedClassId === 'all'
     ? data.assessments
@@ -35,7 +36,7 @@ export default function AssessmentsScreen() {
   };
 
   return (
-    <Screen>
+    <Screen onTouchStart={() => setDeleteArmedAssessmentId(null)}>
       <AppHeader eyebrow="Suivi pédagogique" title="Évaluations & Compétences" />
 
       {/* Class Filter Bar */}
@@ -152,7 +153,17 @@ export default function AssessmentsScreen() {
             const progressPercent = Math.round((evaluatedTotal / totalPossible) * 100);
 
             return (
-              <Surface key={item.id} style={styles.assessmentCard}>
+              <Surface
+                key={item.id}
+                style={[
+                  styles.assessmentCard,
+                  deleteArmedAssessmentId === item.id && {
+                    backgroundColor: colors.card,
+                    borderColor: colors.destructive,
+                    borderWidth: 2,
+                  },
+                ]}
+              >
                 <View style={styles.cardTop}>
                   <View style={styles.badgeRow}>
                     <View style={[styles.classPill, { backgroundColor: colors.secondary }]}>
@@ -171,9 +182,16 @@ export default function AssessmentsScreen() {
                   </Text>
                 </View>
 
-                <Text style={[styles.assessmentTitle, { color: colors.foreground }]}>
-                  {item.title}
-                </Text>
+                <Pressable
+                  accessibilityHint="Maintenez appuyé pour afficher l’action Supprimer."
+                  onTouchStart={(event) => event.stopPropagation()}
+                  onLongPress={() => setDeleteArmedAssessmentId(item.id)}
+                  onPress={() => {
+                    if (deleteArmedAssessmentId !== null) setDeleteArmedAssessmentId(item.id);
+                  }}
+                >
+                  <Text style={[styles.assessmentTitle, { color: colors.foreground }]}>{item.title}</Text>
+                </Pressable>
 
                 <View style={styles.metaRow}>
                   <Text style={[styles.metaText, { color: colors.mutedForeground }]}>
@@ -209,13 +227,21 @@ export default function AssessmentsScreen() {
                       router.push(`/assessments/${item.id}/document`);
                     }}
                   />
-                  <Pressable
-                    onPress={() => handleDeleteAssessment(item.id, item.title)}
-                    hitSlop={8}
-                    style={[styles.deleteBtn, { backgroundColor: colors.errorSurface }]}
-                  >
-                    <Feather name="trash-2" size={15} color={colors.errorForeground} />
-                  </Pressable>
+                  {deleteArmedAssessmentId === item.id ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Supprimer ${item.title}`}
+                      onTouchStart={(event) => event.stopPropagation()}
+                      onPress={() => {
+                        setDeleteArmedAssessmentId(null);
+                        handleDeleteAssessment(item.id, item.title);
+                      }}
+                      style={[styles.deleteBtn, { backgroundColor: colors.errorSurface }]}
+                    >
+                      <Feather name="trash-2" size={15} color={colors.errorForeground} />
+                      <Text style={[styles.deleteActionText, { color: colors.errorForeground }]}>Supprimer</Text>
+                    </Pressable>
+                  ) : null}
                 </View>
               </Surface>
             );
@@ -314,12 +340,15 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   deleteBtn: {
-    width: 32,
-    height: 32,
+    minHeight: 36,
     borderRadius: 8,
+    paddingHorizontal: 9,
+    flexDirection: 'row',
+    gap: 5,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  deleteActionText: { fontSize: 11, fontWeight: '700' },
   emptyContainer: {
     padding: 24,
     alignItems: 'center',

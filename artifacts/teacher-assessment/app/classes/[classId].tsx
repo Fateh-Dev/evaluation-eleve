@@ -1,7 +1,7 @@
 import { Alert } from '@/components/AppDialog';
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -35,6 +35,10 @@ export default function ClassDetailScreen() {
   }, [data.assessments, currentClass.id]);
 
   const [activeTab, setActiveTab] = useState<'competencies' | 'pupils'>('competencies');
+  const [deleteArmedAssessmentId, setDeleteArmedAssessmentId] = useState<string | null>(null);
+  const [deleteArmedPupilId, setDeleteArmedPupilId] = useState<string | null>(null);
+  const [classDeleteArmed, setClassDeleteArmed] = useState(false);
+  const suppressPupilNavigation = useRef(false);
 
   const [classNameModalVisible, setClassNameModalVisible] = useState(false);
   const [classNameInput, setClassNameInput] = useState('');
@@ -166,11 +170,13 @@ export default function ClassDetailScreen() {
   }
 
   return (
-    <Screen>
+    <Screen onTouchStart={() => { setDeleteArmedAssessmentId(null); setDeleteArmedPupilId(null); setClassDeleteArmed(false); }}>
       <AppHeader
         eyebrow="Classe"
         title={currentClass.name}
         onBack={() => router.back()}
+        onTitleLongPress={() => setClassDeleteArmed(true)}
+        titleActionArmed={classDeleteArmed}
         compact
       />
 
@@ -285,7 +291,27 @@ export default function ClassDetailScreen() {
                 const progressPercent = Math.round((evaluatedTotal / totalPossible) * 100);
 
                 return (
-                  <Surface key={item.id} style={styles.assessmentCard}>
+                  <Surface
+                    key={item.id}
+                    style={[
+                      styles.assessmentCard,
+                      deleteArmedAssessmentId === item.id && {
+                        backgroundColor: colors.card,
+                        borderColor: colors.destructive,
+                        borderWidth: 2,
+                      },
+                    ]}
+                  >
+                    <Pressable
+                      delayLongPress={500}
+                      accessibilityHint="Maintenez appuyé sur la compétence pour afficher l’action Supprimer."
+                      onTouchStart={(event) => event.stopPropagation()}
+                      onLongPress={() => setDeleteArmedAssessmentId(item.id)}
+                      onPress={() => {
+                        if (deleteArmedAssessmentId !== null) setDeleteArmedAssessmentId(item.id);
+                      }}
+                      style={{ gap: 10 }}
+                    >
                     <View style={styles.assessmentCardHeader}>
                       <View style={styles.headerLeft}>
                         <View style={[styles.competencyBadge, { backgroundColor: colors.accent }]}>
@@ -293,9 +319,7 @@ export default function ClassDetailScreen() {
                             {item.competency}
                           </Text>
                         </View>
-                        <Text style={[styles.assessmentTitle, { color: colors.foreground }]}>
-                          {item.title}
-                        </Text>
+                        <Text style={[styles.assessmentTitle, { color: colors.foreground }]}>{item.title}</Text>
                       </View>
                       <Text style={[styles.progressNumber, { color: colors.primary }]}>
                         {progressPercent}%
@@ -315,6 +339,7 @@ export default function ClassDetailScreen() {
                         {item.date}
                       </Text>
                     </View>
+                    </Pressable>
 
                     <View style={styles.cardActions}>
                       <Button
@@ -336,13 +361,21 @@ export default function ClassDetailScreen() {
                           router.push(`/assessments/${item.id}/document`);
                         }}
                       />
-                      <Pressable
-                        onPress={() => handleDeleteAssessment(item.id, item.title)}
-                        hitSlop={8}
-                        style={[styles.deleteAssessBtn, { backgroundColor: colors.errorSurface }]}
-                      >
-                        <Feather name="trash-2" size={15} color={colors.errorForeground} />
-                      </Pressable>
+                      {deleteArmedAssessmentId === item.id ? (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Supprimer ${item.title}`}
+                          onTouchStart={(event) => event.stopPropagation()}
+                          onPress={() => {
+                            setDeleteArmedAssessmentId(null);
+                            handleDeleteAssessment(item.id, item.title);
+                          }}
+                          style={[styles.deleteAssessBtn, { backgroundColor: colors.errorSurface }]}
+                        >
+                          <Feather name="trash-2" size={15} color={colors.errorForeground} />
+                          <Text style={[styles.deleteActionText, { color: colors.errorForeground }]}>Supprimer</Text>
+                        </Pressable>
+                      ) : null}
                     </View>
                   </Surface>
                 );
@@ -383,8 +416,35 @@ export default function ClassDetailScreen() {
               classPupils.map((pupil, index) => (
                 <Pressable
                   key={pupil.id}
-                  onPress={() => router.push(`/pupils/${pupil.id}`)}
-                  style={[styles.pupilRow, { borderBottomColor: colors.border }]}
+                  delayLongPress={500}
+                  accessibilityHint="Maintenez appuyé pour afficher l’action Supprimer."
+                  onLongPress={() => {
+                    suppressPupilNavigation.current = true;
+                    setDeleteArmedPupilId(pupil.id);
+                  }}
+                  onTouchStart={(event) => event.stopPropagation()}
+                  onPressOut={() => {
+                    if (suppressPupilNavigation.current) {
+                      setTimeout(() => { suppressPupilNavigation.current = false; }, 0);
+                    }
+                  }}
+                  onPress={() => {
+                    if (suppressPupilNavigation.current) {
+                      suppressPupilNavigation.current = false;
+                      return;
+                    }
+                    if (deleteArmedPupilId !== null) {
+                      setDeleteArmedPupilId(pupil.id);
+                      return;
+                    }
+                    router.push(`/pupils/${pupil.id}`);
+                  }}
+                  style={[
+                    styles.pupilRow,
+                    deleteArmedPupilId === pupil.id
+                      ? { backgroundColor: colors.card, borderColor: colors.destructive, borderWidth: 2, borderRadius: 10, paddingHorizontal: 8 }
+                      : { borderBottomColor: colors.border },
+                  ]}
                 >
                   <View
                     style={[
@@ -406,16 +466,22 @@ export default function ClassDetailScreen() {
                     </Text>
                   </View>
                   <View style={styles.rowRight}>
-                    <Pressable
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        handleDeletePupil(pupil.id, `${pupil.lastName} ${pupil.firstName}`);
-                      }}
-                      style={styles.deletePupilBtn}
-                      hitSlop={10}
-                    >
-                      <Feather name="trash-2" size={16} color={colors.destructive} />
-                    </Pressable>
+                    {deleteArmedPupilId === pupil.id ? (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Supprimer ${pupil.firstName} ${pupil.lastName}`}
+                        onTouchStart={(event) => event.stopPropagation()}
+                        onPress={(event) => {
+                          event.stopPropagation();
+                          setDeleteArmedPupilId(null);
+                          handleDeletePupil(pupil.id, `${pupil.lastName} ${pupil.firstName}`);
+                        }}
+                        style={[styles.deletePupilBtn, { backgroundColor: colors.errorSurface }]}
+                      >
+                        <Feather name="trash-2" size={16} color={colors.destructive} />
+                        <Text style={[styles.deleteActionText, { color: colors.destructive }]}>Supprimer</Text>
+                      </Pressable>
+                    ) : null}
                     <Feather name="chevron-right" size={17} color={colors.mutedForeground} />
                   </View>
                 </Pressable>
@@ -441,12 +507,9 @@ export default function ClassDetailScreen() {
 
       {/* Delete Class Section */}
       <View style={styles.deleteClassSection}>
-        <Button
-          label="Supprimer cette classe"
-          icon="trash-2"
-          secondary
-          onPress={handleDeleteClass}
-        />
+        {classDeleteArmed ? (
+          <Button label="Supprimer cette classe" icon="trash-2" secondary onTouchStart={(event) => event.stopPropagation()} onPress={() => { setClassDeleteArmed(false); handleDeleteClass(); }} />
+        ) : null}
       </View>
 
       <Modal
@@ -762,8 +825,12 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   deletePupilBtn: {
-    padding: 6,
+    minHeight: 34,
+    paddingHorizontal: 8,
     borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
   },
   emptyPupils: {
     padding: 24,
@@ -849,12 +916,15 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   deleteAssessBtn: {
-    width: 32,
-    height: 32,
+    minHeight: 36,
     borderRadius: 8,
+    paddingHorizontal: 9,
+    flexDirection: 'row',
+    gap: 5,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  deleteActionText: { fontSize: 11, fontWeight: '700' },
   deleteClassSection: {
     marginTop: 24,
     marginBottom: 16,

@@ -58,6 +58,7 @@ export default function NewAssessmentScreen() {
   // Objectives list
   const [objectives, setObjectives] = useState<string[]>([]);
   const [newObjectiveText, setNewObjectiveText] = useState('');
+  const [removeArmedObjectiveIndex, setRemoveArmedObjectiveIndex] = useState<number | null>(null);
   const selectedCompetency = competencies.find(
     (competency) => competency.id === selectedCompetencyId,
   );
@@ -159,7 +160,7 @@ export default function NewAssessmentScreen() {
   };
 
   return (
-    <Screen>
+    <Screen onTouchStart={() => setRemoveArmedObjectiveIndex(null)}>
       <AppHeader
         eyebrow="Nouvelle évaluation"
         title="Nouvelle Compétence / Évaluation"
@@ -388,7 +389,12 @@ export default function NewAssessmentScreen() {
           {objectives.map((desc, idx) => (
             <View
               key={idx}
-              style={[styles.objectiveRow, { borderColor: colors.border }]}
+              style={[
+                styles.objectiveRow,
+                removeArmedObjectiveIndex === idx
+                  ? { backgroundColor: colors.card, borderColor: colors.destructive, borderWidth: 2 }
+                  : { borderColor: colors.border },
+              ]}
             >
               <View
                 style={[
@@ -396,11 +402,18 @@ export default function NewAssessmentScreen() {
                   { backgroundColor: colors.accent },
                 ]}
               >
-                <Text
-                  style={[styles.objectiveIndexText, { color: colors.primary }]}
+                <Pressable
+                  accessibilityHint="Maintenez appuyé pour afficher le retrait de cet objectif."
+                  onTouchStart={(event) => event.stopPropagation()}
+                  onLongPress={() => setRemoveArmedObjectiveIndex(idx)}
+                  onPress={() => {
+                    if (removeArmedObjectiveIndex !== null) setRemoveArmedObjectiveIndex(idx);
+                  }}
                 >
-                  {String(idx + 1).padStart(2, '0')}
-                </Text>
+                  <Text style={[styles.objectiveIndexText, { color: colors.primary }]}>
+                    {String(idx + 1).padStart(2, '0')}
+                  </Text>
+                </Pressable>
               </View>
               <TextInput
                 value={desc}
@@ -408,17 +421,21 @@ export default function NewAssessmentScreen() {
                 multiline
                 style={[styles.objectiveInput, { color: colors.foreground }]}
               />
-              <Pressable
-                onPress={() => handleRemoveObjective(idx)}
-                hitSlop={8}
-                style={styles.deleteButton}
-              >
-                <Feather
-                  name="trash-2"
-                  size={17}
-                  color={colors.destructiveForeground || '#DC2626'}
-                />
-              </Pressable>
+              {removeArmedObjectiveIndex === idx ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Supprimer l’objectif ${idx + 1}`}
+                  onTouchStart={(event) => event.stopPropagation()}
+                  onPress={() => {
+                    setRemoveArmedObjectiveIndex(null);
+                    handleRemoveObjective(idx);
+                  }}
+                  hitSlop={8}
+                  style={styles.deleteButton}
+                >
+                  <Feather name="trash-2" size={17} color={colors.destructiveForeground || '#DC2626'} />
+                </Pressable>
+              ) : null}
             </View>
           ))}
         </View>

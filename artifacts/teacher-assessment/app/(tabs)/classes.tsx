@@ -1,7 +1,7 @@
 import { Alert } from '@/components/AppDialog';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -42,6 +42,8 @@ export default function ClassesScreen() {
   >({});
   const [objectivesExpanded, setObjectivesExpanded] = useState(false);
   const [visibleYear, setVisibleYear] = useState(data.academicYear);
+  const [deleteArmedClassId, setDeleteArmedClassId] = useState<string | null>(null);
+  const suppressClassSelection = useRef(false);
 
   const selectedYearConfiguration =
     data.getSchoolYearConfiguration(newClassYear);
@@ -206,7 +208,7 @@ export default function ClassesScreen() {
   };
 
   return (
-    <Screen>
+    <Screen onTouchStart={() => setDeleteArmedClassId(null)}>
       <AppHeader eyebrow="Organisation pédagogique" title="Mes Classes" />
 
       {/* Academic Year Banner */}
@@ -310,13 +312,35 @@ export default function ClassesScreen() {
             return (
               <Pressable
                 key={cls.id}
-                onPress={() => handleSelectClass(cls.id)}
+                delayLongPress={500}
+                accessibilityHint="Maintenez appuyé pour afficher l’action Supprimer."
+                onLongPress={() => {
+                  suppressClassSelection.current = true;
+                  setDeleteArmedClassId(cls.id);
+                }}
+                onTouchStart={(event) => event.stopPropagation()}
+                onPressOut={() => {
+                  if (suppressClassSelection.current) {
+                    setTimeout(() => { suppressClassSelection.current = false; }, 0);
+                  }
+                }}
+                onPress={() => {
+                  if (suppressClassSelection.current) {
+                    suppressClassSelection.current = false;
+                    return;
+                  }
+                  if (deleteArmedClassId !== null) {
+                    setDeleteArmedClassId(cls.id);
+                    return;
+                  }
+                  handleSelectClass(cls.id);
+                }}
                 style={({ pressed }) => [
                   styles.classCard,
                   {
                     backgroundColor: colors.card,
-                    borderColor: isActive ? colors.primary : colors.border,
-                    borderWidth: isActive ? 2 : 1,
+                    borderColor: deleteArmedClassId === cls.id ? colors.destructive : isActive ? colors.primary : colors.border,
+                    borderWidth: deleteArmedClassId === cls.id || isActive ? 2 : 1,
                     opacity: pressed ? 0.85 : 1,
                   },
                 ]}
@@ -413,28 +437,22 @@ export default function ClassesScreen() {
                 </View>
 
                 <View style={styles.cardActionsRow}>
-                  <Pressable
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      handleDeleteClass(cls.id, cls.name);
-                    }}
-                    hitSlop={8}
-                    style={[
-                      styles.deleteButton,
-                      { backgroundColor: colors.errorSurface },
-                    ]}
-                  >
-                    <Feather
-                      name="trash-2"
-                      size={16}
-                      color={colors.errorForeground}
-                    />
-                  </Pressable>
-                  <Feather
-                    name="chevron-right"
-                    size={20}
-                    color={colors.mutedForeground}
-                  />
+                  {deleteArmedClassId === cls.id ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Supprimer ${cls.name}`}
+                      onTouchStart={(event) => event.stopPropagation()}
+                      onPress={(event) => {
+                        event.stopPropagation();
+                        setDeleteArmedClassId(null);
+                        handleDeleteClass(cls.id, cls.name);
+                      }}
+                      style={[styles.deleteButton, { backgroundColor: colors.errorSurface }]}
+                    >
+                      <Feather name="trash-2" size={16} color={colors.errorForeground} />
+                      <Text style={[styles.deleteActionText, { color: colors.errorForeground }]}>Supprimer</Text>
+                    </Pressable>
+                  ) : <Feather name="chevron-right" size={20} color={colors.mutedForeground} />}
                 </View>
               </Pressable>
             );
@@ -1169,12 +1187,15 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   deleteButton: {
-    width: 32,
-    height: 32,
+    minHeight: 36,
     borderRadius: 8,
+    paddingHorizontal: 9,
+    flexDirection: 'row',
+    gap: 5,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  deleteActionText: { fontSize: 11, fontWeight: '700' },
   emptyContainer: {
     padding: 24,
     alignItems: 'center',

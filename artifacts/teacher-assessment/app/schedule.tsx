@@ -39,6 +39,7 @@ export default function ScheduleScreen() {
   const data = useAppData();
   const [modalVisible, setModalVisible] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [deleteArmedSessionId, setDeleteArmedSessionId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<SessionForm>(blankForm((new Date().getDay() + 6) % 7));
 
@@ -129,7 +130,7 @@ export default function ScheduleScreen() {
   };
 
   return (
-    <Screen>
+    <Screen onTouchStart={() => setDeleteArmedSessionId(null)}>
       <AppHeader eyebrow="Organisation" title="Emploi du temps" onBack={() => router.back()} />
       <View style={styles.introRow}>
         <Text style={[styles.intro, { color: colors.mutedForeground }]}>Votre semaine de cours, organisée par jour.</Text>
@@ -167,7 +168,17 @@ export default function ScheduleScreen() {
             ) : sessions.map((session) => {
               const classItem = data.classes.find((item) => item.id === session.classId);
               return (
-                <View key={session.id} style={[styles.sessionRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View
+                  key={session.id}
+                  style={[
+                    styles.sessionRow,
+                    {
+                      backgroundColor: colors.card,
+                      borderColor: deleteArmedSessionId === session.id ? colors.destructive : colors.border,
+                      borderWidth: deleteArmedSessionId === session.id ? 2 : 1,
+                    },
+                  ]}
+                >
                   <View style={[styles.timeBlock, { backgroundColor: colors.accent }]}>
                     <Text style={[styles.timeText, { color: colors.foreground }]}>{session.startTime}</Text>
                     <View style={[styles.timeLine, { backgroundColor: colors.primary }]} />
@@ -176,7 +187,15 @@ export default function ScheduleScreen() {
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={`Ouvrir la classe ${classItem?.name ?? ''}`}
+                    delayLongPress={500}
+                    accessibilityHint="Maintenez appuyé pour afficher l’action Supprimer."
+                    onTouchStart={(event) => event.stopPropagation()}
+                    onLongPress={() => setDeleteArmedSessionId(session.id)}
                     onPress={() => {
+                      if (deleteArmedSessionId !== null) {
+                        setDeleteArmedSessionId(session.id);
+                        return;
+                      }
                       if (!classItem) return;
                       data.setActiveClass(classItem.id);
                       router.push(`/classes/${classItem.id}`);
@@ -196,14 +215,20 @@ export default function ScheduleScreen() {
                   >
                     <Feather name="edit-2" size={16} color={colors.primary} />
                   </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Supprimer la séance"
-                    onPress={() => confirmDelete(session)}
-                    style={styles.iconAction}
-                  >
-                    <Feather name="trash-2" size={16} color={colors.destructive} />
-                  </Pressable>
+                  {deleteArmedSessionId === session.id ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Supprimer la séance"
+                      onTouchStart={(event) => event.stopPropagation()}
+                      onPress={() => {
+                        setDeleteArmedSessionId(null);
+                        confirmDelete(session);
+                      }}
+                      style={styles.iconAction}
+                    >
+                      <Feather name="trash-2" size={16} color={colors.destructive} />
+                    </Pressable>
+                  ) : null}
                 </View>
               );
             })}
