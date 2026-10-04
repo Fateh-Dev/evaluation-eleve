@@ -19,7 +19,7 @@ function NativeTabLayout() {
         <NativeTabs.Trigger.Icon
           sf={{ default: 'house', selected: 'house.fill' }}
         />
-        <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Label>Accueil</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="classes">
         <NativeTabs.Trigger.Icon sf={{ default: 'person.2', selected: 'person.2.fill' }} />
@@ -29,18 +29,13 @@ function NativeTabLayout() {
         <NativeTabs.Trigger.Icon sf={{ default: 'checklist', selected: 'checklist' }} />
         <NativeTabs.Trigger.Label>Évaluations</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="pupils">
-        <NativeTabs.Trigger.Icon sf={{ default: 'person', selected: 'person.fill' }} />
-        <NativeTabs.Trigger.Label>Élèves</NativeTabs.Trigger.Label>
+      <NativeTabs.Trigger name="more">
+        <NativeTabs.Trigger.Icon sf={{ default: 'ellipsis', selected: 'ellipsis' }} />
+        <NativeTabs.Trigger.Label>Plus</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="storage">
-        <NativeTabs.Trigger.Icon sf={{ default: 'folder', selected: 'folder.fill' }} />
-        <NativeTabs.Trigger.Label>Stockage</NativeTabs.Trigger.Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="settings">
-        <NativeTabs.Trigger.Icon sf={{ default: 'gearshape', selected: 'gearshape.fill' }} />
-        <NativeTabs.Trigger.Label>Configuration</NativeTabs.Trigger.Label>
-      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="pupils" hidden />
+      <NativeTabs.Trigger name="storage" hidden />
+      <NativeTabs.Trigger name="settings" hidden />
     </NativeTabs>
   );
 }
@@ -86,7 +81,7 @@ function ClassicTabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Tableau',
+          title: 'Accueil',
           tabBarIcon: ({ color }) =>
             isIOS ? (
               <SymbolView name="house" tintColor={color} size={24} />
@@ -104,16 +99,20 @@ function ClassicTabLayout() {
         options={{ title: 'Évaluations', tabBarIcon: ({ color }) => <Feather name="check-square" size={22} color={color} /> }}
       />
       <Tabs.Screen
+        name="more"
+        options={{ title: 'Plus', tabBarIcon: ({ color }) => <Feather name="more-horizontal" size={22} color={color} /> }}
+      />
+      <Tabs.Screen
         name="pupils"
-        options={{ title: 'Élèves', tabBarIcon: ({ color }) => <Feather name="user" size={22} color={color} /> }}
+        options={{ href: null }}
       />
       <Tabs.Screen
         name="storage"
-        options={{ title: 'Stockage', tabBarIcon: ({ color }) => <Feather name="folder" size={22} color={color} /> }}
+        options={{ href: null }}
       />
       <Tabs.Screen
         name="settings"
-        options={{ title: 'Configuration', tabBarIcon: ({ color }) => <Feather name="settings" size={22} color={color} /> }}
+        options={{ href: null }}
       />
     </Tabs>
   );
