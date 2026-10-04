@@ -10,6 +10,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -25,12 +26,14 @@ import {
 import { PinEntryScreen } from '@/components/PinEntryScreen';
 import { RecoveryCodeDialog } from '@/components/RecoveryCodeDialog';
 import { useAppData } from '@/context/AppDataContext';
+import { useReminders } from '@/context/ReminderContext';
 import { useSecurity } from '@/context/SecurityContext';
 import { useColors } from '@/hooks/useColors';
 
 export default function SettingsScreen() {
   const colors = useColors();
   const data = useAppData();
+  const reminders = useReminders();
   const security = useSecurity();
   const [pinInput, setPinInput] = useState('');
   const [pinConfirmation, setPinConfirmation] = useState('');
@@ -78,6 +81,13 @@ export default function SettingsScreen() {
     });
     setEditingSchool(false);
     Alert.alert('Succès', 'Informations de l’établissement enregistrées.');
+  };
+
+  const handleReminderToggle = async (enabled: boolean) => {
+    const updated = await reminders.setEnabled(enabled);
+    if (enabled && !updated) {
+      Alert.alert('Autorisation requise', 'Autorisez les notifications dans les réglages de votre appareil pour recevoir les rappels.');
+    }
   };
 
   const handleCreateBackup = async () => {
@@ -278,6 +288,52 @@ export default function SettingsScreen() {
         title="Paramètres"
         onBack={() => router.back()}
       />
+
+      <SectionTitle title="Rappels" />
+      <Surface style={styles.card}>
+        <View style={styles.reminderRow}>
+          <View style={[styles.settingIcon, { backgroundColor: colors.accent }]}>
+            <Feather name="bell" size={18} color={colors.primary} />
+          </View>
+          <View style={styles.reminderCopy}>
+            <Text style={[styles.value, { color: colors.foreground }]}>Cours et évaluations à venir</Text>
+            <Text style={[styles.help, { color: colors.mutedForeground }]}>
+              {reminders.available
+                ? 'Recevez un rappel avant les séances et évaluations prévues.'
+                : 'Les notifications sont disponibles dans l’application mobile.'}
+            </Text>
+          </View>
+          <Switch
+            value={reminders.enabled}
+            disabled={!reminders.ready || !reminders.available}
+            onValueChange={(enabled) => { void handleReminderToggle(enabled); }}
+            trackColor={{ false: colors.border, true: colors.accent }}
+            thumbColor={reminders.enabled ? colors.primary : colors.card}
+            accessibilityLabel="Activer les rappels de cours et d’évaluations"
+          />
+        </View>
+        {reminders.enabled ? (
+          <View style={[styles.reminderTiming, { borderTopColor: colors.border }]}>
+            <Text style={[styles.label, { color: colors.mutedForeground }]}>ME RAPPELER</Text>
+            <View style={styles.reminderOptions}>
+              {[5, 10, 15, 30, 60].map((minutes) => {
+                const selected = reminders.minutesBefore === minutes;
+                return (
+                  <Pressable
+                    key={minutes}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    onPress={() => reminders.setMinutesBefore(minutes)}
+                    style={[styles.reminderOption, { backgroundColor: selected ? colors.primary : colors.card, borderColor: selected ? colors.primary : colors.border }]}
+                  >
+                    <Text style={{ color: selected ? colors.primaryForeground : colors.foreground, fontSize: 12, fontWeight: '700' }}>{minutes} min</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
+      </Surface>
 
       {/* PROFESSOR / TEACHER PROFILE */}
       <SectionTitle
@@ -800,6 +856,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   settingCopy: { flex: 1, gap: 4 },
+  reminderRow: { flexDirection: 'row', alignItems: 'center', gap: 11 },
+  reminderCopy: { flex: 1, minWidth: 0, gap: 4 },
+  reminderTiming: { gap: 9, paddingTop: 14, borderTopWidth: 1 },
+  reminderOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  reminderOption: { minHeight: 36, borderWidth: 1, borderRadius: 9, paddingHorizontal: 11, alignItems: 'center', justifyContent: 'center' },
   settingRowInner: { flexDirection: 'row', alignItems: 'flex-start', gap: 11 },
   help: { fontSize: 12, lineHeight: 18 },
   enabled: { fontSize: 12, fontWeight: '800' },

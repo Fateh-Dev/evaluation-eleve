@@ -1,5 +1,5 @@
 import { Alert } from '@/components/AppDialog';
-import { AppHeader, Button, Screen, SectionTitle } from '@/components/AppShell';
+import { AppHeader, Button, ListSelectionToolbar, Screen, SectionTitle, SelectionCheckbox } from '@/components/AppShell';
 import type { ScheduleSession } from '@/context/AppDataContext';
 import { useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
@@ -9,6 +9,7 @@ import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollV
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
+import { useListSelection } from '@/hooks/useListSelection';
 import {
   KeyboardAvoidingView,
   Modal,
@@ -37,9 +38,9 @@ const blankForm = (dayOfWeek: number): SessionForm => ({
 export default function ScheduleScreen() {
   const colors = useColors();
   const data = useAppData();
+  const selection = useListSelection();
   const [modalVisible, setModalVisible] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const [deleteArmedSessionId, setDeleteArmedSessionId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<SessionForm>(blankForm((new Date().getDay() + 6) % 7));
 
@@ -94,11 +95,12 @@ export default function ScheduleScreen() {
     setModalVisible(false);
   };
 
-  const confirmDelete = (session: ScheduleSession) => {
-    const className = data.classes.find((item) => item.id === session.classId)?.name ?? 'cette classe';
-    Alert.alert('Supprimer la séance', `Supprimer la séance de ${className} ?`, [
+  const deleteSelectedSessions = () => {
+    const selected = data.scheduleSessions.filter((session) => selection.selectedIds.includes(session.id));
+    if (selected.length === 0) return;
+    Alert.alert('Supprimer les séances sélectionnées', `Supprimer ${selected.length} séance${selected.length > 1 ? 's' : ''} de l’emploi du temps ?`, [
       { text: 'Annuler', style: 'cancel' },
-      { text: 'Supprimer', style: 'destructive', onPress: () => data.deleteScheduleSession(session.id) },
+      { text: 'Supprimer', style: 'destructive', onPress: () => { selected.forEach((session) => data.deleteScheduleSession(session.id)); selection.cancelSelection(); } },
     ]);
   };
 
@@ -130,7 +132,7 @@ export default function ScheduleScreen() {
   };
 
   return (
-    <Screen onTouchStart={() => setDeleteArmedSessionId(null)}>
+    <Screen>
       <AppHeader eyebrow="Organisation" title="Emploi du temps" onBack={() => router.back()} />
       <View style={styles.introRow}>
         <Text style={[styles.intro, { color: colors.mutedForeground }]}>Votre semaine de cours, organisée par jour.</Text>
@@ -154,6 +156,14 @@ export default function ScheduleScreen() {
           onPress={handleExportPdf}
         />
       </View>
+      <ListSelectionToolbar
+        style={{ marginTop: 8, marginBottom: 0 }}
+        active={selection.isSelecting}
+        selectedCount={selection.selectedIds.length}
+        onStart={() => selection.startSelecting()}
+        onCancel={selection.cancelSelection}
+        onDelete={deleteSelectedSessions}
+      />
 
       {WEEKDAY_ORDER.map((dayOfWeek) => {
         const day = WEEKDAYS[dayOfWeek];
@@ -174,8 +184,8 @@ export default function ScheduleScreen() {
                     styles.sessionRow,
                     {
                       backgroundColor: colors.card,
-                      borderColor: deleteArmedSessionId === session.id ? colors.destructive : colors.border,
-                      borderWidth: deleteArmedSessionId === session.id ? 2 : 1,
+                      borderColor: selection.selectedIds.includes(session.id) ? colors.destructive : colors.border,
+                      borderWidth: selection.selectedIds.includes(session.id) ? 2 : 1,
                     },
                   ]}
                 >
@@ -188,12 +198,11 @@ export default function ScheduleScreen() {
                     accessibilityRole="button"
                     accessibilityLabel={`Ouvrir la classe ${classItem?.name ?? ''}`}
                     delayLongPress={500}
-                    accessibilityHint="Maintenez appuyé pour afficher l’action Supprimer."
+                    accessibilityHint={selection.isSelecting ? 'Touchez pour sélectionner cette séance.' : undefined}
                     onTouchStart={(event) => event.stopPropagation()}
-                    onLongPress={() => setDeleteArmedSessionId(session.id)}
                     onPress={() => {
-                      if (deleteArmedSessionId !== null) {
-                        setDeleteArmedSessionId(session.id);
+                      if (selection.isSelecting) {
+                        selection.toggleSelection(session.id);
                         return;
                       }
                       if (!classItem) return;
@@ -207,28 +216,18 @@ export default function ScheduleScreen() {
                       {[session.subject, session.room, session.notes].filter(Boolean).join(' · ') || classItem?.level}
                     </Text>
                   </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Modifier la séance"
-                    onPress={() => openEditSession(session)}
-                    style={styles.iconAction}
-                  >
-                    <Feather name="edit-2" size={16} color={colors.primary} />
-                  </Pressable>
-                  {deleteArmedSessionId === session.id ? (
+                  {selection.isSelecting ? (
+                    <SelectionCheckbox checked={selection.selectedIds.includes(session.id)} />
+                  ) : (
                     <Pressable
                       accessibilityRole="button"
-                      accessibilityLabel="Supprimer la séance"
-                      onTouchStart={(event) => event.stopPropagation()}
-                      onPress={() => {
-                        setDeleteArmedSessionId(null);
-                        confirmDelete(session);
-                      }}
+                      accessibilityLabel="Modifier la séance"
+                      onPress={() => openEditSession(session)}
                       style={styles.iconAction}
                     >
-                      <Feather name="trash-2" size={16} color={colors.destructive} />
+                      <Feather name="edit-2" size={16} color={colors.primary} />
                     </Pressable>
-                  ) : null}
+                  )}
                 </View>
               );
             })}

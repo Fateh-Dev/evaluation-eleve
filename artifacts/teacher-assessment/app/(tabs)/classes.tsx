@@ -1,7 +1,7 @@
 import { Alert } from '@/components/AppDialog';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -15,6 +15,8 @@ import {
   AppHeader,
   Button,
   KeyboardAvoidingViewCompat,
+  ListSelectionToolbar,
+  SelectionCheckbox,
   Screen,
   SectionTitle,
   Surface,
@@ -22,10 +24,12 @@ import {
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
+import { useListSelection } from '@/hooks/useListSelection';
 
 export default function ClassesScreen() {
   const colors = useColors();
   const data = useAppData();
+  const selection = useListSelection();
 
   const [modalVisible, setModalVisible] = useState(false);
   const [newClassName, setNewClassName] = useState('');
@@ -42,8 +46,6 @@ export default function ClassesScreen() {
   >({});
   const [objectivesExpanded, setObjectivesExpanded] = useState(false);
   const [visibleYear, setVisibleYear] = useState(data.academicYear);
-  const [deleteArmedClassId, setDeleteArmedClassId] = useState<string | null>(null);
-  const suppressClassSelection = useRef(false);
 
   const selectedYearConfiguration =
     data.getSchoolYearConfiguration(newClassYear);
@@ -181,21 +183,21 @@ export default function ClassesScreen() {
     router.push(`/classes/${createdId}`);
   };
 
-  const handleDeleteClass = (classId: string, className: string) => {
+  const handleDeleteSelectedClasses = () => {
+    const selectedClasses = data.classes.filter((item) => selection.selectedIds.includes(item.id));
+    if (selectedClasses.length === 0) return;
+    const names = selectedClasses.map((item) => item.name).join(', ');
     Alert.alert(
-      'Supprimer la classe',
-      `Êtes-vous sûr de vouloir supprimer la classe "${className}" ?\n\nAttention : Tous les élèves, évaluations et notes de cette classe seront définitivement supprimés.`,
+      'Supprimer les classes sélectionnées',
+      `Supprimer ${selectedClasses.length} classe${selectedClasses.length > 1 ? 's' : ''} (${names}) ? Tous les élèves, évaluations et notes associés seront également supprimés.`,
       [
         { text: 'Annuler', style: 'cancel' },
         {
           text: 'Supprimer',
           style: 'destructive',
           onPress: () => {
-            data.deleteClass(classId);
-            Alert.alert(
-              'Classe supprimée',
-              `La classe ${className} a été supprimée.`,
-            );
+            selectedClasses.forEach((item) => data.deleteClass(item.id));
+            selection.cancelSelection();
           },
         },
       ],
@@ -208,7 +210,7 @@ export default function ClassesScreen() {
   };
 
   return (
-    <Screen onTouchStart={() => setDeleteArmedClassId(null)}>
+    <Screen>
       <AppHeader eyebrow="Organisation pédagogique" title="Mes Classes" />
 
       {/* Academic Year Banner */}
@@ -281,6 +283,13 @@ export default function ClassesScreen() {
         action="+ Nouvelle classe"
         onAction={openCreateModal}
       />
+      <ListSelectionToolbar
+        active={selection.isSelecting}
+        selectedCount={selection.selectedIds.length}
+        onStart={() => selection.startSelecting()}
+        onCancel={selection.cancelSelection}
+        onDelete={handleDeleteSelectedClasses}
+      />
 
       {/* Classes List / Empty State */}
       {visibleClasses.length === 0 ? (
@@ -312,25 +321,10 @@ export default function ClassesScreen() {
             return (
               <Pressable
                 key={cls.id}
-                delayLongPress={500}
-                accessibilityHint="Maintenez appuyé pour afficher l’action Supprimer."
-                onLongPress={() => {
-                  suppressClassSelection.current = true;
-                  setDeleteArmedClassId(cls.id);
-                }}
                 onTouchStart={(event) => event.stopPropagation()}
-                onPressOut={() => {
-                  if (suppressClassSelection.current) {
-                    setTimeout(() => { suppressClassSelection.current = false; }, 0);
-                  }
-                }}
                 onPress={() => {
-                  if (suppressClassSelection.current) {
-                    suppressClassSelection.current = false;
-                    return;
-                  }
-                  if (deleteArmedClassId !== null) {
-                    setDeleteArmedClassId(cls.id);
+                  if (selection.isSelecting) {
+                    selection.toggleSelection(cls.id);
                     return;
                   }
                   handleSelectClass(cls.id);
@@ -339,8 +333,8 @@ export default function ClassesScreen() {
                   styles.classCard,
                   {
                     backgroundColor: colors.card,
-                    borderColor: deleteArmedClassId === cls.id ? colors.destructive : isActive ? colors.primary : colors.border,
-                    borderWidth: deleteArmedClassId === cls.id || isActive ? 2 : 1,
+                    borderColor: selection.selectedIds.includes(cls.id) ? colors.primary : isActive ? colors.primary : colors.border,
+                    borderWidth: selection.selectedIds.includes(cls.id) || isActive ? 2 : 1,
                     opacity: pressed ? 0.85 : 1,
                   },
                 ]}
@@ -437,21 +431,8 @@ export default function ClassesScreen() {
                 </View>
 
                 <View style={styles.cardActionsRow}>
-                  {deleteArmedClassId === cls.id ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel={`Supprimer ${cls.name}`}
-                      onTouchStart={(event) => event.stopPropagation()}
-                      onPress={(event) => {
-                        event.stopPropagation();
-                        setDeleteArmedClassId(null);
-                        handleDeleteClass(cls.id, cls.name);
-                      }}
-                      style={[styles.deleteButton, { backgroundColor: colors.errorSurface }]}
-                    >
-                      <Feather name="trash-2" size={16} color={colors.errorForeground} />
-                      <Text style={[styles.deleteActionText, { color: colors.errorForeground }]}>Supprimer</Text>
-                    </Pressable>
+                  {selection.isSelecting ? (
+                    <SelectionCheckbox checked={selection.selectedIds.includes(cls.id)} />
                   ) : <Feather name="chevron-right" size={20} color={colors.mutedForeground} />}
                 </View>
               </Pressable>

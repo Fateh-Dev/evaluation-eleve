@@ -1,7 +1,7 @@
 import { Alert } from '@/components/AppDialog';
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -11,10 +11,11 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { AppHeader, Button, KeyboardAvoidingViewCompat, Screen, SectionTitle, Surface } from '@/components/AppShell';
+import { AppHeader, Button, KeyboardAvoidingViewCompat, ListSelectionToolbar, Screen, SectionTitle, SelectionCheckbox, Surface } from '@/components/AppShell';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
+import { useListSelection } from '@/hooks/useListSelection';
 
 export default function ClassDetailScreen() {
   const colors = useColors();
@@ -35,10 +36,9 @@ export default function ClassDetailScreen() {
   }, [data.assessments, currentClass.id]);
 
   const [activeTab, setActiveTab] = useState<'competencies' | 'pupils'>('competencies');
-  const [deleteArmedAssessmentId, setDeleteArmedAssessmentId] = useState<string | null>(null);
-  const [deleteArmedPupilId, setDeleteArmedPupilId] = useState<string | null>(null);
+  const assessmentSelection = useListSelection();
+  const pupilSelection = useListSelection();
   const [classDeleteArmed, setClassDeleteArmed] = useState(false);
-  const suppressPupilNavigation = useRef(false);
 
   const [classNameModalVisible, setClassNameModalVisible] = useState(false);
   const [classNameInput, setClassNameInput] = useState('');
@@ -99,21 +99,13 @@ export default function ClassDetailScreen() {
     }
   };
 
-  const handleDeletePupil = (pupilId: string, pupilName: string) => {
-    Alert.alert(
-      'Supprimer l’élève',
-      `Êtes-vous sûr de vouloir retirer ${pupilName} de la classe ${currentClass.name} ?`,
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Supprimer',
-          style: 'destructive',
-          onPress: () => {
-            data.deletePupil(pupilId);
-          },
-        },
-      ],
-    );
+  const deleteSelectedPupils = () => {
+    const selected = classPupils.filter((pupil) => pupilSelection.selectedIds.includes(pupil.id));
+    if (selected.length === 0) return;
+    Alert.alert('Supprimer les élèves sélectionnés ?', `Retirer ${selected.length} élève${selected.length > 1 ? 's' : ''} de ${currentClass.name} ?`, [
+      { text: 'Annuler', style: 'cancel' },
+      { text: 'Supprimer', style: 'destructive', onPress: () => { selected.forEach((pupil) => data.deletePupil(pupil.id)); pupilSelection.cancelSelection(); } },
+    ]);
   };
 
   const handleDeleteClass = () => {
@@ -135,22 +127,13 @@ export default function ClassDetailScreen() {
     );
   };
 
-  const handleDeleteAssessment = (assessmentId: string, assessmentTitle: string) => {
-    Alert.alert(
-      'Supprimer la compétence',
-      `Êtes-vous sûr de vouloir supprimer l’évaluation "${assessmentTitle}" ?\n\nToutes les notes et objectifs associés seront définitivement effacés.`,
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Supprimer',
-          style: 'destructive',
-          onPress: () => {
-            data.deleteAssessment(assessmentId);
-            Alert.alert('Compétence supprimée', 'L’évaluation a été supprimée.');
-          },
-        },
-      ],
-    );
+  const deleteSelectedAssessments = () => {
+    const selected = classAssessments.filter((item) => assessmentSelection.selectedIds.includes(item.id));
+    if (selected.length === 0) return;
+    Alert.alert('Supprimer les compétences sélectionnées ?', `Supprimer ${selected.length} compétence${selected.length > 1 ? 's' : ''} de cette classe ?`, [
+      { text: 'Annuler', style: 'cancel' },
+      { text: 'Supprimer', style: 'destructive', onPress: () => { selected.forEach((item) => data.deleteAssessment(item.id)); assessmentSelection.cancelSelection(); } },
+    ]);
   };
 
   if (!currentClass || !currentClass.id) {
@@ -170,7 +153,7 @@ export default function ClassDetailScreen() {
   }
 
   return (
-    <Screen onTouchStart={() => { setDeleteArmedAssessmentId(null); setDeleteArmedPupilId(null); setClassDeleteArmed(false); }}>
+    <Screen onTouchStart={() => setClassDeleteArmed(false)}>
       <AppHeader
         eyebrow="Classe"
         title={currentClass.name}
@@ -265,6 +248,14 @@ export default function ClassDetailScreen() {
             action="+ Ajouter"
             onAction={() => router.push(`/assessments/new?classId=${currentClass.id}`)}
           />
+          <ListSelectionToolbar
+            style={{ marginBottom: 0 }}
+            active={assessmentSelection.isSelecting}
+            selectedCount={assessmentSelection.selectedIds.length}
+            onStart={() => assessmentSelection.startSelecting()}
+            onCancel={assessmentSelection.cancelSelection}
+            onDelete={deleteSelectedAssessments}
+          />
 
           {classAssessments.length === 0 ? (
             <Surface style={styles.emptyCard}>
@@ -291,27 +282,27 @@ export default function ClassDetailScreen() {
                 const progressPercent = Math.round((evaluatedTotal / totalPossible) * 100);
 
                 return (
-                  <Surface
+                  <Pressable
                     key={item.id}
+                    disabled={!assessmentSelection.isSelecting}
+                    onTouchStart={(event) => {
+                      if (assessmentSelection.isSelecting) event.stopPropagation();
+                    }}
+                    onPress={() => {
+                      if (assessmentSelection.isSelecting) assessmentSelection.toggleSelection(item.id);
+                    }}
+                  >
+                  <Surface
                     style={[
                       styles.assessmentCard,
-                      deleteArmedAssessmentId === item.id && {
+                      assessmentSelection.selectedIds.includes(item.id) && {
                         backgroundColor: colors.card,
                         borderColor: colors.destructive,
                         borderWidth: 2,
                       },
                     ]}
                   >
-                    <Pressable
-                      delayLongPress={500}
-                      accessibilityHint="Maintenez appuyé sur la compétence pour afficher l’action Supprimer."
-                      onTouchStart={(event) => event.stopPropagation()}
-                      onLongPress={() => setDeleteArmedAssessmentId(item.id)}
-                      onPress={() => {
-                        if (deleteArmedAssessmentId !== null) setDeleteArmedAssessmentId(item.id);
-                      }}
-                      style={{ gap: 10 }}
-                    >
+                    <View style={{ gap: 10 }}>
                     <View style={styles.assessmentCardHeader}>
                       <View style={styles.headerLeft}>
                         <View style={[styles.competencyBadge, { backgroundColor: colors.accent }]}>
@@ -339,9 +330,13 @@ export default function ClassDetailScreen() {
                         {item.date}
                       </Text>
                     </View>
-                    </Pressable>
+                    </View>
 
                     <View style={styles.cardActions}>
+                      {assessmentSelection.isSelecting ? (
+                        <SelectionCheckbox checked={assessmentSelection.selectedIds.includes(item.id)} />
+                      ) : (
+                        <>
                       <Button
                         label="Évaluer"
                         icon="check-square"
@@ -361,23 +356,11 @@ export default function ClassDetailScreen() {
                           router.push(`/assessments/${item.id}/document`);
                         }}
                       />
-                      {deleteArmedAssessmentId === item.id ? (
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel={`Supprimer ${item.title}`}
-                          onTouchStart={(event) => event.stopPropagation()}
-                          onPress={() => {
-                            setDeleteArmedAssessmentId(null);
-                            handleDeleteAssessment(item.id, item.title);
-                          }}
-                          style={[styles.deleteAssessBtn, { backgroundColor: colors.errorSurface }]}
-                        >
-                          <Feather name="trash-2" size={15} color={colors.errorForeground} />
-                          <Text style={[styles.deleteActionText, { color: colors.errorForeground }]}>Supprimer</Text>
-                        </Pressable>
-                      ) : null}
+                        </>
+                      )}
                     </View>
                   </Surface>
+                  </Pressable>
                 );
               })}
             </View>
@@ -402,6 +385,14 @@ export default function ClassDetailScreen() {
             action="+ Ajouter un élève"
             onAction={openAddPupilModal}
           />
+          <ListSelectionToolbar
+            style={{ marginBottom: 0 }}
+            active={pupilSelection.isSelecting}
+            selectedCount={pupilSelection.selectedIds.length}
+            onStart={() => pupilSelection.startSelecting()}
+            onCancel={pupilSelection.cancelSelection}
+            onDelete={deleteSelectedPupils}
+          />
 
           <View style={styles.pupilList}>
             {classPupils.length === 0 ? (
@@ -416,33 +407,15 @@ export default function ClassDetailScreen() {
               classPupils.map((pupil, index) => (
                 <Pressable
                   key={pupil.id}
-                  delayLongPress={500}
-                  accessibilityHint="Maintenez appuyé pour afficher l’action Supprimer."
-                  onLongPress={() => {
-                    suppressPupilNavigation.current = true;
-                    setDeleteArmedPupilId(pupil.id);
-                  }}
                   onTouchStart={(event) => event.stopPropagation()}
-                  onPressOut={() => {
-                    if (suppressPupilNavigation.current) {
-                      setTimeout(() => { suppressPupilNavigation.current = false; }, 0);
-                    }
-                  }}
                   onPress={() => {
-                    if (suppressPupilNavigation.current) {
-                      suppressPupilNavigation.current = false;
-                      return;
-                    }
-                    if (deleteArmedPupilId !== null) {
-                      setDeleteArmedPupilId(pupil.id);
-                      return;
-                    }
-                    router.push(`/pupils/${pupil.id}`);
+                    if (pupilSelection.isSelecting) pupilSelection.toggleSelection(pupil.id);
+                    else router.push(`/pupils/${pupil.id}`);
                   }}
                   style={[
                     styles.pupilRow,
-                    deleteArmedPupilId === pupil.id
-                      ? { backgroundColor: colors.card, borderColor: colors.destructive, borderWidth: 2, borderRadius: 10, paddingHorizontal: 8 }
+                    pupilSelection.selectedIds.includes(pupil.id)
+                      ? { backgroundColor: colors.card, borderColor: colors.primary, borderWidth: 2, borderRadius: 10, paddingHorizontal: 8 }
                       : { borderBottomColor: colors.border },
                   ]}
                 >
@@ -466,23 +439,9 @@ export default function ClassDetailScreen() {
                     </Text>
                   </View>
                   <View style={styles.rowRight}>
-                    {deleteArmedPupilId === pupil.id ? (
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={`Supprimer ${pupil.firstName} ${pupil.lastName}`}
-                        onTouchStart={(event) => event.stopPropagation()}
-                        onPress={(event) => {
-                          event.stopPropagation();
-                          setDeleteArmedPupilId(null);
-                          handleDeletePupil(pupil.id, `${pupil.lastName} ${pupil.firstName}`);
-                        }}
-                        style={[styles.deletePupilBtn, { backgroundColor: colors.errorSurface }]}
-                      >
-                        <Feather name="trash-2" size={16} color={colors.destructive} />
-                        <Text style={[styles.deleteActionText, { color: colors.destructive }]}>Supprimer</Text>
-                      </Pressable>
-                    ) : null}
-                    <Feather name="chevron-right" size={17} color={colors.mutedForeground} />
+                    {pupilSelection.isSelecting ? (
+                      <SelectionCheckbox checked={pupilSelection.selectedIds.includes(pupil.id)} />
+                    ) : <Feather name="chevron-right" size={17} color={colors.mutedForeground} />}
                   </View>
                 </Pressable>
               ))

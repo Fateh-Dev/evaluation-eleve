@@ -158,6 +158,62 @@ export function Button({ label, onPress, secondary = false, compact = false, ico
   );
 }
 
+export function ListSelectionToolbar({
+  active,
+  selectedCount,
+  onStart,
+  onCancel,
+  onDelete,
+  style,
+}: {
+  active: boolean;
+  selectedCount: number;
+  onStart: () => void;
+  onCancel: () => void;
+  onDelete: () => void;
+  style?: object;
+}) {
+  const colors = useColors();
+  if (!active) {
+    return (
+      <View style={[styles.selectionToolbarContainer, style]}>
+        <Button label="Sélectionner" icon="check-square" secondary compact onPress={onStart} />
+      </View>
+    );
+  }
+  return (
+    <View style={[styles.selectionToolbarContainer, style]}>
+      <View style={[styles.selectionToolbar, { borderColor: colors.border, backgroundColor: colors.card }]}>
+        <Text style={[styles.selectionCount, { color: colors.foreground }]}>
+          {selectedCount} sélectionné{selectedCount > 1 ? 's' : ''}
+        </Text>
+        <View style={styles.selectionActions}>
+          <Button label="Annuler" icon="x" secondary compact onPress={onCancel} />
+          <Button
+            label="Supprimer"
+            icon="trash-2"
+            secondary
+            compact
+            disabled={selectedCount === 0}
+            onPress={onDelete}
+          />
+        </View>
+      </View>
+    </View>
+  );
+}
+
+export function SelectionCheckbox({ checked }: { checked: boolean }) {
+  const colors = useColors();
+  return (
+    <Feather
+      name={checked ? 'check-square' : 'square'}
+      size={21}
+      color={checked ? colors.primary : colors.mutedForeground}
+    />
+  );
+}
+
 export function SectionTitle({ title, action, onAction }: { title: string; action?: string; onAction?: () => void }) {
   const colors = useColors();
   return (
@@ -256,6 +312,10 @@ const styles = StyleSheet.create({
   button: { minHeight: 48, borderRadius: 14, borderWidth: 1, paddingHorizontal: 17, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   buttonCompact: { minHeight: 38, borderRadius: 11, paddingHorizontal: 12 },
   buttonText: { fontSize: 14, fontWeight: '700' },
+  selectionToolbarContainer: { minHeight: 48, justifyContent: 'center', marginBottom: 12 },
+  selectionToolbar: { minHeight: 48, borderWidth: 1, borderRadius: 11, paddingHorizontal: 10, paddingVertical: 5, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  selectionCount: { flex: 1, minWidth: 0, fontSize: 12, fontWeight: '700' },
+  selectionActions: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   sectionTitle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, marginTop: 26 },
   sectionHeading: { fontSize: 18, fontWeight: '700', letterSpacing: -0.2 },
   sectionAction: { fontSize: 13, fontWeight: '700' },

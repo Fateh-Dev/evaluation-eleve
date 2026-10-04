@@ -13,12 +13,15 @@ import {
   AppHeader,
   Button,
   KeyboardAvoidingViewCompat,
+  ListSelectionToolbar,
   Screen,
   SectionTitle,
+  SelectionCheckbox,
   Surface,
 } from "@/components/AppShell";
 import { useColors } from "@/hooks/useColors";
 import { useStorage } from "@/context/StorageContext";
+import { useListSelection } from "@/hooks/useListSelection";
 
 function formatSize(size?: number) {
   if (!size) return "Taille inconnue";
@@ -34,11 +37,11 @@ function formatBytes(size: number | null) {
 export default function StorageScreen() {
   const colors = useColors();
   const storage = useStorage();
+  const selection = useListSelection();
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<"date" | "name" | "size">("date");
   const [renameTarget, setRenameTarget] = useState<string | null>(null);
   const [renameInput, setRenameInput] = useState("");
-  const [deleteArmedFileId, setDeleteArmedFileId] = useState<string | null>(null);
   const [emptyTrashArmed, setEmptyTrashArmed] = useState(false);
   const filteredFiles = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
@@ -68,23 +71,20 @@ export default function StorageScreen() {
       );
     }
   };
-  const handleDelete = (fileId: string, fileName: string) => {
-    const file = storage.files.find((item) => item.id === fileId);
-    if (!file) return;
+  const handleDeleteSelectedFiles = () => {
+    const selected = storage.files.filter((file) => selection.selectedIds.includes(file.id));
+    if (selected.length === 0) return;
     Alert.alert(
-      "Supprimer ce PDF ?",
-      `« ${fileName} » sera déplacé dans la corbeille.`,
+      "Supprimer les PDF sélectionnés ?",
+      `${selected.length} document${selected.length > 1 ? "s" : ""} sera${selected.length > 1 ? "ont" : ""} déplacé${selected.length > 1 ? "s" : ""} dans la corbeille.`,
       [
         { text: "Annuler", style: "cancel" },
         {
           text: "Supprimer",
           style: "destructive",
           onPress: () => {
-            void storage.deletePdf(file);
-            Alert.alert(
-              "PDF déplacé",
-              "Vous pouvez encore le restaurer depuis la corbeille.",
-            );
+            selected.forEach((file) => { void storage.deletePdf(file); });
+            selection.cancelSelection();
           },
         },
       ],
@@ -105,7 +105,7 @@ export default function StorageScreen() {
   };
 
   return (
-    <Screen onTouchStart={() => { setDeleteArmedFileId(null); setEmptyTrashArmed(false); }}>
+    <Screen onTouchStart={() => setEmptyTrashArmed(false)}>
       <AppHeader eyebrow="Documents de l’enseignant" title="Stockage" />
       <Surface style={styles.hero}>
         <View style={[styles.heroIcon, { backgroundColor: colors.accent }]}>
@@ -194,6 +194,15 @@ export default function StorageScreen() {
           {sort === "date" ? "plus récent" : sort === "name" ? "nom" : "taille"}
         </Text>
       </Pressable>
+      {storage.files.length > 0 ? (
+        <ListSelectionToolbar
+          active={selection.isSelecting}
+          selectedCount={selection.selectedIds.length}
+          onStart={() => selection.startSelecting()}
+          onCancel={selection.cancelSelection}
+          onDelete={handleDeleteSelectedFiles}
+        />
+      ) : null}
       {filteredFiles.length === 0 ? (
         <Surface style={styles.empty}>
           <Feather
@@ -227,7 +236,7 @@ export default function StorageScreen() {
               key={file.id}
               style={[
                 styles.fileCard,
-                deleteArmedFileId === file.id && {
+                selection.selectedIds.includes(file.id) && {
                   backgroundColor: colors.card,
                   borderColor: colors.destructive,
                   borderWidth: 2,
@@ -248,13 +257,11 @@ export default function StorageScreen() {
               </View>
               <View style={styles.fileCopy}>
                 <Pressable
-                  delayLongPress={500}
-                  onLongPress={() => setDeleteArmedFileId(file.id)}
                   onTouchStart={(event) => event.stopPropagation()}
                   onPress={() => {
-                    if (deleteArmedFileId !== null) setDeleteArmedFileId(file.id);
+                    if (selection.isSelecting) selection.toggleSelection(file.id);
                   }}
-                  accessibilityHint="Maintenez appuyé pour afficher l’action Supprimer."
+                  accessibilityHint={selection.isSelecting ? 'Touchez pour sélectionner ce PDF.' : undefined}
                 >
                   <Text numberOfLines={2} style={[styles.fileName, { color: colors.foreground }]}>{file.name}</Text>
                 </Pressable>
@@ -265,6 +272,10 @@ export default function StorageScreen() {
                   {new Date(file.createdAt).toLocaleDateString("fr-FR")}
                 </Text>
               </View>
+                {selection.isSelecting ? (
+                  <SelectionCheckbox checked={selection.selectedIds.includes(file.id)} />
+                ) : (
+                  <>
               <Pressable
                 onPress={() => {
                   void storage
@@ -295,21 +306,8 @@ export default function StorageScreen() {
               >
                 <Feather name="edit-2" size={16} color={colors.foreground} />
               </Pressable>
-              {deleteArmedFileId === file.id ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Supprimer ${file.name}`}
-                  onTouchStart={(event) => event.stopPropagation()}
-                  onPress={() => {
-                    setDeleteArmedFileId(null);
-                    handleDelete(file.id, file.name);
-                  }}
-                  style={[styles.action, { width: "auto", paddingHorizontal: 9, flexDirection: "row", gap: 5, backgroundColor: colors.errorSurface }]}
-                >
-                  <Feather name="trash-2" size={16} color={colors.errorForeground} />
-                  <Text style={{ color: colors.errorForeground, fontSize: 11, fontWeight: "700" }}>Supprimer</Text>
-                </Pressable>
-              ) : null}
+                </>
+              )}
             </Surface>
           ))}
         </View>
