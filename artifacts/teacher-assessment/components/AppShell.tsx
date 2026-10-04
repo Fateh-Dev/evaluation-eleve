@@ -1,6 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import React, { createContext, PropsWithChildren, useContext, useState } from 'react';
-import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 
@@ -10,7 +11,7 @@ type ScreenGuideValue = {
 
 const ScreenGuideContext = createContext<ScreenGuideValue | null>(null);
 
-export function Screen({ children, scroll = true, bottomPadding }: PropsWithChildren<{ scroll?: boolean; bottomPadding?: number }>) {
+export function Screen({ children, scroll = true, bottomPadding, onTouchStart }: PropsWithChildren<{ scroll?: boolean; bottomPadding?: number; onTouchStart?: () => void }>) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const [guideMessage, setGuideMessage] = useState<{ title: string; description: string } | null>(null);
@@ -22,6 +23,7 @@ export function Screen({ children, scroll = true, bottomPadding }: PropsWithChil
   const content = (
     <ScreenGuideContext.Provider value={guideContext}>
       <View
+        onTouchStart={onTouchStart}
         style={[styles.screen, { backgroundColor: colors.background, paddingTop: insets.top + 18, paddingBottom: insets.bottom + (bottomPadding ?? 120) }]}
       >
         {children}
@@ -60,16 +62,30 @@ export function Screen({ children, scroll = true, bottomPadding }: PropsWithChil
   );
   if (!scroll) return content;
   return (
-    <ScrollView
+    <KeyboardAwareScrollViewCompat
+      style={{ flex: 1, backgroundColor: colors.background }}
+      bottomOffset={80}
+      keyboardShouldPersistTaps="handled"
       contentContainerStyle={styles.scrollContent}
       showsVerticalScrollIndicator={false}
     >
       {content}
-    </ScrollView>
+    </KeyboardAwareScrollViewCompat>
   );
 }
 
-export function AppHeader({ eyebrow, title, onBack, compact = true }: { eyebrow?: string; title: string; onBack?: () => void; compact?: boolean }) {
+export function KeyboardAvoidingViewCompat({ children, style }: PropsWithChildren<{ style?: object }>) {
+  return (
+    <KeyboardAvoidingView
+      style={style}
+      behavior={Platform.OS === 'ios' ? 'padding' : Platform.OS === 'android' ? 'height' : undefined}
+    >
+      {children}
+    </KeyboardAvoidingView>
+  );
+}
+
+export function AppHeader({ eyebrow, title, onBack, onTitleLongPress, titleActionArmed = false, compact = true }: { eyebrow?: string; title: string; onBack?: () => void; onTitleLongPress?: () => void; titleActionArmed?: boolean; compact?: boolean }) {
   const colors = useColors();
   const guide = useContext(ScreenGuideContext);
   return (
@@ -82,9 +98,17 @@ export function AppHeader({ eyebrow, title, onBack, compact = true }: { eyebrow?
           accessible
           accessibilityLabel="Logo de l’établissement Chaibeddra"
         />
-        <View style={styles.headerText}>
+        <View style={[styles.headerText, titleActionArmed && { borderWidth: 2, borderColor: colors.destructive, backgroundColor: colors.card, borderRadius: 8, padding: 4 }]}>
           {eyebrow ? <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.eyebrow, { color: colors.primary }]}>{eyebrow.toUpperCase()}</Text> : null}
-          <Text numberOfLines={2} ellipsizeMode="tail" style={[styles.title, compact && styles.compactTitle, { color: colors.foreground }]}>{title}</Text>
+          <Text
+            numberOfLines={2}
+            ellipsizeMode="tail"
+            onLongPress={onTitleLongPress}
+            accessibilityHint={onTitleLongPress ? 'Maintenez appuyé pour afficher les actions de suppression.' : undefined}
+            style={[styles.title, compact && styles.compactTitle, { color: colors.foreground }]}
+          >
+            {title}
+          </Text>
         </View>
       </View>
       <View style={styles.headerActions}>
@@ -108,13 +132,14 @@ export function AppHeader({ eyebrow, title, onBack, compact = true }: { eyebrow?
   );
 }
 
-export function Button({ label, onPress, secondary = false, compact = false, icon, disabled = false }: {
-  label: string; onPress: () => void; secondary?: boolean; compact?: boolean; icon?: keyof typeof Feather.glyphMap; disabled?: boolean;
+export function Button({ label, onPress, secondary = false, compact = false, icon, disabled = false, onTouchStart }: {
+  label: string; onPress: () => void; secondary?: boolean; compact?: boolean; icon?: keyof typeof Feather.glyphMap; disabled?: boolean; onTouchStart?: (event: import('react-native').GestureResponderEvent) => void;
 }) {
   const colors = useColors();
   return (
     <Pressable
       onPress={disabled ? undefined : () => onPress()}
+      onTouchStart={onTouchStart}
       disabled={disabled}
       accessibilityRole="button"
       style={({ pressed }) => [
@@ -130,6 +155,62 @@ export function Button({ label, onPress, secondary = false, compact = false, ico
       {icon ? <Feather name={icon} size={compact ? 15 : 17} color={secondary ? colors.foreground : colors.primaryForeground} /> : null}
       <Text style={[styles.buttonText, { color: secondary ? colors.foreground : colors.primaryForeground }]}>{label}</Text>
     </Pressable>
+  );
+}
+
+export function ListSelectionToolbar({
+  active,
+  selectedCount,
+  onStart,
+  onCancel,
+  onDelete,
+  style,
+}: {
+  active: boolean;
+  selectedCount: number;
+  onStart: () => void;
+  onCancel: () => void;
+  onDelete: () => void;
+  style?: object;
+}) {
+  const colors = useColors();
+  if (!active) {
+    return (
+      <View style={[styles.selectionToolbarContainer, style]}>
+        <Button label="Sélectionner" icon="check-square" secondary compact onPress={onStart} />
+      </View>
+    );
+  }
+  return (
+    <View style={[styles.selectionToolbarContainer, style]}>
+      <View style={[styles.selectionToolbar, { borderColor: colors.border, backgroundColor: colors.card }]}>
+        <Text style={[styles.selectionCount, { color: colors.foreground }]}>
+          {selectedCount} sélectionné{selectedCount > 1 ? 's' : ''}
+        </Text>
+        <View style={styles.selectionActions}>
+          <Button label="Annuler" icon="x" secondary compact onPress={onCancel} />
+          <Button
+            label="Supprimer"
+            icon="trash-2"
+            secondary
+            compact
+            disabled={selectedCount === 0}
+            onPress={onDelete}
+          />
+        </View>
+      </View>
+    </View>
+  );
+}
+
+export function SelectionCheckbox({ checked }: { checked: boolean }) {
+  const colors = useColors();
+  return (
+    <Feather
+      name={checked ? 'check-square' : 'square'}
+      size={21}
+      color={checked ? colors.primary : colors.mutedForeground}
+    />
   );
 }
 
@@ -231,6 +312,10 @@ const styles = StyleSheet.create({
   button: { minHeight: 48, borderRadius: 14, borderWidth: 1, paddingHorizontal: 17, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   buttonCompact: { minHeight: 38, borderRadius: 11, paddingHorizontal: 12 },
   buttonText: { fontSize: 14, fontWeight: '700' },
+  selectionToolbarContainer: { minHeight: 48, justifyContent: 'center', marginBottom: 12 },
+  selectionToolbar: { minHeight: 48, borderWidth: 1, borderRadius: 11, paddingHorizontal: 10, paddingVertical: 5, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  selectionCount: { flex: 1, minWidth: 0, fontSize: 12, fontWeight: '700' },
+  selectionActions: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   sectionTitle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, marginTop: 26 },
   sectionHeading: { fontSize: 18, fontWeight: '700', letterSpacing: -0.2 },
   sectionAction: { fontSize: 13, fontWeight: '700' },

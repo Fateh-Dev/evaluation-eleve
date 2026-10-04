@@ -34,15 +34,7 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      [
-        "expo-splash-screen",
-        {
-          "image": "./assets/images/logo.png",
-          "imageWidth": 180,
-          "resizeMode": "contain",
-          "backgroundColor": "#FFFFFF"
-        }
-      ]
+      "expo-notifications"
     ],
     "experiments": {
       "typedRoutes": true,

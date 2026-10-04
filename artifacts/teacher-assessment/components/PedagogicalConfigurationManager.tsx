@@ -30,6 +30,9 @@ export default function PedagogicalConfigurationManager() {
   const [yearNameDraft, setYearNameDraft] = useState('');
   const [editingLevelId, setEditingLevelId] = useState<string | null>(null);
   const [levelNameDraft, setLevelNameDraft] = useState('');
+  const [deleteArmedYear, setDeleteArmedYear] = useState<string | null>(null);
+  const [deleteArmedLevelId, setDeleteArmedLevelId] = useState<string | null>(null);
+  const [deleteArmedObjectiveIndex, setDeleteArmedObjectiveIndex] = useState<number | null>(null);
 
   const configuration = data.getSchoolYearConfiguration(selectedYear);
   const selectedLevel = configuration?.levels.find(
@@ -354,7 +357,7 @@ export default function PedagogicalConfigurationManager() {
   };
 
   return (
-    <>
+    <View onTouchStart={() => { setDeleteArmedYear(null); setDeleteArmedLevelId(null); setDeleteArmedObjectiveIndex(null); }}>
       <SectionTitle title="Configuration pédagogique par année" />
       <Surface
         style={[styles.card, { borderColor: colors.border }]}
@@ -479,15 +482,25 @@ export default function PedagogicalConfigurationManager() {
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={`Sélectionner l’année ${item.year}`}
-                    onPress={() => selectYear(item.year)}
+                    accessibilityHint="Maintenez appuyé pour afficher l’action Supprimer."
+                    onTouchStart={(event) => event.stopPropagation()}
+                    onLongPress={() => {
+                      selectYear(item.year);
+                      setDeleteArmedYear(item.year);
+                    }}
+                    onPress={() => {
+                      selectYear(item.year);
+                      if (deleteArmedYear !== null) setDeleteArmedYear(item.year);
+                    }}
                     style={[
                       styles.chip,
                       styles.manageChip,
                       {
-                        backgroundColor: selected
+                        backgroundColor: deleteArmedYear === item.year ? colors.card : selected
                           ? colors.primary
                           : colors.secondary,
-                        borderColor: selected ? colors.primary : colors.border,
+                        borderColor: deleteArmedYear === item.year ? colors.destructive : selected ? colors.primary : colors.border,
+                        borderWidth: deleteArmedYear === item.year ? 2 : 1,
                       },
                     ]}
                   >
@@ -497,7 +510,7 @@ export default function PedagogicalConfigurationManager() {
                         styles.chipText,
                         {
                           color: selected
-                            ? colors.primaryForeground
+                            ? deleteArmedYear === item.year ? colors.foreground : colors.primaryForeground
                             : colors.foreground,
                         },
                       ]}
@@ -535,28 +548,19 @@ export default function PedagogicalConfigurationManager() {
                       >
                         <Feather name="edit-2" size={15} color={colors.primary} />
                       </Pressable>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={`Supprimer l’année ${item.year}`}
-                        accessibilityState={{ disabled: !canDelete }}
-                        disabled={!canDelete}
-                        onPress={() => requestDeleteYear(item.year)}
-                        style={[
-                          styles.iconButton,
-                          styles.dangerIconButton,
-                          {
-                            borderColor: colors.border,
-                            backgroundColor: colors.errorSurface,
-                          },
-                          !canDelete && styles.disabledButton,
-                        ]}
-                      >
-                        <Feather
-                          name="trash-2"
-                          size={15}
-                          color={colors.errorForeground}
-                        />
-                      </Pressable>
+                      {deleteArmedYear === item.year ? (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Supprimer l’année ${item.year}`}
+                          accessibilityState={{ disabled: !canDelete }}
+                          disabled={!canDelete}
+                          onTouchStart={(event) => event.stopPropagation()}
+                          onPress={() => { setDeleteArmedYear(null); requestDeleteYear(item.year); }}
+                          style={[styles.iconButton, styles.dangerIconButton, { borderColor: colors.border, backgroundColor: colors.errorSurface }, !canDelete && styles.disabledButton]}
+                        >
+                          <Feather name="trash-2" size={15} color={colors.errorForeground} />
+                        </Pressable>
+                      ) : null}
                     </>
                   )}
                 </View>
@@ -679,15 +683,25 @@ export default function PedagogicalConfigurationManager() {
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={`Sélectionner le niveau ${level.name}`}
-                    onPress={() => selectLevel(level.id)}
+                    accessibilityHint="Maintenez appuyé pour afficher l’action Supprimer."
+                    onTouchStart={(event) => event.stopPropagation()}
+                    onLongPress={() => {
+                      selectLevel(level.id);
+                      setDeleteArmedLevelId(level.id);
+                    }}
+                    onPress={() => {
+                      selectLevel(level.id);
+                      if (deleteArmedLevelId !== null) setDeleteArmedLevelId(level.id);
+                    }}
                     style={[
                       styles.chip,
                       styles.manageChip,
                       {
-                        backgroundColor: selected
+                        backgroundColor: deleteArmedLevelId === level.id ? colors.card : selected
                           ? colors.primary
                           : colors.secondary,
-                        borderColor: selected ? colors.primary : colors.border,
+                        borderColor: deleteArmedLevelId === level.id ? colors.destructive : selected ? colors.primary : colors.border,
+                        borderWidth: deleteArmedLevelId === level.id ? 2 : 1,
                       },
                     ]}
                   >
@@ -697,7 +711,7 @@ export default function PedagogicalConfigurationManager() {
                         styles.chipText,
                         {
                           color: selected
-                            ? colors.primaryForeground
+                            ? deleteArmedLevelId === level.id ? colors.foreground : colors.primaryForeground
                             : colors.foreground,
                         },
                       ]}
@@ -721,25 +735,17 @@ export default function PedagogicalConfigurationManager() {
                       >
                         <Feather name="edit-2" size={15} color={colors.primary} />
                       </Pressable>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={`Supprimer le niveau ${level.name}`}
-                        onPress={() => requestDeleteLevel(level.id, level.name)}
-                        style={[
-                          styles.iconButton,
-                          styles.dangerIconButton,
-                          {
-                            borderColor: colors.border,
-                            backgroundColor: colors.errorSurface,
-                          },
-                        ]}
-                      >
-                        <Feather
-                          name="trash-2"
-                          size={15}
-                          color={colors.errorForeground}
-                        />
-                      </Pressable>
+                      {deleteArmedLevelId === level.id ? (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Supprimer le niveau ${level.name}`}
+                          onTouchStart={(event) => event.stopPropagation()}
+                          onPress={() => { setDeleteArmedLevelId(null); requestDeleteLevel(level.id, level.name); }}
+                          style={[styles.iconButton, styles.dangerIconButton, { borderColor: colors.border, backgroundColor: colors.errorSurface }]}
+                        >
+                          <Feather name="trash-2" size={15} color={colors.errorForeground} />
+                        </Pressable>
+                      ) : null}
                     </>
                   )}
                 </View>
@@ -962,11 +968,29 @@ export default function PedagogicalConfigurationManager() {
             {objectiveDraft.map((objective, index) => (
               <View
                 key={`${selectedCompetency.id}-${index}`}
-                style={styles.inlineRow}
+                style={[
+                  styles.inlineRow,
+                  deleteArmedObjectiveIndex === index && {
+                    backgroundColor: colors.card,
+                    borderColor: colors.destructive,
+                    borderWidth: 2,
+                    borderRadius: 8,
+                    paddingHorizontal: 6,
+                  },
+                ]}
               >
-                <Text style={[styles.order, { color: colors.mutedForeground }]}>
-                  {String(index + 1).padStart(2, '0')}
-                </Text>
+                <Pressable
+                  onTouchStart={(event) => event.stopPropagation()}
+                  onLongPress={() => setDeleteArmedObjectiveIndex(index)}
+                  onPress={() => {
+                    if (deleteArmedObjectiveIndex !== null) setDeleteArmedObjectiveIndex(index);
+                  }}
+                  accessibilityHint="Maintenez appuyé pour afficher la suppression."
+                >
+                  <Text style={[styles.order, { color: colors.mutedForeground }]}>
+                    {String(index + 1).padStart(2, '0')}
+                  </Text>
+                </Pressable>
                 <TextInput
                   value={objective}
                   onChangeText={(value) =>
@@ -988,21 +1012,20 @@ export default function PedagogicalConfigurationManager() {
                     },
                   ]}
                 />
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Supprimer l’objectif ${index + 1}`}
-                  onPress={() =>
-                    setObjectiveDraft((previous) =>
-                      previous.filter((_, itemIndex) => itemIndex !== index),
-                    )
-                  }
-                  style={[
-                    styles.removeButton,
-                    { backgroundColor: colors.errorSurface },
-                  ]}
-                >
-                  <Feather name="x" size={16} color={colors.errorForeground} />
-                </Pressable>
+                {deleteArmedObjectiveIndex === index ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Supprimer l’objectif ${index + 1}`}
+                    onTouchStart={(event) => event.stopPropagation()}
+                    onPress={() => {
+                      setDeleteArmedObjectiveIndex(null);
+                      setObjectiveDraft((previous) => previous.filter((_, itemIndex) => itemIndex !== index));
+                    }}
+                    style={[styles.removeButton, { backgroundColor: colors.errorSurface }]}
+                  >
+                    <Feather name="x" size={16} color={colors.errorForeground} />
+                  </Pressable>
+                ) : null}
               </View>
             ))}
             {objectiveDraft.length === 0 && (
@@ -1052,7 +1075,7 @@ export default function PedagogicalConfigurationManager() {
           ) : null}
         </View>
       </Surface>
-    </>
+    </View>
   );
 }
 

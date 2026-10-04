@@ -34,6 +34,17 @@ export type ClassItem = {
   active?: boolean;
 };
 
+export type ScheduleSession = {
+  id: string;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  classId: string;
+  subject?: string;
+  room?: string;
+  notes?: string;
+};
+
 export type Pupil = {
   id: string;
   registrationNumber: string;
@@ -87,6 +98,7 @@ export type AppState = {
   academicYear: string;
   schoolYearConfigurations: SchoolYearConfiguration[];
   classes: ClassItem[];
+  scheduleSessions: ScheduleSession[];
   activeClassId: string;
   pupils: Pupil[];
   assessments: Assessment[];
@@ -116,6 +128,7 @@ export type AppDataContextValue = {
   academicYear: string;
   schoolYearConfigurations: SchoolYearConfiguration[];
   classes: ClassItem[];
+  scheduleSessions: ScheduleSession[];
   activeClassId: string;
   pupils: Pupil[];
   assessments: Assessment[];
@@ -209,6 +222,9 @@ export type AppDataContextValue = {
     }>;
   }) => string;
   setActiveClass: (classId: string) => void;
+  addScheduleSession: (input: Omit<ScheduleSession, 'id'>) => string | undefined;
+  updateScheduleSession: (sessionId: string, input: Omit<ScheduleSession, 'id'>) => boolean;
+  deleteScheduleSession: (sessionId: string) => void;
   renameClass: (classId: string, name: string) => boolean;
   deleteClass: (classId: string) => void;
 
@@ -300,6 +316,18 @@ export type AppDataContextValue = {
 
 const STORAGE_KEY = '@teacher-assessment/app-state-v4';
 
+function isScheduleSession(value: unknown): value is ScheduleSession {
+  if (!value || typeof value !== 'object') return false;
+  const session = value as Partial<ScheduleSession>;
+  return typeof session.id === 'string' &&
+    Number.isInteger(session.dayOfWeek) &&
+    session.dayOfWeek! >= 0 && session.dayOfWeek! <= 6 &&
+    typeof session.classId === 'string' &&
+    typeof session.startTime === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(session.startTime) &&
+    typeof session.endTime === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(session.endTime) &&
+    session.startTime < session.endTime;
+}
+
 export function createEmptyState(): AppState {
   return {
     school: {
@@ -313,6 +341,7 @@ export function createEmptyState(): AppState {
       createDefaultSchoolYearConfiguration('2026-2027'),
     ],
     classes: [],
+    scheduleSessions: [],
     activeClassId: '',
     pupils: [],
     assessments: [],
@@ -359,6 +388,9 @@ export function AppDataProvider({ children }: PropsWithChildren) {
                 objectives,
               ),
               classes,
+              scheduleSessions: Array.isArray(parsed.scheduleSessions)
+                ? parsed.scheduleSessions.filter(isScheduleSession).filter((session) => classes.some((classItem) => classItem.id === session.classId))
+                : [],
               pupils: Array.isArray(parsed.pupils) ? parsed.pupils : [],
               assessments,
               objectives,
@@ -711,6 +743,44 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       activeClassId: classId,
       activeAssessmentId: nextAssessmentId,
     }));
+  };
+
+  const addScheduleSession = (input: Omit<ScheduleSession, 'id'>) => {
+    const start = input.startTime.split(':').reduce((hours, part) => hours * 60 + Number(part), 0);
+    const end = input.endTime.split(':').reduce((hours, part) => hours * 60 + Number(part), 0);
+    if (start >= end || !state.classes.some((item) => item.id === input.classId)) return undefined;
+    const overlaps = state.scheduleSessions.some((session) => {
+      if (session.dayOfWeek !== input.dayOfWeek) return false;
+      const existingStart = session.startTime.split(':').reduce((hours, part) => hours * 60 + Number(part), 0);
+      const existingEnd = session.endTime.split(':').reduce((hours, part) => hours * 60 + Number(part), 0);
+      return start < existingEnd && existingStart < end;
+    });
+    if (overlaps) return undefined;
+    const id = `schedule-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setState((prev) => ({ ...prev, scheduleSessions: [...prev.scheduleSessions, { ...input, id }] }));
+    return id;
+  };
+
+  const updateScheduleSession = (sessionId: string, input: Omit<ScheduleSession, 'id'>) => {
+    const start = input.startTime.split(':').reduce((hours, part) => hours * 60 + Number(part), 0);
+    const end = input.endTime.split(':').reduce((hours, part) => hours * 60 + Number(part), 0);
+    if (start >= end || !state.classes.some((item) => item.id === input.classId)) return false;
+    const overlaps = state.scheduleSessions.some((session) => {
+      if (session.id === sessionId || session.dayOfWeek !== input.dayOfWeek) return false;
+      const existingStart = session.startTime.split(':').reduce((hours, part) => hours * 60 + Number(part), 0);
+      const existingEnd = session.endTime.split(':').reduce((hours, part) => hours * 60 + Number(part), 0);
+      return start < existingEnd && existingStart < end;
+    });
+    if (overlaps) return false;
+    setState((prev) => ({
+      ...prev,
+      scheduleSessions: prev.scheduleSessions.map((session) => session.id === sessionId ? { ...input, id: sessionId } : session),
+    }));
+    return true;
+  };
+
+  const deleteScheduleSession = (sessionId: string) => {
+    setState((prev) => ({ ...prev, scheduleSessions: prev.scheduleSessions.filter((session) => session.id !== sessionId) }));
   };
 
   const renameClass = (classId: string, name: string) => {
@@ -1240,6 +1310,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     if (!candidate.school || !Array.isArray(candidate.classes) || !Array.isArray(candidate.pupils) || !Array.isArray(candidate.assessments)) {
       throw new Error('Cette sauvegarde ne correspond pas à une sauvegarde Évaluation Élève.');
     }
+    const restoredClasses = candidate.classes;
     const restored: AppState = {
       ...createEmptyState(),
       ...candidate,
@@ -1258,6 +1329,9 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       remediations: candidate.remediations ?? {},
       activeClassId: typeof candidate.activeClassId === 'string' ? candidate.activeClassId : '',
       activeAssessmentId: typeof candidate.activeAssessmentId === 'string' ? candidate.activeAssessmentId : '',
+      scheduleSessions: Array.isArray(candidate.scheduleSessions)
+        ? candidate.scheduleSessions.filter(isScheduleSession).filter((session) => restoredClasses.some((classItem) => classItem.id === session.classId))
+        : [],
     };
     setState(restored);
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(restored));
@@ -1314,6 +1388,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       return {
         ...prev,
         classes: remainingClasses,
+        scheduleSessions: prev.scheduleSessions.filter((session) => session.classId !== classId),
         activeClassId: nextActiveClassId,
         pupils: remainingPupils,
         assessments: remainingAssessments,
@@ -1889,6 +1964,9 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       // Methods
       createClass,
       setActiveClass,
+      addScheduleSession,
+      updateScheduleSession,
+      deleteScheduleSession,
       renameClass,
       deleteClass,
       addPupils,
