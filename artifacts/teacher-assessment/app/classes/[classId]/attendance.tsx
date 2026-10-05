@@ -6,7 +6,8 @@ import { exportDailyAttendancePdf } from '@/services/exportService';
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 const getLocalDate = () => {
   const now = new Date();
@@ -22,6 +23,14 @@ const isValidDate = (value: string) => {
     parsedDate.getDate() === day;
 };
 
+const dateValue = (value: string) => {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(year, month - 1, day);
+};
+
+const formatDateValue = (value: Date) =>
+  `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+
 export default function ClassAttendanceScreen() {
   const colors = useColors();
   const data = useAppData();
@@ -35,6 +44,7 @@ export default function ClassAttendanceScreen() {
   const [date, setDate] = useState(
     params.date && isValidDate(params.date) ? params.date : getLocalDate(),
   );
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const weekday = isValidDate(date)
     ? (new Date(`${date}T00:00:00`).getDay() + 6) % 7
     : -1;
@@ -185,17 +195,49 @@ export default function ClassAttendanceScreen() {
 
       <View style={styles.dateRow}>
         <View style={styles.dateInputGroup}>
-          <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>DATE · AAAA-MM-JJ</Text>
-          <TextInput
-            value={date}
-            onChangeText={setDate}
-            placeholder="2026-10-05"
-            keyboardType="numbers-and-punctuation"
-            accessibilityLabel="Date de l’appel"
-            style={[styles.dateInput, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.card }]}
-          />
+          <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>DATE DE L’APPEL</Text>
+          {Platform.OS === 'web' ? (
+            <TextInput
+              value={date}
+              onChangeText={setDate}
+              placeholder="AAAA-MM-JJ"
+              keyboardType="numbers-and-punctuation"
+              accessibilityLabel="Date de l’appel"
+              style={[styles.dateInput, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.card }]}
+            />
+          ) : (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Date de l’appel : ${formattedDate || date}`}
+              onPress={() => setShowDatePicker(true)}
+              style={[styles.datePickerButton, { borderColor: colors.border, backgroundColor: colors.card }]}
+            >
+              <Feather name="calendar" size={16} color={colors.primary} />
+              <Text style={[styles.datePickerText, { color: colors.foreground }]}>{formattedDate || date}</Text>
+            </Pressable>
+          )}
         </View>
       </View>
+      {showDatePicker && Platform.OS !== 'web' ? (
+        <View style={[styles.pickerContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <DateTimePicker
+            value={isValidDate(date) ? dateValue(date) : new Date()}
+            mode="date"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            maximumDate={dateValue(getLocalDate())}
+            onValueChange={(_, selectedDate) => {
+              setDate(formatDateValue(selectedDate));
+              if (Platform.OS !== 'ios') setShowDatePicker(false);
+            }}
+            onDismiss={() => setShowDatePicker(false)}
+          />
+          {Platform.OS === 'ios' ? (
+            <Pressable accessibilityRole="button" onPress={() => setShowDatePicker(false)} style={styles.pickerDone}>
+              <Text style={[styles.pickerDoneText, { color: colors.primary }]}>Terminé</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
 
       <Text style={[styles.fieldLabel, styles.sessionLabel, { color: colors.mutedForeground }]}>
         SÉANCE PROGRAMMÉE · {formattedDate || 'DATE À VÉRIFIER'}
@@ -327,6 +369,11 @@ const styles = StyleSheet.create({
   dateInputGroup: { flex: 1, gap: 5 },
   fieldLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 0.6 },
   dateInput: { height: 42, borderWidth: 1, borderRadius: 9, paddingHorizontal: 10, fontSize: 14 },
+  datePickerButton: { height: 42, borderWidth: 1, borderRadius: 9, paddingHorizontal: 11, flexDirection: 'row', alignItems: 'center', gap: 9 },
+  datePickerText: { fontSize: 14, fontWeight: '600' },
+  pickerContainer: { alignItems: 'center', borderWidth: 1, borderRadius: 10, marginBottom: 12, padding: 8 },
+  pickerDone: { alignSelf: 'flex-end', paddingHorizontal: 12, paddingVertical: 7 },
+  pickerDoneText: { fontSize: 14, fontWeight: '700' },
   sessionLabel: { marginBottom: 7 },
   sessionChoices: { gap: 7, marginBottom: 12 },
   sessionChoice: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 54, padding: 10, borderWidth: 1, borderRadius: 10 },

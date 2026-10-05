@@ -9,6 +9,7 @@ import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollV
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useListSelection } from '@/hooks/useListSelection';
 import {
   KeyboardAvoidingView,
@@ -42,6 +43,7 @@ export default function ScheduleScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [activeTimeField, setActiveTimeField] = useState<'startTime' | 'endTime' | null>(null);
   const [form, setForm] = useState<SessionForm>(blankForm((new Date().getDay() + 6) % 7));
 
   const openNewSession = () => {
@@ -50,12 +52,14 @@ export default function ScheduleScreen() {
       return;
     }
     setEditingId(null);
+    setActiveTimeField(null);
     setForm({ ...blankForm((new Date().getDay() + 6) % 7), classId: data.activeClassId || data.classes[0].id });
     setModalVisible(true);
   };
 
   const openEditSession = (session: ScheduleSession) => {
     setEditingId(session.id);
+    setActiveTimeField(null);
     setForm({
       dayOfWeek: session.dayOfWeek,
       startTime: session.startTime,
@@ -295,14 +299,65 @@ export default function ScheduleScreen() {
 
               <View style={styles.timeFields}>
                 <View style={styles.timeField}>
-                  <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>DÉBUT · HH:MM</Text>
-                  <TextInput value={form.startTime} onChangeText={(value) => updateForm('startTime', value)} placeholder="08:00" keyboardType="numbers-and-punctuation" style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground }]} />
+                  <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>DÉBUT</Text>
+                  {Platform.OS === 'web' ? (
+                    <TextInput value={form.startTime} onChangeText={(value) => updateForm('startTime', value)} placeholder="08:00" keyboardType="numbers-and-punctuation" style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground }]} />
+                  ) : (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Heure de début : ${form.startTime}`}
+                      onPress={() => setActiveTimeField('startTime')}
+                      style={[styles.timePickerButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+                    >
+                      <Feather name="clock" size={15} color={colors.primary} />
+                      <Text style={[styles.timePickerText, { color: colors.foreground }]}>{form.startTime}</Text>
+                    </Pressable>
+                  )}
                 </View>
                 <View style={styles.timeField}>
-                  <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>FIN · HH:MM</Text>
-                  <TextInput value={form.endTime} onChangeText={(value) => updateForm('endTime', value)} placeholder="09:00" keyboardType="numbers-and-punctuation" style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground }]} />
+                  <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>FIN</Text>
+                  {Platform.OS === 'web' ? (
+                    <TextInput value={form.endTime} onChangeText={(value) => updateForm('endTime', value)} placeholder="09:00" keyboardType="numbers-and-punctuation" style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground }]} />
+                  ) : (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Heure de fin : ${form.endTime}`}
+                      onPress={() => setActiveTimeField('endTime')}
+                      style={[styles.timePickerButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+                    >
+                      <Feather name="clock" size={15} color={colors.primary} />
+                      <Text style={[styles.timePickerText, { color: colors.foreground }]}>{form.endTime}</Text>
+                    </Pressable>
+                  )}
                 </View>
               </View>
+              {activeTimeField ? (
+                <View style={[styles.timePickerContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <DateTimePicker
+                    value={(() => {
+                      const [hours, minutes] = form[activeTimeField].split(':').map(Number);
+                      const value = new Date();
+                      value.setHours(hours, minutes, 0, 0);
+                      return value;
+                    })()}
+                    mode="time"
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    onValueChange={(_, selectedTime) => {
+                      updateForm(
+                        activeTimeField,
+                        `${String(selectedTime.getHours()).padStart(2, '0')}:${String(selectedTime.getMinutes()).padStart(2, '0')}`,
+                      );
+                      if (Platform.OS !== 'ios') setActiveTimeField(null);
+                    }}
+                    onDismiss={() => setActiveTimeField(null)}
+                  />
+                  {Platform.OS === 'ios' ? (
+                    <Pressable accessibilityRole="button" onPress={() => setActiveTimeField(null)} style={styles.pickerDone}>
+                      <Text style={[styles.pickerDoneText, { color: colors.primary }]}>Terminé</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              ) : null}
               <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>MATIÈRE · FACULTATIF</Text>
               <TextInput value={form.subject} onChangeText={(value) => updateForm('subject', value)} placeholder="Français" style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground }]} />
               <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>SALLE · FACULTATIF</Text>
@@ -344,6 +399,11 @@ const styles = StyleSheet.create({
   choiceText: { fontSize: 12, fontWeight: '700' },
   timeFields: { flexDirection: 'row', gap: 10 },
   timeField: { flex: 1 },
+  timePickerButton: { minHeight: 44, borderWidth: 1, borderRadius: 9, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 9 },
+  timePickerText: { fontSize: 14, fontWeight: '600' },
+  timePickerContainer: { alignItems: 'center', borderWidth: 1, borderRadius: 10, marginTop: 10, padding: 8 },
+  pickerDone: { alignSelf: 'flex-end', paddingHorizontal: 12, paddingVertical: 7 },
+  pickerDoneText: { fontSize: 14, fontWeight: '700' },
   input: { minHeight: 44, borderWidth: 1, borderRadius: 9, paddingHorizontal: 12, fontSize: 14 },
   notesInput: { minHeight: 70, textAlignVertical: 'top', paddingTop: 10, marginBottom: 16 },
 });
