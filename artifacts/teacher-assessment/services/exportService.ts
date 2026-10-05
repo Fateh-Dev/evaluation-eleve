@@ -1002,44 +1002,66 @@ export function generateSchedulePdfHtml(data: {
   const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   })[character] ?? character);
-  const days = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
-  const dayOrder = [6, 0, 1, 2, 3, 4, 5];
-  const daySections = dayOrder.map((dayOfWeek) => {
-    const sessions = data.sessions
-      .filter((session) => session.dayOfWeek === dayOfWeek)
-      .sort((left, right) => left.startTime.localeCompare(right.startTime));
-    const rows = sessions.length
-      ? sessions.map((session) => `
-          <tr>
-            <td>${escapeHtml(session.startTime)} – ${escapeHtml(session.endTime)}</td>
-            <td><strong>${escapeHtml(session.className)}</strong></td>
-            <td>${escapeHtml(session.subject || '—')}</td>
-            <td>${escapeHtml(session.room || '—')}</td>
-            <td>${escapeHtml(session.notes || '—')}</td>
-          </tr>`).join('')
-      : '<tr><td colspan="5" class="empty">Aucune séance programmée</td></tr>';
-    return `<section><h2>${days[dayOfWeek]}</h2><table><thead><tr><th>Horaire</th><th>Classe ou groupe</th><th>Matière</th><th>Salle</th><th>Informations</th></tr></thead><tbody>${rows}</tbody></table></section>`;
+  const days = [
+    { label: 'Dimanche', dayOfWeek: 6 },
+    { label: 'Lundi', dayOfWeek: 0 },
+    { label: 'Mardi', dayOfWeek: 1 },
+    { label: 'Mercredi', dayOfWeek: 2 },
+    { label: 'Jeudi', dayOfWeek: 3 },
+  ];
+  const slots = [
+    { label: '08–09', start: '08:00', end: '09:00' },
+    { label: '09–10', start: '09:00', end: '10:00' },
+    { label: '10–11', start: '10:00', end: '11:00' },
+    { label: '11–12', start: '11:00', end: '12:00' },
+    { label: '13–14', start: '13:00', end: '14:00' },
+    { label: '14–15', start: '14:00', end: '15:00' },
+    { label: '15–16', start: '15:00', end: '16:00' },
+    { label: '16–17', start: '16:00', end: '17:00' },
+  ];
+  const sessionCell = (dayOfWeek: number, start: string, end: string) => {
+    const sessions = data.sessions.filter((session) =>
+      session.dayOfWeek === dayOfWeek && session.startTime === start && session.endTime === end,
+    );
+    if (sessions.length === 0) return '<span class="empty">—</span>';
+    return sessions.map((session) => [
+      `<strong>${escapeHtml(session.className)}</strong>`,
+      session.subject ? escapeHtml(session.subject) : '',
+      session.room ? escapeHtml(session.room) : '',
+      session.notes ? escapeHtml(session.notes) : '',
+    ].filter(Boolean).join('<br>')).join('<div class="session-separator"></div>');
+  };
+  const headerCells = slots.slice().reverse().map((slot) => `<th>${slot.label}</th>`).join('');
+  const bodyRows = days.map((day) => {
+    const cells = slots.slice().reverse().map((slot) => `<td>${sessionCell(day.dayOfWeek, slot.start, slot.end)}</td>`).join('');
+    return `<tr><th class="day">${day.label}</th>${cells}</tr>`;
   }).join('');
+  const schoolLine = [data.schoolName, data.teacherName ? `Enseignant(e) : ${data.teacherName}` : '']
+    .filter((value): value is string => Boolean(value)).map(escapeHtml).join(' · ');
 
   return `<!DOCTYPE html>
-    <html lang="fr"><head><meta charset="UTF-8"><title>Emploi du temps</title>
+    <html lang="fr"><head><meta charset="UTF-8"><title>Emploi du temps — ${escapeHtml(data.schoolName || '')}</title>
     <style>
-      @page { size: A4 portrait; margin: 12mm; }
-      body { font-family: Arial, sans-serif; color: #1f2933; font-size: 10pt; }
-      h1 { margin: 0 0 5px; color: #183143; font-size: 22pt; }
-      .meta { margin-bottom: 18px; color: #52616b; font-size: 10pt; }
-      section { margin: 0 0 14px; break-inside: avoid; }
-      h2 { margin: 0; padding: 6px 9px; background: #e9eef2; color: #183143; font-size: 12pt; }
-      table { width: 100%; border-collapse: collapse; }
-      th, td { border: 1px solid #cbd5dc; padding: 6px 7px; text-align: left; vertical-align: top; }
-      th { background: #f3f6f8; font-size: 8pt; }
-      td { font-size: 9pt; }
-      .empty { color: #687782; font-style: italic; }
+      @page { size: A4 landscape; margin: 9mm; }
+      * { box-sizing: border-box; }
+      body { font-family: Arial, "DejaVu Sans", sans-serif; color: #1f2933; font-size: 10pt; margin: 0; }
+      .heading { text-align: center; margin: 0 0 8px; }
+      h1 { margin: 0 0 3px; color: #183143; font-size: 18pt; }
+      .subtitle { margin: 0; color: #52616b; font-size: 10pt; }
+      table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      th, td { border: 1px solid #7f7f7f; padding: 3px 2px; text-align: center; vertical-align: middle; height: 48px; line-height: 1.2; }
+      th { background: #f1eee8; font-size: 9pt; font-weight: 700; }
+      th.day { width: 10%; background: #faf8f3; font-size: 10pt; }
+      td { font-size: 8.5pt; }
+      .empty { color: #657174; font-size: 9pt; }
+      .session-separator { border-top: 1px dashed #c4c4c4; margin: 3px 8px; }
+      .footer { text-align: center; margin-top: 7px; color: #52616b; font-size: 8pt; }
       @media print { body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
     </style></head><body>
-    <h1>Emploi du temps hebdomadaire</h1>
-    <div class="meta">${escapeHtml(data.schoolName || '')}${data.schoolName && data.teacherName ? ' · ' : ''}${data.teacherName ? `Enseignant(e) : ${escapeHtml(data.teacherName)}` : ''} · Édité le ${new Date().toLocaleDateString('fr-FR')}</div>
-    ${daySections}</body></html>`;
+    <div class="heading"><h1>${escapeHtml(data.schoolName || 'Emploi du temps')}</h1><p class="subtitle">Emploi du temps hebdomadaire${schoolLine ? ` · ${schoolLine}` : ''}</p></div>
+    <table><thead><tr><th class="day">Jour</th>${headerCells}</tr></thead><tbody>${bodyRows}</tbody></table>
+    <div class="footer">Document généré le ${new Date().toLocaleDateString('fr-FR')} · La pause méridienne 12–13 n’est pas affichée</div>
+    </body></html>`;
 }
 
 export async function exportSchedulePdf(data: {
