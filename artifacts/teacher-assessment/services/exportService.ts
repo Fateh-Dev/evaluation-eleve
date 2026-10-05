@@ -1071,6 +1071,30 @@ export async function exportSchedulePdf(data: {
 }): Promise<void> {
   const html = generateSchedulePdfHtml(data);
   if (Platform.OS === 'web') {
+    // On Web, expo-print may print the current React page instead of the supplied HTML.
+    // Open a dedicated print document so the PDF contains only the schedule grid.
+    if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+      const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=1200,height=900');
+      if (!printWindow) {
+        throw new Error('La fenêtre d’impression a été bloquée par le navigateur. Autorisez les fenêtres pop-up puis réessayez.');
+      }
+      printWindow.document.open();
+      printWindow.document.write(html);
+      printWindow.document.close();
+      await new Promise<void>((resolve) => {
+        const print = () => {
+          printWindow.focus();
+          printWindow.print();
+          resolve();
+        };
+        if (printWindow.document.readyState === 'complete') {
+          setTimeout(print, 150);
+        } else {
+          printWindow.addEventListener('load', () => setTimeout(print, 150), { once: true });
+        }
+      });
+      return;
+    }
     await Print.printAsync({ html });
     return;
   }
