@@ -48,6 +48,15 @@ export default function NewAssessmentScreen() {
       selectedClass.level,
     ],
   );
+  const classAssessments = useMemo(
+    () => data.getAssessmentsForClass(selectedClassId),
+    [data.assessments, selectedClassId],
+  );
+  const isCompetencyUsed = (competency: (typeof competencies)[number]) =>
+    classAssessments.some((assessment) =>
+      assessment.competencyId === competency.id ||
+      normalizeLabel(assessment.competency) === normalizeLabel(competency.name),
+    );
   const [selectedCompetencyId, setSelectedCompetencyId] = useState('');
   const [title, setTitle] = useState('');
   const [subject, setSubject] = useState('Français');
@@ -65,8 +74,8 @@ export default function NewAssessmentScreen() {
 
   useEffect(() => {
     const nextCompetency =
-      competencies.find((item) => item.id === selectedCompetencyId) ??
-      competencies[0];
+      competencies.find((item) => item.id === selectedCompetencyId && !isCompetencyUsed(item)) ??
+      competencies.find((item) => !isCompetencyUsed(item));
     setSelectedCompetencyId(nextCompetency?.id ?? '');
     if (!nextCompetency) {
       setTitle('');
@@ -100,9 +109,11 @@ export default function NewAssessmentScreen() {
         ? configuredObjectives
         : (template?.defaultObjectives ?? ['Objectif 1']),
     );
-  }, [selectedClassId, selectedCompetencyId, data.schoolYearConfigurations]);
+  }, [selectedClassId, selectedCompetencyId, data.schoolYearConfigurations, data.assessments]);
 
   const handleSelectCompetency = (competencyId: string) => {
+    const competency = competencies.find((item) => item.id === competencyId);
+    if (competency && isCompetencyUsed(competency)) return;
     setSelectedCompetencyId(competencyId);
     setNewObjectiveText('');
   };
@@ -142,6 +153,13 @@ export default function NewAssessmentScreen() {
       Alert.alert('Objectifs requis', 'Veuillez ajouter au moins un objectif.');
       return;
     }
+    if (isCompetencyUsed(selectedCompetency)) {
+      Alert.alert(
+        'Compétence déjà évaluée',
+        `La compétence « ${selectedCompetency.name} » a déjà été ajoutée à ${selectedClass.name} pour l’année scolaire ${selectedClass.academicYear}.`,
+      );
+      return;
+    }
 
     const createdId = data.createAssessment({
       classId: selectedClassId,
@@ -156,6 +174,13 @@ export default function NewAssessmentScreen() {
       objectives,
     });
 
+    if (!createdId) {
+      Alert.alert(
+        'Compétence déjà évaluée',
+        `Cette compétence est déjà associée à une évaluation de ${selectedClass.name} pour l’année scolaire ${selectedClass.academicYear}.`,
+      );
+      return;
+    }
     router.replace(`/assessments/${createdId}`);
   };
 
@@ -232,6 +257,7 @@ export default function NewAssessmentScreen() {
         <View style={styles.templatesGrid}>
           {competencies.map((competency) => {
             const isSelected = selectedCompetencyId === competency.id;
+            const isAlreadyUsed = isCompetencyUsed(competency);
             const levelId = data.getLevelIdForYear(
               selectedClass.academicYear,
               selectedClass.levelId,
@@ -245,13 +271,16 @@ export default function NewAssessmentScreen() {
             return (
               <Pressable
                 key={competency.id}
+                disabled={isAlreadyUsed}
+                accessibilityState={{ disabled: isAlreadyUsed, selected: isSelected }}
                 onPress={() => handleSelectCompetency(competency.id)}
                 style={[
                   styles.templateCard,
                   {
                     backgroundColor: isSelected ? colors.accent : colors.card,
-                    borderColor: isSelected ? colors.primary : colors.border,
-                    borderWidth: isSelected ? 2 : 1,
+                    borderColor: isAlreadyUsed ? colors.border : isSelected ? colors.primary : colors.border,
+                    borderWidth: !isAlreadyUsed && isSelected ? 2 : 1,
+                    opacity: isAlreadyUsed ? 0.55 : 1,
                   },
                 ]}
               >
@@ -269,8 +298,9 @@ export default function NewAssessmentScreen() {
                     { color: colors.mutedForeground },
                   ]}
                 >
-                  {objectiveCount} objectif{objectiveCount > 1 ? 's' : ''}{' '}
-                  configuré{objectiveCount > 1 ? 's' : ''}
+                  {isAlreadyUsed
+                    ? `Déjà évaluée pour ${selectedClass.name} cette année`
+                    : `${objectiveCount} objectif${objectiveCount > 1 ? 's' : ''} configuré${objectiveCount > 1 ? 's' : ''}`}
                 </Text>
               </Pressable>
             );

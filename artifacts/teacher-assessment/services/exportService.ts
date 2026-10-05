@@ -997,54 +997,124 @@ export type SchedulePdfEntry = {
 export function generateSchedulePdfHtml(data: {
   teacherName?: string;
   schoolName?: string;
+  city?: string;
+  academicYear?: string;
   sessions: SchedulePdfEntry[];
 }): string {
   const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   })[character] ?? character);
-  const days = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
-  const dayOrder = [6, 0, 1, 2, 3, 4, 5];
-  const daySections = dayOrder.map((dayOfWeek) => {
-    const sessions = data.sessions
-      .filter((session) => session.dayOfWeek === dayOfWeek)
-      .sort((left, right) => left.startTime.localeCompare(right.startTime));
-    const rows = sessions.length
-      ? sessions.map((session) => `
-          <tr>
-            <td>${escapeHtml(session.startTime)} – ${escapeHtml(session.endTime)}</td>
-            <td><strong>${escapeHtml(session.className)}</strong></td>
-            <td>${escapeHtml(session.subject || '—')}</td>
-            <td>${escapeHtml(session.room || '—')}</td>
-            <td>${escapeHtml(session.notes || '—')}</td>
-          </tr>`).join('')
-      : '<tr><td colspan="5" class="empty">Aucune séance programmée</td></tr>';
-    return `<section><h2>${days[dayOfWeek]}</h2><table><thead><tr><th>Horaire</th><th>Classe ou groupe</th><th>Matière</th><th>Salle</th><th>Informations</th></tr></thead><tbody>${rows}</tbody></table></section>`;
+  const days = [
+    { label: 'Dimanche', dayOfWeek: 6 },
+    { label: 'Lundi', dayOfWeek: 0 },
+    { label: 'Mardi', dayOfWeek: 1 },
+    { label: 'Mercredi', dayOfWeek: 2 },
+    { label: 'Jeudi', dayOfWeek: 3 },
+  ];
+  const slots = [
+    { label: '08–09', start: '08:00', end: '09:00' },
+    { label: '09–10', start: '09:00', end: '10:00' },
+    { label: '10–11', start: '10:00', end: '11:00' },
+    { label: '11–12', start: '11:00', end: '12:00' },
+    { label: 'Pause 12–13', start: '12:00', end: '13:00', isBreak: true },
+    { label: '13–14', start: '13:00', end: '14:00' },
+    { label: '14–15', start: '14:00', end: '15:00' },
+    { label: '15–16', start: '15:00', end: '16:00' },
+    { label: '16–17', start: '16:00', end: '17:00' },
+  ];
+  const timeToMinutes = (time: string) => {
+    const [hours, minutes] = time.split(':').map(Number);
+    return hours * 60 + minutes;
+  };
+  const sessionCell = (session: SchedulePdfEntry) => [
+    `<strong>${escapeHtml(session.className)}</strong>`,
+    `<span class="time">${escapeHtml(session.startTime)}–${escapeHtml(session.endTime)}</span>`,
+    session.subject ? escapeHtml(session.subject) : '',
+    session.room ? escapeHtml(session.room) : '',
+    session.notes ? escapeHtml(session.notes) : '',
+  ].filter(Boolean).join('<br>');
+  const headerCells = slots.map((slot) => `<th>${slot.label}</th>`).join('');
+  const bodyRows = days.map((day, dayIndex) => {
+    const daySessions = data.sessions.filter((session) => session.dayOfWeek === day.dayOfWeek);
+    const cells: string[] = [];
+    let slotIndex = 0;
+    while (slotIndex < slots.length) {
+      if (slots[slotIndex].isBreak) {
+        if (dayIndex === 0) {
+          cells.push(`<td class="break" rowspan="${days.length}"><strong>Pause déjeuner</strong><br><span>12:00–13:00</span></td>`);
+        }
+        slotIndex += 1;
+        continue;
+      }
+      const slotStart = timeToMinutes(slots[slotIndex].start);
+      const slotEnd = timeToMinutes(slots[slotIndex].end);
+      const session = daySessions.find((item) =>
+        timeToMinutes(item.startTime) < slotEnd && slotStart < timeToMinutes(item.endTime),
+      );
+      if (!session) {
+        cells.push('<td><span class="empty">—</span></td>');
+        slotIndex += 1;
+        continue;
+      }
+
+      const sessionStart = timeToMinutes(session.startTime);
+      const sessionEnd = timeToMinutes(session.endTime);
+      let colSpan = 1;
+      while (slotIndex + colSpan < slots.length &&
+        !slots[slotIndex + colSpan].isBreak &&
+        sessionStart < timeToMinutes(slots[slotIndex + colSpan].end) &&
+        timeToMinutes(slots[slotIndex + colSpan].start) < sessionEnd) {
+        colSpan += 1;
+      }
+      cells.push(`<td colspan="${colSpan}">${sessionCell(session)}</td>`);
+      slotIndex += colSpan;
+    }
+    return `<tr><th class="day">${day.label}</th>${cells.join('')}</tr>`;
   }).join('');
+  const metadata = [
+    { label: 'Enseignant(e)', value: data.teacherName },
+    { label: 'Établissement', value: data.schoolName },
+    { label: 'Ville', value: data.city },
+    { label: 'Année scolaire', value: data.academicYear },
+  ].filter((item): item is { label: string; value: string } => Boolean(item.value?.trim()))
+    .map((item) => `<span><strong>${item.label} :</strong> ${escapeHtml(item.value)}</span>`)
+    .join('<span class="separator">·</span>');
 
   return `<!DOCTYPE html>
     <html lang="fr"><head><meta charset="UTF-8"><title>Emploi du temps</title>
     <style>
-      @page { size: A4 portrait; margin: 12mm; }
-      body { font-family: Arial, sans-serif; color: #1f2933; font-size: 10pt; }
-      h1 { margin: 0 0 5px; color: #183143; font-size: 22pt; }
-      .meta { margin-bottom: 18px; color: #52616b; font-size: 10pt; }
-      section { margin: 0 0 14px; break-inside: avoid; }
-      h2 { margin: 0; padding: 6px 9px; background: #e9eef2; color: #183143; font-size: 12pt; }
-      table { width: 100%; border-collapse: collapse; }
-      th, td { border: 1px solid #cbd5dc; padding: 6px 7px; text-align: left; vertical-align: top; }
-      th { background: #f3f6f8; font-size: 8pt; }
-      td { font-size: 9pt; }
-      .empty { color: #687782; font-style: italic; }
+      @page { size: A4 landscape; margin: 9mm; }
+      * { box-sizing: border-box; }
+      body { font-family: Arial, "DejaVu Sans", sans-serif; color: #1f2933; font-size: 10pt; margin: 0; }
+      .heading { text-align: center; margin: 0 0 8px; }
+      h1 { margin: 0 0 3px; color: #183143; font-size: 18pt; }
+      .subtitle { margin: 0; color: #52616b; font-size: 10pt; }
+      .metadata { display: flex; justify-content: center; flex-wrap: wrap; gap: 4px 9px; margin-top: 5px; color: #52616b; font-size: 9pt; }
+      .separator { color: #a0a8ad; }
+      table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      th, td { border: 1px solid #7f7f7f; padding: 3px 2px; text-align: center; vertical-align: middle; height: 48px; line-height: 1.2; }
+      th { background: #f1eee8; font-size: 9pt; font-weight: 700; }
+      th.day { width: 10%; background: #faf8f3; font-size: 10pt; }
+      td { font-size: 8.5pt; }
+      .time { color: #52616b; font-size: 8pt; font-weight: 700; }
+      .empty { color: #657174; font-size: 9pt; }
+      .break { background: #f7f1df; color: #6c5a2d; font-size: 8pt; }
+      .break span { font-size: 7pt; }
+      .session-separator { border-top: 1px dashed #c4c4c4; margin: 3px 8px; }
+      .footer { text-align: center; margin-top: 7px; color: #52616b; font-size: 8pt; }
       @media print { body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
     </style></head><body>
-    <h1>Emploi du temps hebdomadaire</h1>
-    <div class="meta">${escapeHtml(data.schoolName || '')}${data.schoolName && data.teacherName ? ' · ' : ''}${data.teacherName ? `Enseignant(e) : ${escapeHtml(data.teacherName)}` : ''} · Édité le ${new Date().toLocaleDateString('fr-FR')}</div>
-    ${daySections}</body></html>`;
+    <div class="heading"><h1>${escapeHtml(data.schoolName || 'Emploi du temps')}</h1><p class="subtitle">Emploi du temps hebdomadaire</p><div class="metadata">${metadata}</div></div>
+    <table><thead><tr><th class="day">Jour</th>${headerCells}</tr></thead><tbody>${bodyRows}</tbody></table>
+    <div class="footer">Document généré le ${new Date().toLocaleDateString('fr-FR')}</div>
+    </body></html>`;
 }
 
 export async function exportSchedulePdf(data: {
   teacherName?: string;
   schoolName?: string;
+  city?: string;
+  academicYear?: string;
   sessions: SchedulePdfEntry[];
 }): Promise<void> {
   const html = generateSchedulePdfHtml(data);
@@ -1067,6 +1137,191 @@ export async function exportSchedulePdf(data: {
   await Sharing.shareAsync(targetUri, {
     mimeType: 'application/pdf',
     dialogTitle: 'Enregistrer ou partager l’emploi du temps',
+    UTI: 'com.adobe.pdf',
+  });
+}
+
+export type ClassAttendanceExportData = {
+  schoolName?: string;
+  teacherName?: string;
+  className: string;
+  level: string;
+  academicYear: string;
+  pupils: Array<{
+    registrationNumber: string;
+    firstName: string;
+    lastName: string;
+    present: number;
+    absent: number;
+    total: number;
+  }>;
+};
+
+export function generateClassAttendancePdfHtml(data: ClassAttendanceExportData): string {
+  const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[character] ?? character);
+  const rows = data.pupils.map((pupil, index) => {
+    const rate = pupil.total ? `${Math.round((pupil.present / pupil.total) * 100)} %` : '—';
+    return `<tr><td>${index + 1}</td><td>${escapeHtml(pupil.registrationNumber)}</td><td>${escapeHtml(pupil.lastName)} ${escapeHtml(pupil.firstName)}</td><td>${pupil.present}</td><td>${pupil.absent}</td><td>${pupil.total}</td><td>${rate}</td></tr>`;
+  }).join('');
+  const schoolLine = [
+    data.schoolName ? `Établissement : ${data.schoolName}` : '',
+    data.teacherName ? `Enseignant(e) : ${data.teacherName}` : '',
+    `Année scolaire : ${data.academicYear}`,
+  ].filter(Boolean).map(escapeHtml).join(' · ');
+
+  return `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>Présences — ${escapeHtml(data.className)}</title>
+    <style>
+      @page { size: A4 portrait; margin: 14mm; }
+      * { box-sizing: border-box; }
+      body { font-family: Arial, "DejaVu Sans", sans-serif; color: #1f2933; font-size: 10pt; margin: 0; }
+      header { text-align: center; margin-bottom: 18px; }
+      h1 { margin: 0 0 5px; font-size: 18pt; color: #183143; }
+      .class { font-size: 12pt; font-weight: 700; margin: 0 0 5px; }
+      .meta { color: #52616b; font-size: 9pt; margin: 0; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { border: 1px solid #9aa4aa; padding: 7px 6px; text-align: center; }
+      th { background: #eef2f4; font-size: 9pt; }
+      td.name { text-align: left; }
+      tbody tr:nth-child(even) { background: #f8fafb; }
+      footer { margin-top: 12px; text-align: right; color: #52616b; font-size: 8pt; }
+      .empty { text-align: center; color: #52616b; padding: 18px; }
+      @media print { body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
+    </style></head><body>
+    <header><h1>Liste de présence</h1><p class="class">${escapeHtml(data.className)} · ${escapeHtml(data.level)}</p><p class="meta">${schoolLine}</p></header>
+    <table><thead><tr><th>N°</th><th>Matricule</th><th>Nom et prénom</th><th>Présences</th><th>Absences</th><th>Appels</th><th>Taux</th></tr></thead>
+    <tbody>${rows || '<tr><td class="empty" colspan="7">Aucun élève dans cette classe.</td></tr>'}</tbody></table>
+    <footer>${data.pupils.length} élève${data.pupils.length === 1 ? '' : 's'} · Document généré le ${new Date().toLocaleDateString('fr-FR')}</footer>
+    </body></html>`;
+}
+
+export async function exportClassAttendancePdf(data: ClassAttendanceExportData): Promise<void> {
+  const html = generateClassAttendancePdfHtml(data);
+  if (Platform.OS === 'web') {
+    await Print.printAsync({ html });
+    return;
+  }
+
+  const { base64 } = await Print.printToFileAsync({ html, base64: true });
+  if (!base64) throw new Error('Expo Print n’a pas fourni le contenu du PDF.');
+  const cacheDirectory = LegacyFS.cacheDirectory ?? Paths.cache.uri;
+  const safeClassName = data.className.replace(/[^\p{L}\p{N}-]+/gu, '_');
+  const targetUri = `${cacheDirectory.endsWith('/') ? cacheDirectory : `${cacheDirectory}/`}${Date.now()}-Presences_${safeClassName}.pdf`;
+  await LegacyFS.writeAsStringAsync(targetUri, base64, { encoding: LegacyFS.EncodingType.Base64 });
+  const fileInfo = await LegacyFS.getInfoAsync(targetUri);
+  if (!fileInfo.exists || fileInfo.size === 0) throw new Error('Le PDF des présences n’a pas été enregistré correctement.');
+  if (!(await Sharing.isAvailableAsync())) {
+    Alert.alert('PDF généré', 'Le fichier a été créé dans le cache de l’application.');
+    return;
+  }
+  await Sharing.shareAsync(targetUri, {
+    mimeType: 'application/pdf',
+    dialogTitle: `Enregistrer ou partager la liste de présence — ${data.className}`,
+    UTI: 'com.adobe.pdf',
+  });
+}
+
+export type DailyAttendanceExportData = {
+  schoolName?: string;
+  teacherName?: string;
+  className: string;
+  level: string;
+  academicYear: string;
+  date: string;
+  session: {
+    startTime: string;
+    endTime: string;
+    subject?: string;
+    room?: string;
+  };
+  pupils: Array<{
+    registrationNumber: string;
+    firstName: string;
+    lastName: string;
+    status?: 'present' | 'absent';
+  }>;
+};
+
+export function generateDailyAttendancePdfHtml(data: DailyAttendanceExportData): string {
+  const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[character] ?? character);
+  const present = data.pupils.filter((pupil) => pupil.status === 'present').length;
+  const absent = data.pupils.filter((pupil) => pupil.status === 'absent').length;
+  const unmarked = data.pupils.length - present - absent;
+  const rows = data.pupils.map((pupil, index) => {
+    const status = pupil.status === 'present'
+      ? '<span class="present">Présent</span>'
+      : pupil.status === 'absent'
+        ? '<span class="absent">Absent</span>'
+        : '<span class="unmarked">Non renseigné</span>';
+    return `<tr><td>${index + 1}</td><td>${escapeHtml(pupil.registrationNumber)}</td><td class="name">${escapeHtml(pupil.lastName)} ${escapeHtml(pupil.firstName)}</td><td>${status}</td></tr>`;
+  }).join('');
+  const schoolLine = [
+    data.schoolName ? `Établissement : ${data.schoolName}` : '',
+    data.teacherName ? `Enseignant(e) : ${data.teacherName}` : '',
+    `Année scolaire : ${data.academicYear}`,
+  ].filter((value): value is string => Boolean(value)).map(escapeHtml).join(' · ');
+  const sessionDetails = [
+    `${data.session.startTime}–${data.session.endTime}`,
+    data.session.subject,
+    data.session.room,
+  ].filter((value): value is string => Boolean(value)).map(escapeHtml).join(' · ');
+
+  return `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>Appel — ${escapeHtml(data.className)} — ${escapeHtml(data.date)}</title>
+    <style>
+      @page { size: A4 portrait; margin: 14mm; }
+      * { box-sizing: border-box; }
+      body { font-family: Arial, "DejaVu Sans", sans-serif; color: #1f2933; font-size: 10pt; margin: 0; }
+      header { text-align: center; margin-bottom: 16px; }
+      h1 { margin: 0 0 5px; font-size: 18pt; color: #183143; }
+      .class { font-size: 12pt; font-weight: 700; margin: 0 0 5px; }
+      .meta { color: #52616b; font-size: 9pt; margin: 4px 0; }
+      .counts { display: flex; justify-content: center; gap: 16px; margin: 14px 0; font-weight: 700; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { border: 1px solid #9aa4aa; padding: 7px 6px; text-align: center; }
+      th { background: #eef2f4; font-size: 9pt; }
+      td.name { text-align: left; }
+      tbody tr:nth-child(even) { background: #f8fafb; }
+      .present { color: #166534; font-weight: 700; }
+      .absent { color: #b91c1c; font-weight: 700; }
+      .unmarked { color: #64748b; }
+      footer { margin-top: 12px; text-align: right; color: #52616b; font-size: 8pt; }
+      .empty { text-align: center; color: #52616b; padding: 18px; }
+      @media print { body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
+    </style></head><body>
+    <header><h1>Situation de présence</h1><p class="class">${escapeHtml(data.className)} · ${escapeHtml(data.level)}</p><p class="meta">${escapeHtml(data.date)} · ${sessionDetails}</p><p class="meta">${schoolLine}</p></header>
+    <div class="counts"><span class="present">Présents : ${present}</span><span class="absent">Absents : ${absent}</span><span class="unmarked">Non renseignés : ${unmarked}</span></div>
+    <table><thead><tr><th>N°</th><th>Matricule</th><th>Nom et prénom</th><th>Statut</th></tr></thead>
+    <tbody>${rows || '<tr><td class="empty" colspan="4">Aucun élève dans cette classe.</td></tr>'}</tbody></table>
+    <footer>${data.pupils.length} élève${data.pupils.length === 1 ? '' : 's'} · Document généré le ${new Date().toLocaleDateString('fr-FR')}</footer>
+    </body></html>`;
+}
+
+export async function exportDailyAttendancePdf(data: DailyAttendanceExportData): Promise<void> {
+  const html = generateDailyAttendancePdfHtml(data);
+  if (Platform.OS === 'web') {
+    await Print.printAsync({ html });
+    return;
+  }
+
+  const { base64 } = await Print.printToFileAsync({ html, base64: true });
+  if (!base64) throw new Error('Expo Print n’a pas fourni le contenu du PDF.');
+  const cacheDirectory = LegacyFS.cacheDirectory ?? Paths.cache.uri;
+  const safeClassName = data.className.replace(/[^\p{L}\p{N}-]+/gu, '_');
+  const safeDate = data.date.replace(/[^\p{L}\p{N}-]+/gu, '-');
+  const targetUri = `${cacheDirectory.endsWith('/') ? cacheDirectory : `${cacheDirectory}/`}${Date.now()}-Appel_${safeClassName}_${safeDate}.pdf`;
+  await LegacyFS.writeAsStringAsync(targetUri, base64, { encoding: LegacyFS.EncodingType.Base64 });
+  const fileInfo = await LegacyFS.getInfoAsync(targetUri);
+  if (!fileInfo.exists || fileInfo.size === 0) throw new Error('Le PDF de l’appel n’a pas été enregistré correctement.');
+  if (!(await Sharing.isAvailableAsync())) {
+    Alert.alert('PDF généré', 'Le fichier a été créé dans le cache de l’application.');
+    return;
+  }
+  await Sharing.shareAsync(targetUri, {
+    mimeType: 'application/pdf',
+    dialogTitle: `Enregistrer ou partager l’appel — ${data.className} — ${data.date}`,
     UTI: 'com.adobe.pdf',
   });
 }

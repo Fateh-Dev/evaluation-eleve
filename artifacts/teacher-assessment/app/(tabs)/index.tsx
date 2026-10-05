@@ -91,7 +91,14 @@ export default function DashboardScreen() {
             compact
             onPress={() => {
               data.setActiveClass(currentSessionClass.id);
-              router.push(`/classes/${currentSessionClass.id}`);
+              router.push({
+                pathname: '/classes/[classId]',
+                params: {
+                  classId: currentSessionClass.id,
+                  sessionId: currentSession!.id,
+                  attendanceDate: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`,
+                },
+              });
             }}
           />
         ) : null}

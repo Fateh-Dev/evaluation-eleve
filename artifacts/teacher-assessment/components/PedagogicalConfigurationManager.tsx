@@ -32,7 +32,6 @@ export default function PedagogicalConfigurationManager() {
   const [levelNameDraft, setLevelNameDraft] = useState('');
   const [deleteArmedYear, setDeleteArmedYear] = useState<string | null>(null);
   const [deleteArmedLevelId, setDeleteArmedLevelId] = useState<string | null>(null);
-  const [deleteArmedObjectiveIndex, setDeleteArmedObjectiveIndex] = useState<number | null>(null);
 
   const configuration = data.getSchoolYearConfiguration(selectedYear);
   const selectedLevel = configuration?.levels.find(
@@ -356,8 +355,25 @@ export default function PedagogicalConfigurationManager() {
     );
   };
 
+  const requestRemoveObjective = (index: number) => {
+    const description = objectiveDraft[index]?.trim();
+    if (description === undefined) return;
+    Alert.alert(
+      'Supprimer cet objectif ?',
+      `« ${description || `Objectif ${index + 1}`} » sera retiré de cette compétence après l’enregistrement de la liste.`,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: () => setObjectiveDraft((previous) => previous.filter((_, itemIndex) => itemIndex !== index)),
+        },
+      ],
+    );
+  };
+
   return (
-    <View onTouchStart={() => { setDeleteArmedYear(null); setDeleteArmedLevelId(null); setDeleteArmedObjectiveIndex(null); }}>
+    <View onTouchStart={() => { setDeleteArmedYear(null); setDeleteArmedLevelId(null); }}>
       <SectionTitle title="Configuration pédagogique par année" />
       <Surface
         style={[styles.card, { borderColor: colors.border }]}
@@ -968,29 +984,11 @@ export default function PedagogicalConfigurationManager() {
             {objectiveDraft.map((objective, index) => (
               <View
                 key={`${selectedCompetency.id}-${index}`}
-                style={[
-                  styles.inlineRow,
-                  deleteArmedObjectiveIndex === index && {
-                    backgroundColor: colors.card,
-                    borderColor: colors.destructive,
-                    borderWidth: 2,
-                    borderRadius: 8,
-                    paddingHorizontal: 6,
-                  },
-                ]}
+                style={styles.inlineRow}
               >
-                <Pressable
-                  onTouchStart={(event) => event.stopPropagation()}
-                  onLongPress={() => setDeleteArmedObjectiveIndex(index)}
-                  onPress={() => {
-                    if (deleteArmedObjectiveIndex !== null) setDeleteArmedObjectiveIndex(index);
-                  }}
-                  accessibilityHint="Maintenez appuyé pour afficher la suppression."
-                >
-                  <Text style={[styles.order, { color: colors.mutedForeground }]}>
-                    {String(index + 1).padStart(2, '0')}
-                  </Text>
-                </Pressable>
+                <Text style={[styles.order, { color: colors.mutedForeground }]}>
+                  {String(index + 1).padStart(2, '0')}
+                </Text>
                 <TextInput
                   value={objective}
                   onChangeText={(value) =>
@@ -1012,20 +1010,15 @@ export default function PedagogicalConfigurationManager() {
                     },
                   ]}
                 />
-                {deleteArmedObjectiveIndex === index ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Supprimer l’objectif ${index + 1}`}
-                    onTouchStart={(event) => event.stopPropagation()}
-                    onPress={() => {
-                      setDeleteArmedObjectiveIndex(null);
-                      setObjectiveDraft((previous) => previous.filter((_, itemIndex) => itemIndex !== index));
-                    }}
-                    style={[styles.removeButton, { backgroundColor: colors.errorSurface }]}
-                  >
-                    <Feather name="x" size={16} color={colors.errorForeground} />
-                  </Pressable>
-                ) : null}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Supprimer l’objectif ${index + 1}`}
+                  onTouchStart={(event) => event.stopPropagation()}
+                  onPress={() => requestRemoveObjective(index)}
+                  style={[styles.removeButton, { backgroundColor: colors.errorSurface }]}
+                >
+                  <Feather name="trash-2" size={16} color={colors.errorForeground} />
+                </Pressable>
               </View>
             ))}
             {objectiveDraft.length === 0 && (

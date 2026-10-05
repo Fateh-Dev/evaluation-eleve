@@ -65,7 +65,6 @@ export default function AssessmentEvaluationScreen() {
   });
   const [objectivesModalVisible, setObjectivesModalVisible] = useState(false);
   const [assessmentDeleteArmed, setAssessmentDeleteArmed] = useState(false);
-  const [deleteArmedObjectiveId, setDeleteArmedObjectiveId] = useState<string | null>(null);
   const [newObjectiveText, setNewObjectiveText] = useState('');
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [summaryExpanded, setSummaryExpanded] = useState(true);
@@ -197,7 +196,7 @@ export default function AssessmentEvaluationScreen() {
   }
 
   return (
-    <Screen scroll={false} bottomPadding={20} onTouchStart={() => { setAssessmentDeleteArmed(false); setDeleteArmedObjectiveId(null); }}>
+    <Screen scroll={false} bottomPadding={20} onTouchStart={() => setAssessmentDeleteArmed(false)}>
       <AppHeader
         eyebrow="Évaluation"
         title={currentAssessment.title}
@@ -408,34 +407,15 @@ export default function AssessmentEvaluationScreen() {
               {currentObjectives.map((objective) => (
                 <View
                   key={objective.id}
-                  style={[
-                    styles.objectiveCell,
-                    deleteArmedObjectiveId === objective.id && {
-                      backgroundColor: colors.card,
-                      borderColor: colors.destructive,
-                      borderWidth: 2,
-                      borderRadius: 6,
-                    },
-                  ]}
+                  style={styles.objectiveCell}
                 >
                   <View style={styles.objCellHeader}>
-                    <Pressable
-                      onTouchStart={(event) => event.stopPropagation()}
-                      onLongPress={() => setDeleteArmedObjectiveId(objective.id)}
-                      onPress={() => {
-                        if (deleteArmedObjectiveId !== null) setDeleteArmedObjectiveId(objective.id);
-                      }}
-                      accessibilityHint="Maintenez appuyé pour afficher la suppression."
-                    >
-                      <Text style={[styles.objectiveNumber, { color: colors.foreground }]}>
-                        {String(objective.order).padStart(2, '0')}
-                      </Text>
+                    <Text style={[styles.objectiveNumber, { color: colors.foreground }]}>
+                      {String(objective.order).padStart(2, '0')}
+                    </Text>
+                    <Pressable onTouchStart={(event) => event.stopPropagation()} onPress={() => handleDeleteObjective(objective.id, objective.order, objective.description)} hitSlop={6} accessibilityRole="button" accessibilityLabel={`Supprimer l’objectif ${objective.order}`}>
+                      <Feather name="trash-2" size={14} color={colors.destructive} />
                     </Pressable>
-                    {deleteArmedObjectiveId === objective.id ? (
-                      <Pressable onTouchStart={(event) => event.stopPropagation()} onPress={() => { setDeleteArmedObjectiveId(null); handleDeleteObjective(objective.id, objective.order, objective.description); }} hitSlop={6} accessibilityRole="button" accessibilityLabel="Supprimer cet objectif">
-                        <Feather name="trash-2" size={12} color={colors.destructive} />
-                      </Pressable>
-                    ) : null}
                   </View>
                   <Pressable onPress={() => confirmMarkAll(objective.id)}>
                     <Text style={[styles.markAll, { color: colors.primary }]}>marquer +</Text>
@@ -596,34 +576,16 @@ export default function AssessmentEvaluationScreen() {
               return (
                 <Surface
                   key={objective.id}
-                  style={[
-                    styles.mobileObjective,
-                    deleteArmedObjectiveId === objective.id && {
-                      backgroundColor: colors.card,
-                      borderColor: colors.destructive,
-                      borderWidth: 2,
-                    },
-                  ]}
+                  style={styles.mobileObjective}
                 >
                   <View style={styles.objectiveCopy}>
                     <View style={styles.objectiveHeaderRow}>
-                      <Pressable
-                        onTouchStart={(event) => event.stopPropagation()}
-                        onLongPress={() => setDeleteArmedObjectiveId(objective.id)}
-                        onPress={() => {
-                          if (deleteArmedObjectiveId !== null) setDeleteArmedObjectiveId(objective.id);
-                        }}
-                        accessibilityHint="Maintenez appuyé pour afficher la suppression."
-                      >
-                        <Text style={[styles.mobileObjectiveNumber, { color: colors.primary }]}>
-                          OBJECTIF {String(objective.order).padStart(2, '0')}
-                        </Text>
+                      <Text style={[styles.mobileObjectiveNumber, { color: colors.primary }]}>
+                        OBJECTIF {String(objective.order).padStart(2, '0')}
+                      </Text>
+                      <Pressable onTouchStart={(event) => event.stopPropagation()} onPress={() => handleDeleteObjective(objective.id, objective.order, objective.description)} hitSlop={8} style={styles.trashObjBtn} accessibilityRole="button" accessibilityLabel={`Supprimer l’objectif ${objective.order}`}>
+                        <Feather name="trash-2" size={14} color={colors.destructive} />
                       </Pressable>
-                      {deleteArmedObjectiveId === objective.id ? (
-                        <Pressable onTouchStart={(event) => event.stopPropagation()} onPress={() => { setDeleteArmedObjectiveId(null); handleDeleteObjective(objective.id, objective.order, objective.description); }} hitSlop={8} style={styles.trashObjBtn} accessibilityRole="button" accessibilityLabel="Supprimer cet objectif">
-                          <Feather name="trash-2" size={14} color={colors.destructive} />
-                        </Pressable>
-                      ) : null}
                     </View>
                     <Text style={[styles.mobileObjectiveText, { color: colors.foreground }]}>
                       {objective.description}
@@ -723,35 +685,19 @@ export default function AssessmentEvaluationScreen() {
               {currentObjectives.map((obj) => (
                 <View
                   key={obj.id}
-                  style={[
-                    styles.objListItem,
-                    deleteArmedObjectiveId === obj.id
-                      ? { backgroundColor: colors.card, borderColor: colors.destructive, borderWidth: 2, borderRadius: 7, paddingHorizontal: 5 }
-                      : { borderBottomColor: colors.border },
-                  ]}
+                  style={[styles.objListItem, { borderBottomColor: colors.border }]}
                 >
                   <View style={[styles.objOrderBadge, { backgroundColor: colors.secondary }]}>
                     <Text style={[styles.objOrderText, { color: colors.foreground }]}>
                       {String(obj.order).padStart(2, '0')}
                     </Text>
                   </View>
-                  <Pressable
-                    onTouchStart={(event) => event.stopPropagation()}
-                    onLongPress={() => setDeleteArmedObjectiveId(obj.id)}
-                    onPress={() => {
-                      if (deleteArmedObjectiveId !== null) setDeleteArmedObjectiveId(obj.id);
-                    }}
-                    accessibilityHint="Maintenez appuyé pour afficher la suppression."
-                  >
-                    <Text style={[styles.objListDesc, { color: colors.foreground }]}>
-                      {obj.description}
-                    </Text>
+                  <Text style={[styles.objListDesc, { color: colors.foreground }]}>
+                    {obj.description}
+                  </Text>
+                  <Pressable onTouchStart={(event) => event.stopPropagation()} onPress={() => handleDeleteObjective(obj.id, obj.order, obj.description)} hitSlop={8} style={styles.trashObjBtn} accessibilityRole="button" accessibilityLabel={`Supprimer l’objectif ${obj.order}`}>
+                    <Feather name="trash-2" size={16} color={colors.destructive} />
                   </Pressable>
-                  {deleteArmedObjectiveId === obj.id ? (
-                    <Pressable onTouchStart={(event) => event.stopPropagation()} onPress={() => { setDeleteArmedObjectiveId(null); handleDeleteObjective(obj.id, obj.order, obj.description); }} hitSlop={8} style={styles.trashObjBtn} accessibilityRole="button" accessibilityLabel="Supprimer cet objectif">
-                      <Feather name="trash-2" size={16} color={colors.destructive} />
-                    </Pressable>
-                  ) : null}
                 </View>
               ))}
             </ScrollView>

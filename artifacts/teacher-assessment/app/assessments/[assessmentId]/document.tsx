@@ -1,7 +1,7 @@
 import { Alert } from '@/components/AppDialog';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -10,6 +10,7 @@ import {
   Share,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { AppHeader, GuideAnchor, Screen, Surface } from '@/components/AppShell';
@@ -67,6 +68,18 @@ export default function AssessmentDocumentScreen() {
   }, [data.allRemediations, currentAssessment.id]);
 
   const [exportingFormat, setExportingFormat] = useState<'excel' | 'word' | 'pdf' | null>(null);
+  const [individualDecisionDraft, setIndividualDecisionDraft] = useState(currentRemediation.individual);
+  const [classDecisionDraft, setClassDecisionDraft] = useState(currentRemediation.classroom);
+
+  useEffect(() => {
+    setIndividualDecisionDraft(currentRemediation.individual);
+    setClassDecisionDraft(currentRemediation.classroom);
+  }, [currentAssessment.id, currentRemediation.individual, currentRemediation.classroom]);
+
+  const saveDecisions = () => {
+    data.updateRemediation(individualDecisionDraft, classDecisionDraft, currentAssessment.id);
+    Alert.alert('Décisions enregistrées', 'Les décisions de cette évaluation sont enregistrées.');
+  };
 
   // Compute column totals for bottom total row
   const objectiveTotals = useMemo(() => {
@@ -128,8 +141,8 @@ export default function AssessmentDocumentScreen() {
       pupils: currentPupils,
       evaluations: currentEvaluations,
       absentPupilIds: [...absentPupilIds],
-      individualRemediation: currentRemediation.individual,
-      classRemediation: currentRemediation.classroom,
+      individualRemediation: individualDecisionDraft,
+      classRemediation: classDecisionDraft,
     };
   }, [
     data.school,
@@ -140,7 +153,8 @@ export default function AssessmentDocumentScreen() {
     currentPupils,
     currentEvaluations,
     absentPupilIds,
-    currentRemediation,
+    individualDecisionDraft,
+    classDecisionDraft,
   ]);
 
   const handleExportExcel = async () => {
@@ -536,24 +550,34 @@ export default function AssessmentDocumentScreen() {
           <Text style={styles.decisionsTitle}>Décisions à prendre :</Text>
 
           <Text style={styles.decisionCategory}>A) Au plan individuel :</Text>
-          {(currentRemediation.individual || 'Aucune décision individuelle enregistrée.')
-            .split('\n')
-            .filter(Boolean)
-            .map((line, idx) => (
-              <Text key={idx} style={styles.decisionBullet}>
-                {line.startsWith('•') || line.startsWith('-') ? line : `• ${line}`}
-              </Text>
-            ))}
+          <TextInput
+            accessibilityLabel="Décision à prendre au plan individuel"
+            multiline
+            value={individualDecisionDraft}
+            onChangeText={setIndividualDecisionDraft}
+            placeholder="Saisir les décisions individuelles…"
+            placeholderTextColor="#64748B"
+            style={styles.decisionInput}
+          />
 
           <Text style={styles.decisionCategory}>B) Au plan de la classe :</Text>
-          {(currentRemediation.classroom || 'Aucune décision de classe enregistrée.')
-            .split('\n')
-            .filter(Boolean)
-            .map((line, idx) => (
-              <Text key={idx} style={styles.decisionBullet}>
-                {line.startsWith('•') || line.startsWith('-') ? line : `• ${line}`}
-              </Text>
-            ))}
+          <TextInput
+            accessibilityLabel="Décision à prendre au plan de la classe"
+            multiline
+            value={classDecisionDraft}
+            onChangeText={setClassDecisionDraft}
+            placeholder="Saisir les décisions pour la classe…"
+            placeholderTextColor="#64748B"
+            style={styles.decisionInput}
+          />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Enregistrer les décisions"
+            onPress={saveDecisions}
+            style={styles.saveDecisionsButton}
+          >
+            <Text style={styles.saveDecisionsButtonText}>Enregistrer les décisions</Text>
+          </Pressable>
         </View>
       </Surface>
     </Screen>
@@ -839,11 +863,29 @@ const styles = StyleSheet.create({
     marginTop: 6,
     marginBottom: 4,
   },
-  decisionBullet: {
+  decisionInput: {
+    minHeight: 70,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 6,
+    padding: 8,
+    color: '#333333',
+    backgroundColor: '#FFFFFF',
     fontSize: 10.5,
     lineHeight: 16,
-    color: '#333333',
-    marginLeft: 8,
-    marginBottom: 3,
+    textAlignVertical: 'top',
+  },
+  saveDecisionsButton: {
+    alignSelf: 'flex-end',
+    marginTop: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 7,
+    backgroundColor: '#1F4E78',
+  },
+  saveDecisionsButtonText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
   },
 });

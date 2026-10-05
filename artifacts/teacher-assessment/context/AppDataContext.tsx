@@ -45,6 +45,20 @@ export type ScheduleSession = {
   notes?: string;
 };
 
+export type AttendanceStatus = 'present' | 'absent';
+
+export type AttendanceRecord = {
+  id: string;
+  classId: string;
+  sessionId?: string;
+  date: string;
+  startTime?: string;
+  endTime?: string;
+  subject?: string;
+  room?: string;
+  statuses: Record<string, AttendanceStatus>;
+};
+
 export type Pupil = {
   id: string;
   registrationNumber: string;
@@ -99,6 +113,7 @@ export type AppState = {
   schoolYearConfigurations: SchoolYearConfiguration[];
   classes: ClassItem[];
   scheduleSessions: ScheduleSession[];
+  attendanceRecords: AttendanceRecord[];
   activeClassId: string;
   pupils: Pupil[];
   assessments: Assessment[];
@@ -129,6 +144,7 @@ export type AppDataContextValue = {
   schoolYearConfigurations: SchoolYearConfiguration[];
   classes: ClassItem[];
   scheduleSessions: ScheduleSession[];
+  attendanceRecords: AttendanceRecord[];
   activeClassId: string;
   pupils: Pupil[];
   assessments: Assessment[];
@@ -245,6 +261,13 @@ export type AppDataContextValue = {
     lastName: string,
   ) => boolean;
   getPupilsForClass: (classId: string) => Pupil[];
+  getAttendanceRecord: (
+    classId: string,
+    sessionId: string | undefined,
+    date: string,
+  ) => AttendanceRecord | undefined;
+  getAttendanceRecordsForClass: (classId: string) => AttendanceRecord[];
+  saveAttendanceRecord: (record: Omit<AttendanceRecord, 'id'>) => boolean;
 
   // Assessment / Competency Actions
   createAssessment: (input: {
@@ -258,7 +281,7 @@ export type AppDataContextValue = {
     sessionObjectives?: string;
     date?: string;
     objectives?: string[];
-  }) => string;
+  }) => string | undefined;
   setActiveAssessment: (assessmentId: string) => void;
   deleteAssessment: (assessmentId: string) => void;
   getAssessment: (assessmentId: string) => Assessment | undefined;
@@ -328,6 +351,23 @@ function isScheduleSession(value: unknown): value is ScheduleSession {
     session.startTime < session.endTime;
 }
 
+function isAttendanceRecord(value: unknown): value is AttendanceRecord {
+  if (!value || typeof value !== 'object') return false;
+  const record = value as Partial<AttendanceRecord>;
+  const [year, month, day] = (record.date ?? '').split('-').map(Number);
+  const parsedDate = new Date(year, month - 1, day);
+  const hasValidDate = /^\d{4}-\d{2}-\d{2}$/.test(record.date ?? '') &&
+    parsedDate.getFullYear() === year &&
+    parsedDate.getMonth() === month - 1 &&
+    parsedDate.getDate() === day;
+  return typeof record.id === 'string' &&
+    typeof record.classId === 'string' &&
+    hasValidDate &&
+    (record.sessionId === undefined || typeof record.sessionId === 'string') &&
+    Boolean(record.statuses) && typeof record.statuses === 'object' &&
+    Object.values(record.statuses).every((status) => status === 'present' || status === 'absent');
+}
+
 export function createEmptyState(): AppState {
   return {
     school: {
@@ -342,6 +382,7 @@ export function createEmptyState(): AppState {
     ],
     classes: [],
     scheduleSessions: [],
+    attendanceRecords: [],
     activeClassId: '',
     pupils: [],
     assessments: [],
@@ -390,6 +431,9 @@ export function AppDataProvider({ children }: PropsWithChildren) {
               classes,
               scheduleSessions: Array.isArray(parsed.scheduleSessions)
                 ? parsed.scheduleSessions.filter(isScheduleSession).filter((session) => classes.some((classItem) => classItem.id === session.classId))
+                : [],
+              attendanceRecords: Array.isArray(parsed.attendanceRecords)
+                ? parsed.attendanceRecords.filter(isAttendanceRecord).filter((record) => classes.some((classItem) => classItem.id === record.classId))
                 : [],
               pupils: Array.isArray(parsed.pupils) ? parsed.pupils : [],
               assessments,
@@ -1332,6 +1376,9 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       scheduleSessions: Array.isArray(candidate.scheduleSessions)
         ? candidate.scheduleSessions.filter(isScheduleSession).filter((session) => restoredClasses.some((classItem) => classItem.id === session.classId))
         : [],
+      attendanceRecords: Array.isArray(candidate.attendanceRecords)
+        ? candidate.attendanceRecords.filter(isAttendanceRecord).filter((record) => restoredClasses.some((classItem) => classItem.id === record.classId))
+        : [],
     };
     setState(restored);
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(restored));
@@ -1397,6 +1444,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         evaluations: nextEvaluations,
         remediations: nextRemediations,
         absentPupilIds: nextAbsences,
+        attendanceRecords: prev.attendanceRecords.filter((record) => record.classId !== classId),
       };
     });
   };
@@ -1404,6 +1452,56 @@ export function AppDataProvider({ children }: PropsWithChildren) {
   // PUPIL ACTIONS
   const getPupilsForClass = (classId: string) => {
     return state.pupils.filter((p) => p.classId === classId);
+  };
+
+  const getAttendanceRecord = (
+    classId: string,
+    sessionId: string | undefined,
+    date: string,
+  ) => state.attendanceRecords.find((record) =>
+    record.classId === classId &&
+    (record.sessionId ?? '') === (sessionId ?? '') &&
+    record.date === date,
+  );
+
+  const getAttendanceRecordsForClass = (classId: string) =>
+    state.attendanceRecords.filter((record) => record.classId === classId);
+
+  const saveAttendanceRecord = (record: Omit<AttendanceRecord, 'id'>) => {
+    const classPupils = state.pupils.filter((pupil) => pupil.classId === record.classId);
+    const [year, month, day] = record.date.split('-').map(Number);
+    const parsedDate = new Date(year, month - 1, day);
+    const scheduledSession = record.sessionId
+      ? state.scheduleSessions.find((session) => session.id === record.sessionId)
+      : undefined;
+    const hasValidDate = /^\d{4}-\d{2}-\d{2}$/.test(record.date) &&
+      parsedDate.getFullYear() === year &&
+      parsedDate.getMonth() === month - 1 &&
+      parsedDate.getDate() === day;
+    if (
+      !state.classes.some((classItem) => classItem.id === record.classId) ||
+      !hasValidDate ||
+      !scheduledSession ||
+      scheduledSession.classId !== record.classId ||
+      scheduledSession.dayOfWeek !== (parsedDate.getDay() + 6) % 7 ||
+      classPupils.length === 0 ||
+      classPupils.some((pupil) => record.statuses[pupil.id] !== 'present' && record.statuses[pupil.id] !== 'absent')
+    ) {
+      return false;
+    }
+    const id = `${record.classId}::${record.sessionId ?? 'manual'}::${record.date}`;
+    setState((prev) => ({
+      ...prev,
+      attendanceRecords: [
+        ...prev.attendanceRecords.filter((item) =>
+          !(item.classId === record.classId &&
+            (item.sessionId ?? '') === (record.sessionId ?? '') &&
+            item.date === record.date),
+        ),
+        { ...record, id },
+      ],
+    }));
+    return true;
   };
 
   const addPupils = (
@@ -1518,7 +1616,6 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     date?: string;
     objectives?: string[];
   }) => {
-    const newAssessmentId = createConfigId('assessment');
     const targetClass =
       state.classes.find((c) => c.id === input.classId) ?? activeClass;
     const configuration = getSchoolYearConfiguration(targetClass.academicYear);
@@ -1537,6 +1634,14 @@ export function AppDataProvider({ children }: PropsWithChildren) {
           normalizeLabel(item.name) === normalizeLabel(input.competency),
       );
     const competencyId = input.competencyId ?? competency?.id;
+    const duplicateExists = state.assessments.some((assessment) =>
+      assessment.classId === input.classId &&
+      ((competencyId && assessment.competencyId === competencyId) ||
+        normalizeLabel(assessment.competency) === normalizeLabel(input.competency)),
+    );
+    if (duplicateExists) return undefined;
+
+    const newAssessmentId = createConfigId('assessment');
 
     const newAssessment: Assessment = {
       id: newAssessmentId,
@@ -1973,6 +2078,9 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       deletePupil,
       updatePupilName,
       getPupilsForClass,
+      getAttendanceRecord,
+      getAttendanceRecordsForClass,
+      saveAttendanceRecord,
       createAssessment,
       setActiveAssessment,
       deleteAssessment,

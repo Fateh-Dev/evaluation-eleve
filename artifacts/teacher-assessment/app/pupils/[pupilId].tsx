@@ -15,8 +15,6 @@ export default function PupilDetailScreen() {
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [firstNameInput, setFirstNameInput] = useState('');
   const [lastNameInput, setLastNameInput] = useState('');
-  const [decisionModalVisible, setDecisionModalVisible] = useState(false);
-  const [decisionInput, setDecisionInput] = useState('');
   const pupilClass = data.classes.find(
     (classItem) => classItem.id === pupil?.classId,
   );
@@ -33,10 +31,6 @@ export default function PupilDetailScreen() {
   const pupilEvaluations = pupilAssessment
     ? data.getEvaluationsForAssessment(pupilAssessment.id)[pupil?.id ?? ''] ?? {}
     : {};
-  const individualDecision = pupilAssessment
-    ? data.getRemediationForAssessment(pupilAssessment.id).individual
-    : '';
-
   const openEditModal = () => {
     if (!pupil) return;
     setFirstNameInput(pupil.firstName);
@@ -54,35 +48,6 @@ export default function PupilDetailScreen() {
       return;
     }
     setEditModalVisible(false);
-  };
-
-  const openDecisionEditor = () => {
-    if (!pupilAssessment) {
-      Alert.alert(
-        'Aucune évaluation',
-        'Créez une évaluation pour cette classe avant d’ajouter une décision individuelle.',
-      );
-      return;
-    }
-    setDecisionInput(individualDecision);
-    setDecisionModalVisible(true);
-  };
-
-  const saveIndividualDecision = () => {
-    if (!pupilAssessment) {
-      Alert.alert(
-        'Aucune évaluation',
-        'Créez une évaluation pour cette classe avant d’ajouter une décision individuelle.',
-      );
-      return;
-    }
-    const existing = data.getRemediationForAssessment(pupilAssessment.id);
-    data.updateRemediation(
-      decisionInput,
-      existing.classroom,
-      pupilAssessment.id,
-    );
-    setDecisionModalVisible(false);
   };
 
   if (!pupil) {
@@ -167,67 +132,6 @@ export default function PupilDetailScreen() {
           </Text>
         )}
       </Surface>
-      <SectionTitle
-        title="Décisions individuelles"
-        action="Modifier"
-        onAction={openDecisionEditor}
-      />
-      <Surface style={styles.note}>
-        <Feather name="edit-3" size={16} color={colors.primary} />
-        <Text style={[styles.noteText, { color: colors.foreground }]}>
-          {individualDecision || 'Aucune décision individuelle renseignée.'}
-        </Text>
-      </Surface>
-      <Modal
-        visible={decisionModalVisible}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setDecisionModalVisible(false)}
-      >
-        <KeyboardAvoidingViewCompat style={styles.modalOverlay}>
-          <Surface style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <View style={styles.modalHeader}>
-              <View style={styles.modalHeaderCopy}>
-                <Text style={[styles.modalTitle, { color: colors.foreground }]}>
-                  Décision individuelle
-                </Text>
-                <Text style={[styles.profileMeta, { color: colors.mutedForeground }]}>
-                  {pupil.firstName} {pupil.lastName}
-                </Text>
-              </View>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Fermer"
-                onPress={() => setDecisionModalVisible(false)}
-                style={[styles.closeButton, { backgroundColor: colors.secondary }]}
-              >
-                <Feather name="x" size={18} color={colors.foreground} />
-              </Pressable>
-            </View>
-            <TextInput
-              autoFocus
-              multiline
-              value={decisionInput}
-              onChangeText={setDecisionInput}
-              placeholder="Saisir la décision ou la remédiation individuelle…"
-              placeholderTextColor={colors.mutedForeground}
-              textAlignVertical="top"
-              style={[
-                styles.decisionInput,
-                {
-                  color: colors.foreground,
-                  borderColor: colors.border,
-                  backgroundColor: colors.background,
-                },
-              ]}
-            />
-            <View style={styles.modalActions}>
-              <Button label="Annuler" secondary onPress={() => setDecisionModalVisible(false)} />
-              <Button label="Enregistrer" icon="check" onPress={saveIndividualDecision} />
-            </View>
-          </Surface>
-        </KeyboardAvoidingViewCompat>
-      </Modal>
       <Modal
         visible={editModalVisible}
         animationType="slide"
@@ -308,8 +212,6 @@ const styles = StyleSheet.create({
   objectiveRow: { minHeight: 42, borderTopWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 2, paddingVertical: 4 },
   objectiveText: { flex: 1, fontSize: 12, lineHeight: 17 },
   emptyHistory: { fontSize: 13, lineHeight: 19, paddingVertical: 4 },
-  note: { flexDirection: 'row', gap: 10, alignItems: 'flex-start', padding: 16, minHeight: 64 },
-  noteText: { flex: 1, fontSize: 13, lineHeight: 19 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 },
   modalCard: { width: '100%', maxWidth: 480, borderRadius: 20, borderWidth: 1, padding: 20, gap: 16 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, paddingBottom: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(128, 128, 128, 0.25)' },
@@ -319,6 +221,5 @@ const styles = StyleSheet.create({
   fieldGroup: { gap: 6 },
   fieldLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 1 },
   input: { height: 44, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, fontSize: 14 },
-  decisionInput: { minHeight: 140, borderWidth: 1, borderRadius: 12, padding: 12, fontSize: 14, lineHeight: 20 },
   modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10 },
 });

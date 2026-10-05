@@ -16,11 +16,12 @@ import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollV
 import { useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
 import { useListSelection } from '@/hooks/useListSelection';
+import { exportClassAttendancePdf } from '@/services/exportService';
 
 export default function ClassDetailScreen() {
   const colors = useColors();
   const data = useAppData();
-  const params = useLocalSearchParams<{ classId: string }>();
+  const params = useLocalSearchParams<{ classId: string; sessionId?: string; attendanceDate?: string }>();
 
   const currentClassId = params.classId || data.activeClassId;
   const currentClass = useMemo(() => {
@@ -34,11 +35,83 @@ export default function ClassDetailScreen() {
   const classAssessments = useMemo(() => {
     return data.getAssessmentsForClass(currentClass.id);
   }, [data.assessments, currentClass.id]);
+  const attendanceRecords = useMemo(
+    () => data.getAttendanceRecordsForClass(currentClass.id),
+    [data.attendanceRecords, currentClass.id],
+  );
+  const pupilAttendanceStats = useMemo(
+    () => new Map(classPupils.map((pupil) => {
+      const stats = attendanceRecords.reduce((counts, record) => {
+        const status = record.statuses[pupil.id];
+        if (status === 'present' || status === 'absent') {
+          counts.total += 1;
+          if (status === 'present') counts.present += 1;
+        }
+        return counts;
+      }, { present: 0, total: 0 });
+      return [pupil.id, stats] as const;
+    })),
+    [attendanceRecords, classPupils],
+  );
+  const attendanceCounts = [...pupilAttendanceStats.values()].reduce(
+    (counts, pupilStats) => ({
+      present: counts.present + pupilStats.present,
+      total: counts.total + pupilStats.total,
+    }),
+    { present: 0, total: 0 },
+  );
+  const classAttendanceRate = attendanceCounts.total
+    ? Math.round((attendanceCounts.present / attendanceCounts.total) * 100)
+    : null;
+
+  const openAttendance = () => {
+    const now = new Date();
+    const attendanceDate = params.attendanceDate && /^\d{4}-\d{2}-\d{2}$/.test(params.attendanceDate)
+      ? params.attendanceDate
+      : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    router.push({
+      pathname: '/classes/[classId]/attendance',
+      params: {
+        classId: currentClass.id,
+        sessionId: params.sessionId ?? '',
+        date: attendanceDate,
+      },
+    });
+  };
+
+  const exportAttendanceList = async () => {
+    setIsExportingAttendance(true);
+    try {
+      await exportClassAttendancePdf({
+        schoolName: data.school.name,
+        teacherName: data.teacherName,
+        className: currentClass.name,
+        level: currentClass.level,
+        academicYear: currentClass.academicYear,
+        pupils: classPupils.map((pupil) => {
+          const stats = pupilAttendanceStats.get(pupil.id) ?? { present: 0, total: 0 };
+          return {
+            registrationNumber: pupil.registrationNumber,
+            firstName: pupil.firstName,
+            lastName: pupil.lastName,
+            present: stats.present,
+            absent: stats.total - stats.present,
+            total: stats.total,
+          };
+        }),
+      });
+    } catch (error) {
+      Alert.alert('Export impossible', error instanceof Error ? error.message : 'Impossible de générer la liste de présence.');
+    } finally {
+      setIsExportingAttendance(false);
+    }
+  };
 
   const [activeTab, setActiveTab] = useState<'competencies' | 'pupils'>('competencies');
   const assessmentSelection = useListSelection();
   const pupilSelection = useListSelection();
   const [classDeleteArmed, setClassDeleteArmed] = useState(false);
+  const [isExportingAttendance, setIsExportingAttendance] = useState(false);
 
   const [classNameModalVisible, setClassNameModalVisible] = useState(false);
   const [classNameInput, setClassNameInput] = useState('');
@@ -186,6 +259,27 @@ export default function ClassDetailScreen() {
           <Feather name="edit-2" size={16} color={colors.primary} />
         </Pressable>
       </Surface>
+      <Surface style={[styles.attendanceSummary, { borderColor: colors.border }]}>
+        <View style={styles.attendanceSummaryCopy}>
+          <Text style={[styles.attendanceSummaryTitle, { color: colors.foreground }]}>Présence de la classe</Text>
+          <Text style={[styles.attendanceSummaryMeta, { color: colors.mutedForeground }]}>
+            {classAttendanceRate === null
+              ? 'Aucun appel enregistré'
+              : `${classAttendanceRate}% · ${attendanceRecords.length} appel${attendanceRecords.length > 1 ? 's' : ''} enregistré${attendanceRecords.length > 1 ? 's' : ''}`}
+          </Text>
+        </View>
+        <View style={styles.attendanceActions}>
+          <Button label="Faire l’appel" icon="check-square" compact onPress={openAttendance} />
+          <Button
+            label={isExportingAttendance ? 'Préparation…' : 'Exporter la liste'}
+            icon="download"
+            compact
+            secondary
+            disabled={isExportingAttendance}
+            onPress={() => { void exportAttendanceList(); }}
+          />
+        </View>
+      </Surface>
 
       {/* Tabs Switcher: Compétences vs Élèves */}
       <View style={styles.tabBar}>
@@ -246,6 +340,7 @@ export default function ClassDetailScreen() {
           <SectionTitle
             title="Compétences de la classe"
             action="+ Ajouter"
+            compact
             onAction={() => router.push(`/assessments/new?classId=${currentClass.id}`)}
           />
           <ListSelectionToolbar
@@ -337,25 +432,29 @@ export default function ClassDetailScreen() {
                         <SelectionCheckbox checked={assessmentSelection.selectedIds.includes(item.id)} />
                       ) : (
                         <>
-                      <Button
-                        label="Évaluer"
-                        icon="check-square"
-                        compact
-                        onPress={() => {
-                          data.setActiveAssessment(item.id);
-                          router.push(`/assessments/${item.id}`);
-                        }}
-                      />
-                      <Button
-                        label="Exporter"
-                        icon="file-text"
-                        compact
-                        secondary
-                        onPress={() => {
-                          data.setActiveAssessment(item.id);
-                          router.push(`/assessments/${item.id}/document`);
-                        }}
-                      />
+                      <View style={styles.cardActionButton}>
+                        <Button
+                          label="Évaluer"
+                          icon="check-square"
+                          compact
+                          onPress={() => {
+                            data.setActiveAssessment(item.id);
+                            router.push(`/assessments/${item.id}`);
+                          }}
+                        />
+                      </View>
+                      <View style={styles.cardActionButton}>
+                        <Button
+                          label="Exporter"
+                          icon="file-text"
+                          compact
+                          secondary
+                          onPress={() => {
+                            data.setActiveAssessment(item.id);
+                            router.push(`/assessments/${item.id}/document`);
+                          }}
+                        />
+                      </View>
                         </>
                       )}
                     </View>
@@ -383,6 +482,7 @@ export default function ClassDetailScreen() {
           <SectionTitle
             title="Élèves de la classe"
             action="+ Ajouter un élève"
+            compact
             onAction={openAddPupilModal}
           />
           <ListSelectionToolbar
@@ -404,8 +504,12 @@ export default function ClassDetailScreen() {
                 </Text>
               </Surface>
             ) : (
-              classPupils.map((pupil, index) => (
-                <Pressable
+              classPupils.map((pupil, index) => {
+                const pupilStats = pupilAttendanceStats.get(pupil.id) ?? { present: 0, total: 0 };
+                const presenceLabel = pupilStats.total
+                  ? `Présence : ${Math.round((pupilStats.present / pupilStats.total) * 100)}% (${pupilStats.present}/${pupilStats.total})`
+                  : 'Présence : aucun appel';
+                return <Pressable
                   key={pupil.id}
                   onTouchStart={(event) => event.stopPropagation()}
                   onPress={() => {
@@ -437,14 +541,17 @@ export default function ClassDetailScreen() {
                     <Text style={[styles.pupilMeta, { color: colors.mutedForeground }]}>
                       N° {pupil.registrationNumber} {pupil.dateOfBirth ? `· Né(e) le ${pupil.dateOfBirth}` : ''}
                     </Text>
+                    <Text style={[styles.pupilMeta, { color: colors.primary }]}>
+                      {presenceLabel}
+                    </Text>
                   </View>
                   <View style={styles.rowRight}>
                     {pupilSelection.isSelecting ? (
                       <SelectionCheckbox checked={pupilSelection.selectedIds.includes(pupil.id)} />
                     ) : <Feather name="chevron-right" size={17} color={colors.mutedForeground} />}
                   </View>
-                </Pressable>
-              ))
+                </Pressable>;
+              })
             )}
           </View>
 
@@ -639,10 +746,16 @@ const styles = StyleSheet.create({
   classInfo: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    gap: 10,
     padding: 16,
     borderRadius: 14,
     marginBottom: 16,
   },
+  attendanceSummary: { flexDirection: 'column', alignItems: 'stretch', gap: 8, padding: 10, borderWidth: 1, borderRadius: 14, marginBottom: 10 },
+  attendanceSummaryCopy: { flex: 1, gap: 3 },
+  attendanceSummaryTitle: { fontSize: 14, fontWeight: '700' },
+  attendanceSummaryMeta: { fontSize: 12 },
+  attendanceActions: { flexDirection: 'row', gap: 10 },
   infoCol: {
     alignItems: 'center',
     gap: 4,
@@ -666,8 +779,8 @@ const styles = StyleSheet.create({
   },
   tabBar: {
     flexDirection: 'row',
-    gap: 10,
-    marginBottom: 16,
+    gap: 12,
+    marginBottom: 18,
   },
   tabItem: {
     flex: 1,
@@ -677,7 +790,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 7,
     paddingHorizontal: 12,
   },
   tabText: {
@@ -738,8 +851,12 @@ const styles = StyleSheet.create({
   },
   cardActions: {
     flexDirection: 'row',
-    gap: 8,
-    marginTop: 4,
+    gap: 12,
+    marginTop: 8,
+  },
+  cardActionButton: {
+    flex: 1,
+    minWidth: 0,
   },
   pupilList: {
     borderRadius: 14,
@@ -775,8 +892,8 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
   },
   pupilActions: {
-    marginTop: 10,
-    gap: 8,
+    marginTop: 12,
+    gap: 12,
   },
   rowRight: {
     flexDirection: 'row',
@@ -870,8 +987,8 @@ const styles = StyleSheet.create({
   },
   modalButtons: {
     flexDirection: 'row',
-    gap: 10,
-    marginTop: 8,
+    gap: 12,
+    marginTop: 10,
     justifyContent: 'flex-end',
   },
   deleteAssessBtn: {

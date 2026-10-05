@@ -114,6 +114,8 @@ export default function ScheduleScreen() {
       await exportSchedulePdf({
         teacherName: data.teacherName,
         schoolName: data.school.name,
+        city: data.school.wilaya,
+        academicYear: data.academicYear,
         sessions: data.scheduleSessions.map((session) => ({
           dayOfWeek: session.dayOfWeek,
           startTime: session.startTime,
@@ -207,7 +209,15 @@ export default function ScheduleScreen() {
                       }
                       if (!classItem) return;
                       data.setActiveClass(classItem.id);
-                      router.push(`/classes/${classItem.id}`);
+                      const now = new Date();
+                      router.push({
+                        pathname: '/classes/[classId]',
+                        params: {
+                          classId: classItem.id,
+                          sessionId: session.id,
+                          attendanceDate: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`,
+                        },
+                      });
                     }}
                     style={styles.sessionInfo}
                   >

@@ -214,10 +214,10 @@ export function SelectionCheckbox({ checked }: { checked: boolean }) {
   );
 }
 
-export function SectionTitle({ title, action, onAction }: { title: string; action?: string; onAction?: () => void }) {
+export function SectionTitle({ title, action, onAction, compact = false }: { title: string; action?: string; onAction?: () => void; compact?: boolean }) {
   const colors = useColors();
   return (
-    <View style={styles.sectionTitle}>
+    <View style={[styles.sectionTitle, compact && styles.sectionTitleCompact]}>
       <Text style={[styles.sectionHeading, { color: colors.foreground }]}>{title}</Text>
       {action && onAction ? <Pressable onPress={onAction}><Text style={[styles.sectionAction, { color: colors.primary }]}>{action}</Text></Pressable> : null}
     </View>
@@ -317,6 +317,7 @@ const styles = StyleSheet.create({
   selectionCount: { flex: 1, minWidth: 0, fontSize: 12, fontWeight: '700' },
   selectionActions: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   sectionTitle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, marginTop: 26 },
+  sectionTitleCompact: { marginTop: 8, marginBottom: 8 },
   sectionHeading: { fontSize: 18, fontWeight: '700', letterSpacing: -0.2 },
   sectionAction: { fontSize: 13, fontWeight: '700' },
   guideOverlay: { flex: 1, justifyContent: 'flex-end' },
