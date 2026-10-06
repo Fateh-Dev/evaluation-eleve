@@ -277,7 +277,7 @@ export default function DashboardScreen() {
           style={[styles.quickCard, { backgroundColor: colors.card, borderColor: colors.border }]}
         >
           <Feather name="award" size={22} color={colors.primary} />
-          <Text style={[styles.quickTitle, { color: colors.foreground }]}>Compétences</Text>
+          <Text style={[styles.quickTitle, { color: colors.foreground }]}>Test de niveau</Text>
           <Text style={[styles.quickText, { color: colors.mutedForeground }]}>
             {data.assessments.length} évaluation{data.assessments.length > 1 ? 's' : ''}
           </Text>

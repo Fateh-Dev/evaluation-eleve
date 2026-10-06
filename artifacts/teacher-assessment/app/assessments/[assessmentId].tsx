@@ -189,7 +189,7 @@ export default function AssessmentEvaluationScreen() {
           <Text style={[styles.emptyCardText, { color: colors.mutedForeground }]}>
             Elle a peut-être été supprimée ou n’a pas encore été créée.
           </Text>
-          <Button label="Retour aux évaluations" icon="arrow-left" onPress={() => router.replace('/assessments')} />
+          <Button label="Retour aux tests de niveau" icon="arrow-left" onPress={() => router.replace('/assessments')} />
         </Surface>
       </Screen>
     );

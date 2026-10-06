@@ -187,8 +187,8 @@ export default function NewAssessmentScreen() {
   return (
     <Screen onTouchStart={() => setRemoveArmedObjectiveIndex(null)}>
       <AppHeader
-        eyebrow="Nouvelle évaluation"
-        title="Nouvelle Compétence / Évaluation"
+        eyebrow="Test de niveau"
+        title="Nouveau test de niveau"
         onBack={() => router.back()}
         compact
       />

@@ -25,15 +25,12 @@ function NativeTabLayout() {
         <NativeTabs.Trigger.Icon sf={{ default: 'person.2', selected: 'person.2.fill' }} />
         <NativeTabs.Trigger.Label>Classes</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="assessments">
-        <NativeTabs.Trigger.Icon sf={{ default: 'checklist', selected: 'checklist' }} />
-        <NativeTabs.Trigger.Label>Évaluations</NativeTabs.Trigger.Label>
-      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="more">
         <NativeTabs.Trigger.Icon sf={{ default: 'ellipsis', selected: 'ellipsis' }} />
         <NativeTabs.Trigger.Label>Plus</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="pupils" hidden />
+      <NativeTabs.Trigger name="assessments" hidden />
       <NativeTabs.Trigger name="storage" hidden />
       <NativeTabs.Trigger name="settings" hidden />
     </NativeTabs>
@@ -95,12 +92,12 @@ function ClassicTabLayout() {
         options={{ title: 'Classes', tabBarIcon: ({ color }) => <Feather name="users" size={22} color={color} /> }}
       />
       <Tabs.Screen
-        name="assessments"
-        options={{ title: 'Évaluations', tabBarIcon: ({ color }) => <Feather name="check-square" size={22} color={color} /> }}
-      />
-      <Tabs.Screen
         name="more"
         options={{ title: 'Plus', tabBarIcon: ({ color }) => <Feather name="more-horizontal" size={22} color={color} /> }}
+      />
+      <Tabs.Screen
+        name="assessments"
+        options={{ href: null }}
       />
       <Tabs.Screen
         name="pupils"

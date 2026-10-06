@@ -40,7 +40,7 @@ export default function AssessmentsScreen() {
 
   return (
     <Screen>
-      <AppHeader eyebrow="Suivi pédagogique" title="Évaluations & Compétences" />
+      <AppHeader eyebrow="Plus · Suivi pédagogique" title="Test de niveau" />
 
       {/* Class Filter Bar */}
       {data.classes.length > 0 && (
@@ -99,14 +99,14 @@ export default function AssessmentsScreen() {
 
       {data.classes.length > 0 && (
         <Button
-          label="Nouvelle compétence / évaluation"
+          label="Nouveau test de niveau"
           icon="plus"
           onPress={() => router.push('/assessments/new')}
         />
       )}
 
       <SectionTitle
-        title={`Compétences (${filteredAssessments.length})`}
+        title={`Tests de niveau (${filteredAssessments.length})`}
         action={data.classes.length > 0 ? '+ Ajouter' : undefined}
         onAction={() => router.push('/assessments/new')}
       />
@@ -142,11 +142,11 @@ export default function AssessmentsScreen() {
           </Text>
           <Text style={[styles.emptySubtitle, { color: colors.mutedForeground }]}>
             {selectedClassId === 'all'
-              ? 'Créez votre première compétence d’évaluation pour commencer à noter vos élèves.'
+              ? 'Créez votre premier test de niveau pour commencer à noter vos élèves.'
               : 'Aucune compétence pour cette classe. Cliquez sur "+ Ajouter" pour en créer une.'}
           </Text>
           <Button
-            label="Créer une compétence"
+            label="Créer un test de niveau"
             icon="plus"
             onPress={() => router.push(`/assessments/new${selectedClassId !== 'all' ? `?classId=${selectedClassId}` : ''}`)}
           />
