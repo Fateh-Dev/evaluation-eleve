@@ -108,6 +108,7 @@ export function getContinuousEvaluationProgress(
   classId: string,
   schoolYearId: string,
   evaluations: ContinuousEvaluationEntry[],
+  evaluationPeriodId?: string,
 ): ContinuousEvaluationProgress {
   const pupilIdSet = new Set(pupilIds);
   const evaluationByPupil = new Map<string, ContinuousEvaluationEntry>();
@@ -115,7 +116,7 @@ export function getContinuousEvaluationProgress(
     if (
       evaluation.classId === classId &&
       evaluation.schoolYearId === schoolYearId &&
-      !evaluation.evaluationPeriodId &&
+      (evaluation.evaluationPeriodId ?? '') === (evaluationPeriodId ?? '') &&
       pupilIdSet.has(evaluation.pupilId)
     ) {
       evaluationByPupil.set(evaluation.pupilId, evaluation);

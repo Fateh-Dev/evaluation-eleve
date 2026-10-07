@@ -43,14 +43,41 @@ export default function ClassDetailScreen() {
   const currentClass = useMemo(() => {
     return data.classes.find((c) => c.id === currentClassId) ?? data.activeClass;
   }, [data.classes, currentClassId, data.activeClass]);
+  const continuousPeriods = data.getContinuousEvaluationPeriods(currentClass.academicYear);
+  const activeEvaluationPeriod = data.getActiveContinuousEvaluationPeriod(currentClass.academicYear);
 
   const classPupils = useMemo(() => {
     return data.getPupilsForClass(currentClass.id);
   }, [data.pupils, currentClass.id]);
 
-  const attendanceRecords = useMemo(
+  const allAttendanceRecords = useMemo(
     () => data.getAttendanceRecordsForClass(currentClass.id),
     [data.attendanceRecords, currentClass.id],
+  );
+  const attendanceRecords = useMemo(() => {
+    if (!activeEvaluationPeriod) return allAttendanceRecords;
+    return allAttendanceRecords.filter((record) =>
+      record.date >= activeEvaluationPeriod.startDate &&
+      record.date <= activeEvaluationPeriod.endDate,
+    );
+  }, [
+    allAttendanceRecords,
+    activeEvaluationPeriod?.startDate,
+    activeEvaluationPeriod?.endDate,
+  ]);
+  const allPupilAttendanceStats = useMemo(
+    () => new Map(classPupils.map((pupil) => {
+      const stats = allAttendanceRecords.reduce((counts, record) => {
+        const status = record.statuses[pupil.id];
+        if (status === 'present' || status === 'absent') {
+          counts.total += 1;
+          if (status === 'present') counts.present += 1;
+        }
+        return counts;
+      }, { present: 0, total: 0 });
+      return [pupil.id, stats] as const;
+    })),
+    [allAttendanceRecords, classPupils],
   );
   const pupilAttendanceStats = useMemo(
     () => new Map(classPupils.map((pupil) => {
@@ -72,6 +99,7 @@ export default function ClassDetailScreen() {
         pupil.id,
         currentClass.id,
         currentClass.academicYear,
+        activeEvaluationPeriod?.id,
       );
       const events = evaluation
         ? data.getDisciplineEventsForEvaluation(evaluation.id)
@@ -109,13 +137,14 @@ export default function ClassDetailScreen() {
       classPupils,
       currentClass.id,
       currentClass.academicYear,
+      activeEvaluationPeriod?.id,
       pupilAttendanceStats,
       data.continuousEvaluations,
       data.disciplineEvents,
       data.continuousEvaluationSettings,
     ],
   );
-  const attendanceCounts = [...pupilAttendanceStats.values()].reduce(
+  const attendanceCounts = [...allPupilAttendanceStats.values()].reduce(
     (counts, pupilStats) => ({
       present: counts.present + pupilStats.present,
       total: counts.total + pupilStats.total,
@@ -151,7 +180,7 @@ export default function ClassDetailScreen() {
         level: currentClass.level,
         academicYear: currentClass.academicYear,
         pupils: classPupils.map((pupil) => {
-          const stats = pupilAttendanceStats.get(pupil.id) ?? { present: 0, total: 0 };
+          const stats = allPupilAttendanceStats.get(pupil.id) ?? { present: 0, total: 0 };
           return {
             registrationNumber: pupil.registrationNumber,
             firstName: pupil.firstName,
@@ -212,6 +241,9 @@ export default function ClassDetailScreen() {
         className: currentClass.name,
         level: currentClass.level,
         academicYear: currentClass.academicYear,
+        evaluationPeriodName: activeEvaluationPeriod?.name,
+        evaluationPeriodStartDate: activeEvaluationPeriod?.startDate,
+        evaluationPeriodEndDate: activeEvaluationPeriod?.endDate,
         pupils: continuousEvaluationRows.map((row) => ({
           registrationNumber: row.pupil.registrationNumber,
           firstName: row.pupil.firstName,
@@ -230,13 +262,15 @@ export default function ClassDetailScreen() {
       };
       const safeClassName = currentClass.name.replace(/[^\p{L}\p{N}-]+/gu, '_');
       const safeAcademicYear = currentClass.academicYear.replace(/[^\p{L}\p{N}-]+/gu, '_');
+      const safePeriodName = (activeEvaluationPeriod?.name ?? 'evaluation')
+        .replace(/[^\p{L}\p{N}-]+/gu, '_');
       if (format === 'pdf') {
         await exportContinuousEvaluationPdf(exportData);
       } else {
         const workbook = await generateContinuousEvaluationWorkbook(exportData);
         await downloadFile(
           workbook,
-          `Evaluation_continue_${safeClassName}_${safeAcademicYear}.xlsx`,
+          `Evaluation_continue_${safeClassName}_${safeAcademicYear}_${safePeriodName}.xlsx`,
           'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         );
       }
@@ -283,6 +317,7 @@ export default function ClassDetailScreen() {
       currentClass.academicYear,
       field,
       score,
+      activeEvaluationPeriod?.id,
     )) {
       Alert.alert('Enregistrement impossible', 'La note n’a pas pu être sauvegardée.');
       setScoreDrafts((previous) => {
@@ -307,6 +342,8 @@ export default function ClassDetailScreen() {
       pupilId,
       currentClass.id,
       currentClass.academicYear,
+      undefined,
+      activeEvaluationPeriod?.id,
     );
     if (!eventId) {
       Alert.alert('Enregistrement impossible', 'La pénalité disciplinaire n’a pas pu être enregistrée.');
@@ -482,7 +519,7 @@ export default function ClassDetailScreen() {
           <Text style={[styles.attendanceSummaryMeta, { color: colors.mutedForeground }]}>
             {classAttendanceRate === null
               ? 'Aucun appel enregistré'
-              : `${classAttendanceRate}% · ${attendanceRecords.length} appel${attendanceRecords.length > 1 ? 's' : ''} enregistré${attendanceRecords.length > 1 ? 's' : ''}`}
+              : `${classAttendanceRate}% · ${allAttendanceRecords.length} appel${allAttendanceRecords.length > 1 ? 's' : ''} enregistré${allAttendanceRecords.length > 1 ? 's' : ''}`}
           </Text>
         </View>
         <View style={styles.attendanceActions}>
@@ -559,6 +596,44 @@ export default function ClassDetailScreen() {
             compact
             onAction={openAddPupilModal}
           />
+          <View style={styles.periodSelector}>
+            {continuousPeriods.map((period) => (
+              <Pressable
+                key={period.id}
+                accessibilityRole="button"
+                accessibilityState={{ selected: period.id === activeEvaluationPeriod?.id }}
+                onPress={() => {
+                  setScoreDrafts({});
+                  data.setActiveContinuousEvaluationPeriod(currentClass.academicYear, period.id);
+                }}
+                style={[
+                  styles.filterChip,
+                  {
+                    backgroundColor: period.id === activeEvaluationPeriod?.id ? colors.primary : colors.card,
+                    borderColor: period.id === activeEvaluationPeriod?.id ? colors.primary : colors.border,
+                  },
+                ]}
+              >
+                <Text style={[styles.filterChipText, {
+                  color: period.id === activeEvaluationPeriod?.id ? colors.primaryForeground : colors.foreground,
+                }]}>
+                  {period.name}
+                </Text>
+              </Pressable>
+            ))}
+            <Button
+              label="Périodes"
+              icon="calendar"
+              secondary
+              compact
+              onPress={() => router.push('/continuous')}
+            />
+          </View>
+          <Text style={[styles.periodCaption, { color: colors.mutedForeground }]}>
+            {activeEvaluationPeriod
+              ? `${activeEvaluationPeriod.startDate} – ${activeEvaluationPeriod.endDate}`
+              : 'Aucune période définie pour cette année scolaire'}
+          </Text>
           <Text style={[styles.progressSummary, { color: colors.mutedForeground }]}>
             {completedEvaluationCount}/{classPupils.length} complets · notes sur 5 sauvegardées automatiquement
           </Text>
@@ -808,7 +883,7 @@ export default function ClassDetailScreen() {
               </Surface>
             ) : (
               classPupils.map((pupil, index) => {
-                const pupilStats = pupilAttendanceStats.get(pupil.id) ?? { present: 0, total: 0 };
+                const pupilStats = allPupilAttendanceStats.get(pupil.id) ?? { present: 0, total: 0 };
                 const presenceLabel = pupilStats.total
                   ? `Présence : ${Math.round((pupilStats.present / pupilStats.total) * 100)}% (${pupilStats.present}/${pupilStats.total})`
                   : 'Présence : aucun appel';
@@ -1108,6 +1183,8 @@ const styles = StyleSheet.create({
   evaluationTotalGroup: { alignItems: 'flex-end', gap: 2 },
   evaluationHint: { fontSize: 12, lineHeight: 18, marginTop: -7 },
   progressSummary: { fontSize: 11, lineHeight: 15, marginTop: -8 },
+  periodSelector: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 7, marginTop: 2 },
+  periodCaption: { fontSize: 11, marginTop: -3 },
   toolsCard: { padding: 9, gap: 8 },
   toolsHeader: { minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: 9 },
   toolsIcon: { width: 30, height: 30, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },

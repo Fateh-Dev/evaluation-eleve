@@ -77,6 +77,14 @@ export type ContinuousEvaluationRecord = {
   updatedAt: string;
 };
 
+export type ContinuousEvaluationPeriod = {
+  id: string;
+  schoolYearId: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+};
+
 export type DisciplineEvent = {
   id: string;
   studentId: string;
@@ -159,6 +167,8 @@ export type AppState = {
   scheduleSessions: ScheduleSession[];
   attendanceRecords: AttendanceRecord[];
   continuousEvaluations: ContinuousEvaluationRecord[];
+  continuousEvaluationPeriods: ContinuousEvaluationPeriod[];
+  activeContinuousEvaluationPeriodByYear: Record<string, string>;
   disciplineEvents: DisciplineEvent[];
   continuousEvaluationSettings: ContinuousEvaluationSettings;
   levelTests: LevelTest[];
@@ -194,6 +204,8 @@ export type AppDataContextValue = {
   scheduleSessions: ScheduleSession[];
   attendanceRecords: AttendanceRecord[];
   continuousEvaluations: ContinuousEvaluationRecord[];
+  continuousEvaluationPeriods: ContinuousEvaluationPeriod[];
+  activeContinuousEvaluationPeriodByYear: Record<string, string>;
   disciplineEvents: DisciplineEvent[];
   continuousEvaluationSettings: ContinuousEvaluationSettings;
   levelTests: LevelTest[];
@@ -321,6 +333,22 @@ export type AppDataContextValue = {
     schoolYearId: string,
     evaluationPeriodId?: string,
   ) => ContinuousEvaluationRecord | undefined;
+  getContinuousEvaluationPeriods: (schoolYearId: string) => ContinuousEvaluationPeriod[];
+  getActiveContinuousEvaluationPeriod: (schoolYearId: string) => ContinuousEvaluationPeriod | undefined;
+  setActiveContinuousEvaluationPeriod: (schoolYearId: string, periodId: string) => boolean;
+  addContinuousEvaluationPeriod: (
+    schoolYearId: string,
+    name: string,
+    startDate: string,
+    endDate: string,
+  ) => string | undefined;
+  updateContinuousEvaluationPeriod: (
+    periodId: string,
+    name: string,
+    startDate: string,
+    endDate: string,
+  ) => boolean;
+  deleteContinuousEvaluationPeriod: (periodId: string) => boolean;
   setContinuousEvaluationScore: (
     pupilId: string,
     classId: string,
@@ -456,6 +484,82 @@ function isContinuousEvaluationRecord(value: unknown): value is ContinuousEvalua
     typeof evaluation.updatedAt === 'string';
 }
 
+function isValidDateString(value: string): boolean {
+  const [year, month, day] = value.split('-').map(Number);
+  const parsedDate = new Date(year, month - 1, day);
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+    parsedDate.getFullYear() === year &&
+    parsedDate.getMonth() === month - 1 &&
+    parsedDate.getDate() === day;
+}
+
+function isContinuousEvaluationPeriod(value: unknown): value is ContinuousEvaluationPeriod {
+  if (!value || typeof value !== 'object') return false;
+  const period = value as Partial<ContinuousEvaluationPeriod>;
+  return typeof period.id === 'string' &&
+    typeof period.schoolYearId === 'string' &&
+    typeof period.name === 'string' &&
+    Boolean(period.name.trim()) &&
+    typeof period.startDate === 'string' &&
+    isValidDateString(period.startDate) &&
+    typeof period.endDate === 'string' &&
+    isValidDateString(period.endDate) &&
+    period.startDate <= period.endDate;
+}
+
+function createDefaultContinuousEvaluationPeriods(
+  schoolYearId: string,
+): ContinuousEvaluationPeriod[] {
+  const years = schoolYearId.match(/(\d{4})\D+(\d{4})/);
+  const firstYear = Number(years?.[1] ?? schoolYearId.match(/\d{4}/)?.[0] ?? new Date().getFullYear());
+  const secondYear = Number(years?.[2] ?? firstYear + 1);
+  const yearKey = schoolYearId.replace(/[^a-zA-Z0-9-]/g, '-');
+  const date = (year: number, month: number, day: number) =>
+    `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  return [
+    {
+      id: `continuous-period-${yearKey}-1`,
+      schoolYearId,
+      name: '1er trimestre',
+      startDate: date(firstYear, 9, 1),
+      endDate: date(firstYear, 12, 31),
+    },
+    {
+      id: `continuous-period-${yearKey}-2`,
+      schoolYearId,
+      name: '2e trimestre',
+      startDate: date(secondYear, 1, 1),
+      endDate: date(secondYear, 3, 31),
+    },
+    {
+      id: `continuous-period-${yearKey}-3`,
+      schoolYearId,
+      name: '3e trimestre',
+      startDate: date(secondYear, 4, 1),
+      endDate: date(secondYear, 7, 31),
+    },
+  ];
+}
+
+function initializeContinuousEvaluationPeriods(
+  schoolYearIds: string[],
+  storedPeriods: unknown,
+): ContinuousEvaluationPeriod[] {
+  const validPeriods = Array.isArray(storedPeriods)
+    ? storedPeriods.filter(isContinuousEvaluationPeriod)
+    : [];
+  const periods = validPeriods.filter((period, index) =>
+    validPeriods.findIndex((item) => item.id === period.id) === index &&
+    schoolYearIds.includes(period.schoolYearId),
+  );
+  for (const schoolYearId of schoolYearIds) {
+    if (!periods.some((period) => period.schoolYearId === schoolYearId)) {
+      periods.push(...createDefaultContinuousEvaluationPeriods(schoolYearId));
+    }
+  }
+  return periods;
+}
+
 function isDisciplineEvent(value: unknown): value is DisciplineEvent {
   if (!value || typeof value !== 'object') return false;
   const event = value as Partial<DisciplineEvent>;
@@ -542,6 +646,8 @@ export function createEmptyState(): AppState {
     scheduleSessions: [],
     attendanceRecords: [],
     continuousEvaluations: [],
+    continuousEvaluationPeriods: createDefaultContinuousEvaluationPeriods('2026-2027'),
+    activeContinuousEvaluationPeriodByYear: {},
     disciplineEvents: [],
     continuousEvaluationSettings: {
       absencePenaltyPerAbsence: DEFAULT_ABSENCE_SCORING_CONFIGURATION.penaltyPerAbsence,
@@ -587,6 +693,18 @@ export function AppDataProvider({ children }: PropsWithChildren) {
             const assessments = migratedLevelTests.assessments;
             const objectives = parsed.objectives ?? {};
             const pupils = Array.isArray(parsed.pupils) ? parsed.pupils : [];
+            const continuousEvaluationPeriods = initializeContinuousEvaluationPeriods(
+              [...new Set([academicYear, ...classes.map((item) => item.academicYear)])],
+              parsed.continuousEvaluationPeriods,
+            );
+            const periodByYear = new Map<string, string>();
+            for (const period of [...continuousEvaluationPeriods].sort(
+              (left, right) => left.startDate.localeCompare(right.startDate),
+            )) {
+              if (!periodByYear.has(period.schoolYearId)) {
+                periodByYear.set(period.schoolYearId, period.id);
+              }
+            }
             const validEvaluations = Array.isArray(parsed.continuousEvaluations)
               ? parsed.continuousEvaluations
                   .filter(isContinuousEvaluationRecord)
@@ -600,8 +718,31 @@ export function AppDataProvider({ children }: PropsWithChildren) {
                       ),
                     ),
                   )
+                  .map((evaluation) => ({
+                    ...evaluation,
+                    evaluationPeriodId:
+                      (evaluation.evaluationPeriodId &&
+                      continuousEvaluationPeriods.some(
+                        (period) =>
+                          period.id === evaluation.evaluationPeriodId &&
+                          period.schoolYearId === evaluation.schoolYearId,
+                      )
+                        ? evaluation.evaluationPeriodId
+                        : periodByYear.get(evaluation.schoolYearId)),
+                  }))
               : [];
             const evaluationIds = new Set(validEvaluations.map((item) => item.id));
+            const validPeriodIds = new Set(continuousEvaluationPeriods.map((item) => item.id));
+            const activeContinuousEvaluationPeriodByYear = Object.fromEntries(
+              Object.entries(parsed.activeContinuousEvaluationPeriodByYear ?? {}).filter(
+                ([schoolYearId, periodId]) =>
+                  typeof periodId === 'string' &&
+                  validPeriodIds.has(periodId) &&
+                  continuousEvaluationPeriods.some(
+                    (period) => period.id === periodId && period.schoolYearId === schoolYearId,
+                  ),
+              ),
+            );
             setState((prev) => ({
               ...prev,
               ...parsed,
@@ -623,6 +764,8 @@ export function AppDataProvider({ children }: PropsWithChildren) {
                 ? parsed.attendanceRecords.filter(isAttendanceRecord).filter((record) => classes.some((classItem) => classItem.id === record.classId))
                 : [],
               continuousEvaluations: validEvaluations,
+              continuousEvaluationPeriods,
+              activeContinuousEvaluationPeriodByYear,
               disciplineEvents: Array.isArray(parsed.disciplineEvents)
                 ? parsed.disciplineEvents
                     .filter(isDisciplineEvent)
@@ -865,6 +1008,14 @@ export function AppDataProvider({ children }: PropsWithChildren) {
                 : item,
             )
           : [...prev.schoolYearConfigurations, configuration],
+        continuousEvaluationPeriods: prev.continuousEvaluationPeriods.some(
+          (period) => period.schoolYearId === academicYear,
+        )
+          ? prev.continuousEvaluationPeriods
+          : [
+              ...prev.continuousEvaluationPeriods,
+              ...createDefaultContinuousEvaluationPeriods(academicYear),
+            ],
         classes: [...prev.classes, newClass],
         activeClassId: newId,
       };
@@ -1031,6 +1182,10 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         ...prev.schoolYearConfigurations,
         configuration,
       ],
+      continuousEvaluationPeriods: [
+        ...prev.continuousEvaluationPeriods,
+        ...createDefaultContinuousEvaluationPeriods(requestedYear),
+      ],
     }));
     return true;
   };
@@ -1058,6 +1213,17 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         normalizeLabel(item.academicYear) === normalizeLabel(configuration.year)
           ? { ...item, academicYear: cleanName }
           : item,
+      ),
+      continuousEvaluationPeriods: prev.continuousEvaluationPeriods.map((period) =>
+        normalizeLabel(period.schoolYearId) === normalizeLabel(configuration.year)
+          ? { ...period, schoolYearId: cleanName }
+          : period,
+      ),
+      activeContinuousEvaluationPeriodByYear: Object.fromEntries(
+        Object.entries(prev.activeContinuousEvaluationPeriodByYear).map(([yearId, periodId]) => [
+          normalizeLabel(yearId) === normalizeLabel(configuration.year) ? cleanName : yearId,
+          periodId,
+        ]),
       ),
       levelTests: prev.levelTests.map((test) =>
         normalizeLabel(test.schoolYearId) === normalizeLabel(configuration.year)
@@ -1136,6 +1302,14 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         schoolYearConfigurations,
         academicYear: defaultYear,
         classes,
+        continuousEvaluationPeriods: prev.continuousEvaluationPeriods.filter(
+          (period) => normalizeLabel(period.schoolYearId) !== yearKey,
+        ),
+        activeContinuousEvaluationPeriodByYear: Object.fromEntries(
+          Object.entries(prev.activeContinuousEvaluationPeriodByYear).filter(
+            ([schoolYearId]) => normalizeLabel(schoolYearId) !== yearKey,
+          ),
+        ),
         levelTests: prev.levelTests.filter((test) => !classIds.has(test.classId)),
         activeClassId,
         pupils: prev.pupils.filter((item) => !classIds.has(item.classId)),
@@ -1484,6 +1658,21 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       candidate.assessments.map((assessment) => ({ ...assessment })),
       candidate.levelTests,
     );
+    const restoredAcademicYear = typeof candidate.academicYear === 'string'
+      ? candidate.academicYear
+      : '2026-2027';
+    const continuousEvaluationPeriods = initializeContinuousEvaluationPeriods(
+      [...new Set([restoredAcademicYear, ...restoredClasses.map((item) => item.academicYear)])],
+      candidate.continuousEvaluationPeriods,
+    );
+    const periodByYear = new Map<string, string>();
+    for (const period of [...continuousEvaluationPeriods].sort(
+      (left, right) => left.startDate.localeCompare(right.startDate),
+    )) {
+      if (!periodByYear.has(period.schoolYearId)) {
+        periodByYear.set(period.schoolYearId, period.id);
+      }
+    }
     const continuousEvaluations = Array.isArray(candidate.continuousEvaluations)
       ? candidate.continuousEvaluations
           .filter(isContinuousEvaluationRecord)
@@ -1497,14 +1686,37 @@ export function AppDataProvider({ children }: PropsWithChildren) {
               ),
             ),
           )
+          .map((evaluation) => ({
+            ...evaluation,
+            evaluationPeriodId:
+              (evaluation.evaluationPeriodId &&
+              continuousEvaluationPeriods.some(
+                (period) =>
+                  period.id === evaluation.evaluationPeriodId &&
+                  period.schoolYearId === evaluation.schoolYearId,
+              )
+                ? evaluation.evaluationPeriodId
+                : periodByYear.get(evaluation.schoolYearId)),
+          }))
       : [];
     const evaluationIds = new Set(continuousEvaluations.map((item) => item.id));
+    const validPeriodIds = new Set(continuousEvaluationPeriods.map((item) => item.id));
+    const activeContinuousEvaluationPeriodByYear = Object.fromEntries(
+      Object.entries(candidate.activeContinuousEvaluationPeriodByYear ?? {}).filter(
+        ([schoolYearId, periodId]) =>
+          typeof periodId === 'string' &&
+          validPeriodIds.has(periodId) &&
+          continuousEvaluationPeriods.some(
+            (period) => period.id === periodId && period.schoolYearId === schoolYearId,
+          ),
+      ),
+    );
     const restored: AppState = {
       ...createEmptyState(),
       ...candidate,
       school: { ...createEmptyState().school, ...candidate.school },
       teacherName: typeof candidate.teacherName === 'string' ? candidate.teacherName : '',
-      academicYear: typeof candidate.academicYear === 'string' ? candidate.academicYear : '2026-2027',
+      academicYear: restoredAcademicYear,
       schoolYearConfigurations: Array.isArray(candidate.schoolYearConfigurations)
         ? candidate.schoolYearConfigurations
         : createEmptyState().schoolYearConfigurations,
@@ -1525,6 +1737,8 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         ? candidate.attendanceRecords.filter(isAttendanceRecord).filter((record) => restoredClasses.some((classItem) => classItem.id === record.classId))
         : [],
       continuousEvaluations,
+      continuousEvaluationPeriods,
+      activeContinuousEvaluationPeriodByYear,
       disciplineEvents: Array.isArray(candidate.disciplineEvents)
         ? candidate.disciplineEvents
             .filter(isDisciplineEvent)
@@ -1689,6 +1903,126 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     evaluation.schoolYearId === schoolYearId &&
     (evaluation.evaluationPeriodId ?? '') === (evaluationPeriodId ?? ''),
   );
+
+  const getContinuousEvaluationPeriods = (schoolYearId: string) =>
+    state.continuousEvaluationPeriods
+      .filter((period) => period.schoolYearId === schoolYearId)
+      .sort((left, right) => left.startDate.localeCompare(right.startDate));
+
+  const getActiveContinuousEvaluationPeriod = (schoolYearId: string) => {
+    const periods = getContinuousEvaluationPeriods(schoolYearId);
+    const selectedId = state.activeContinuousEvaluationPeriodByYear[schoolYearId];
+    return periods.find((period) => period.id === selectedId) ?? periods[0];
+  };
+
+  const setActiveContinuousEvaluationPeriod = (schoolYearId: string, periodId: string) => {
+    if (!state.continuousEvaluationPeriods.some(
+      (period) => period.id === periodId && period.schoolYearId === schoolYearId,
+    )) return false;
+    setState((prev) => ({
+      ...prev,
+      activeContinuousEvaluationPeriodByYear: {
+        ...prev.activeContinuousEvaluationPeriodByYear,
+        [schoolYearId]: periodId,
+      },
+    }));
+    return true;
+  };
+
+  const addContinuousEvaluationPeriod = (
+    schoolYearId: string,
+    name: string,
+    startDate: string,
+    endDate: string,
+  ) => {
+    const cleanName = name.trim();
+    if (
+      !schoolYearId.trim() ||
+      !cleanName ||
+      !isValidDateString(startDate) ||
+      !isValidDateString(endDate) ||
+      startDate > endDate ||
+      state.continuousEvaluationPeriods.some(
+        (period) =>
+          period.schoolYearId === schoolYearId &&
+          startDate <= period.endDate &&
+          period.startDate <= endDate,
+      )
+    ) return undefined;
+    const period: ContinuousEvaluationPeriod = {
+      id: createConfigId('continuous-period'),
+      schoolYearId,
+      name: cleanName,
+      startDate,
+      endDate,
+    };
+    setState((prev) => ({
+      ...prev,
+      continuousEvaluationPeriods: [...prev.continuousEvaluationPeriods, period],
+      activeContinuousEvaluationPeriodByYear: prev.activeContinuousEvaluationPeriodByYear[schoolYearId]
+        ? prev.activeContinuousEvaluationPeriodByYear
+        : { ...prev.activeContinuousEvaluationPeriodByYear, [schoolYearId]: period.id },
+    }));
+    return period.id;
+  };
+
+  const updateContinuousEvaluationPeriod = (
+    periodId: string,
+    name: string,
+    startDate: string,
+    endDate: string,
+  ) => {
+    const existing = state.continuousEvaluationPeriods.find((period) => period.id === periodId);
+    const cleanName = name.trim();
+    if (
+      !existing ||
+      !cleanName ||
+      !isValidDateString(startDate) ||
+      !isValidDateString(endDate) ||
+      startDate > endDate ||
+      state.continuousEvaluationPeriods.some(
+        (period) =>
+          period.id !== periodId &&
+          period.schoolYearId === existing.schoolYearId &&
+          startDate <= period.endDate &&
+          period.startDate <= endDate,
+      )
+    ) return false;
+    setState((prev) => ({
+      ...prev,
+      continuousEvaluationPeriods: prev.continuousEvaluationPeriods.map((period) =>
+        period.id === periodId
+          ? { ...period, name: cleanName, startDate, endDate }
+          : period,
+      ),
+    }));
+    return true;
+  };
+
+  const deleteContinuousEvaluationPeriod = (periodId: string) => {
+    const period = state.continuousEvaluationPeriods.find((item) => item.id === periodId);
+    if (
+      !period ||
+      state.continuousEvaluations.some((evaluation) => evaluation.evaluationPeriodId === periodId)
+    ) return false;
+    setState((prev) => {
+      const periods = prev.continuousEvaluationPeriods.filter((item) => item.id !== periodId);
+      const activePeriods = { ...prev.activeContinuousEvaluationPeriodByYear };
+      if (activePeriods[period.schoolYearId] === periodId) {
+        const replacement = periods
+          .filter((item) => item.schoolYearId === period.schoolYearId)
+          .sort((left, right) => left.startDate.localeCompare(right.startDate))[0];
+        if (replacement) activePeriods[period.schoolYearId] = replacement.id;
+        else delete activePeriods[period.schoolYearId];
+      }
+      return {
+        ...prev,
+        continuousEvaluationPeriods: periods,
+        activeContinuousEvaluationPeriodByYear: activePeriods,
+      };
+    });
+    return true;
+  };
 
   const setContinuousEvaluationScore = (
     pupilId: string,
@@ -2464,6 +2798,12 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       getAttendanceRecordsForClass,
       saveAttendanceRecord,
       getContinuousEvaluation,
+      getContinuousEvaluationPeriods,
+      getActiveContinuousEvaluationPeriod,
+      setActiveContinuousEvaluationPeriod,
+      addContinuousEvaluationPeriod,
+      updateContinuousEvaluationPeriod,
+      deleteContinuousEvaluationPeriod,
       setContinuousEvaluationScore,
       getDisciplineEventsForEvaluation,
       addDisciplinePenalty,

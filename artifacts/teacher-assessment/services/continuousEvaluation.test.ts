@@ -93,6 +93,33 @@ function runContinuousEvaluationTests() {
   assertEqual(progress.completionPercent, 33, 'Pourcentage d’évaluations complètes');
   assertEqual(progress.averageEnteredScore ?? -1, 4, 'Moyenne des notes saisies seulement');
 
+  const firstTermProgress = getContinuousEvaluationProgress(
+    ['pupil-1', 'pupil-2', 'pupil-3'],
+    'class-1',
+    '2026-2027',
+    [
+      {
+        pupilId: 'pupil-1',
+        classId: 'class-1',
+        schoolYearId: '2026-2027',
+        cahierScore: 4,
+        participationScore: 3,
+      },
+      {
+        pupilId: 'pupil-3',
+        classId: 'class-1',
+        schoolYearId: '2026-2027',
+        evaluationPeriodId: 'period-1',
+        cahierScore: 5,
+        participationScore: 5,
+      },
+    ],
+    'period-1',
+  );
+  assertEqual(firstTermProgress.completedCount, 1, 'Les évaluations sont isolées par trimestre');
+  assertEqual(firstTermProgress.incompleteCount, 2, 'La progression du trimestre est indépendante');
+  assertEqual(firstTermProgress.averageEnteredScore ?? -1, 5, 'La moyenne ne mélange pas les trimestres');
+
   const emptyProgress = getContinuousEvaluationProgress([], 'class-1', '2026-2027', []);
   assertEqual(emptyProgress.completionPercent, 0, 'Aucun élève donne une progression nulle');
   assertEqual(emptyProgress.averageEnteredScore === null, true, 'Aucune note donne une moyenne vide');

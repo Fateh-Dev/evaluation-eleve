@@ -693,6 +693,9 @@ export type ContinuousEvaluationExportData = {
   className: string;
   level: string;
   academicYear: string;
+  evaluationPeriodName?: string;
+  evaluationPeriodStartDate?: string;
+  evaluationPeriodEndDate?: string;
   pupils: Array<{
     registrationNumber: string;
     firstName: string;
@@ -735,6 +738,9 @@ export function generateContinuousEvaluationPdfHtml(
     data.teacherName ? `Enseignant(e) : ${data.teacherName}` : '',
     `Niveau : ${data.level}`,
     `Année scolaire : ${data.academicYear}`,
+    data.evaluationPeriodName
+      ? `Période : ${data.evaluationPeriodName}${data.evaluationPeriodStartDate && data.evaluationPeriodEndDate ? ` (${data.evaluationPeriodStartDate} – ${data.evaluationPeriodEndDate})` : ''}`
+      : '',
   ].filter(Boolean).map(escapeExportHtml).join(' · ');
 
   return `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>Évaluation continue — ${escapeExportHtml(data.className)}</title>
@@ -774,7 +780,8 @@ export async function exportContinuousEvaluationPdf(
   const { base64 } = await Print.printToFileAsync({ html, base64: true });
   if (!base64) throw new Error('Expo Print n’a pas fourni le contenu du PDF.');
   const safeClassName = data.className.replace(/[^\p{L}\p{N}-]+/gu, '_');
-  const filename = `Evaluation_continue_${safeClassName}_${data.academicYear.replace(/[^\p{L}\p{N}-]+/gu, '_')}.pdf`;
+  const safePeriodName = (data.evaluationPeriodName ?? 'evaluation').replace(/[^\p{L}\p{N}-]+/gu, '_');
+  const filename = `Evaluation_continue_${safeClassName}_${data.academicYear.replace(/[^\p{L}\p{N}-]+/gu, '_')}_${safePeriodName}.pdf`;
   const cacheDirectory = LegacyFS.cacheDirectory ?? Paths.cache.uri;
   const targetUri = `${cacheDirectory.endsWith('/') ? cacheDirectory : `${cacheDirectory}/`}${Date.now()}-${filename}`;
   await LegacyFS.writeAsStringAsync(targetUri, base64, { encoding: LegacyFS.EncodingType.Base64 });
@@ -807,7 +814,7 @@ export async function generateContinuousEvaluationWorkbook(
   })[character] ?? character);
   const rows: Cell[][] = [
     ['ÉVALUATION CONTINUE', null, null, null, null, null, null, null, null, null, null, null],
-    [`Classe : ${data.className}`, `Niveau : ${data.level}`, `Année scolaire : ${data.academicYear}`, `Établissement : ${data.schoolName ?? ''}`, `Enseignant(e) : ${data.teacherName ?? ''}`],
+    [`Classe : ${data.className}`, `Niveau : ${data.level}`, `Année scolaire : ${data.academicYear}`, `Période : ${data.evaluationPeriodName ?? ''}`, `Dates : ${data.evaluationPeriodStartDate && data.evaluationPeriodEndDate ? `${data.evaluationPeriodStartDate} – ${data.evaluationPeriodEndDate}` : ''}`, `Établissement : ${data.schoolName ?? ''}`, `Enseignant(e) : ${data.teacherName ?? ''}`],
     [],
     ['N°', 'Matricule', 'Nom', 'Prénom', 'Cahier /5', 'Participation /5', 'Absences /5', 'Discipline /5', 'Total /20', 'État', 'Présences', 'Absences', 'Appels', 'Taux de présence'],
     ...data.pupils.map((pupil, index) => [

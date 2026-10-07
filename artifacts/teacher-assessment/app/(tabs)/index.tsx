@@ -12,9 +12,6 @@ export default function DashboardScreen() {
   const colors = useColors();
   const data = useAppData();
   const [now, setNow] = useState(() => new Date());
-  const [scheduleExpanded, setScheduleExpanded] = useState(false);
-  const [indicatorsExpanded, setIndicatorsExpanded] = useState(false);
-  const [quickAccessExpanded, setQuickAccessExpanded] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 30_000);
@@ -46,12 +43,16 @@ export default function DashboardScreen() {
     : [];
   const className = activeClass?.name ?? 'Aucune classe';
   const pupilCount = activeClassPupils.length;
+  const activeEvaluationPeriod = activeClass
+    ? data.getActiveContinuousEvaluationPeriod(activeClass.academicYear)
+    : undefined;
   const evaluationProgress = activeClass
     ? getContinuousEvaluationProgress(
         activeClassPupils.map((pupil) => pupil.id),
         activeClass.id,
         activeClass.academicYear,
         data.continuousEvaluations,
+        activeEvaluationPeriod?.id,
       )
     : getContinuousEvaluationProgress([], '', '', []);
   const {
@@ -132,13 +133,7 @@ export default function DashboardScreen() {
       <AppHeader eyebrow="Espace enseignant" title={teacherGreeting} />
       <SectionTitle title="Emploi du temps" action="Gérer" onAction={() => router.push('/schedule')} />
       <Surface style={styles.scheduleCard}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={scheduleExpanded ? 'Réduire l’emploi du temps' : 'Afficher les détails de l’emploi du temps'}
-          accessibilityState={{ expanded: scheduleExpanded }}
-          onPress={() => setScheduleExpanded((expanded) => !expanded)}
-          style={styles.scheduleHeading}
-        >
+        <View style={styles.scheduleHeading}>
           <View style={[styles.scheduleIcon, { backgroundColor: currentSessionClass ? colors.successSurface : colors.muted }]}>
             <Feather name={currentSessionClass ? 'clock' : 'calendar'} size={18} color={currentSessionClass ? colors.successForeground : colors.mutedForeground} />
           </View>
@@ -157,12 +152,7 @@ export default function DashboardScreen() {
               <Text style={[styles.rowSubtitle, { color: colors.mutedForeground }]}>Aucune classe n’est sélectionnée par l’emploi du temps.</Text>
             )}
           </View>
-          <Feather
-            name={scheduleExpanded ? 'chevron-up' : 'chevron-down'}
-            size={19}
-            color={colors.mutedForeground}
-          />
-        </Pressable>
+        </View>
         {currentSessionClass && currentSession ? (
           <Button
             label="Continuer la séance"
@@ -181,26 +171,22 @@ export default function DashboardScreen() {
             }}
           />
         ) : null}
-        {scheduleExpanded ? (
-          <>
-            <View style={[styles.nextSession, { borderTopColor: colors.border }]}>
-              <Feather name="info" size={15} color={colors.mutedForeground} />
-              <View style={styles.rowCopy}>
-                <Text style={[styles.nextLabel, { color: colors.mutedForeground }]}>Prochaine séance</Text>
-                {nextSession && nextSessionClass ? (
-                  <Text style={[styles.rowSubtitle, { color: colors.foreground }]}>
-                    <Text style={{ fontWeight: '700' }}>{nextSessionClass.name}</Text>
-                    {' · '}{WEEKDAYS[nextSession.dayOfWeek]} · {nextSession.startTime} – {nextSession.endTime}
-                    {nextSession.room ? ` · ${nextSession.room}` : ''}
-                  </Text>
-                ) : (
-                  <Text style={[styles.rowSubtitle, { color: colors.mutedForeground }]}>Aucune autre séance programmée</Text>
-                )}
-              </View>
-            </View>
-            <Button label="Gérer l’emploi du temps" secondary compact icon="calendar" onPress={() => router.push('/schedule')} />
-          </>
-        ) : null}
+        <View style={[styles.nextSession, { borderTopColor: colors.border }]}>
+          <Feather name="info" size={15} color={colors.mutedForeground} />
+          <View style={styles.rowCopy}>
+            <Text style={[styles.nextLabel, { color: colors.mutedForeground }]}>Prochaine séance</Text>
+            {nextSession && nextSessionClass ? (
+              <Text style={[styles.rowSubtitle, { color: colors.foreground }]}>
+                <Text style={{ fontWeight: '700' }}>{nextSessionClass.name}</Text>
+                {' · '}{WEEKDAYS[nextSession.dayOfWeek]} · {nextSession.startTime} – {nextSession.endTime}
+                {nextSession.room ? ` · ${nextSession.room}` : ''}
+              </Text>
+            ) : (
+              <Text style={[styles.rowSubtitle, { color: colors.mutedForeground }]}>Aucune autre séance programmée</Text>
+            )}
+          </View>
+        </View>
+        <Button label="Gérer l’emploi du temps" secondary compact icon="calendar" onPress={() => router.push('/schedule')} />
       </Surface>
 
       {!hasClasses ? (
@@ -231,7 +217,9 @@ export default function DashboardScreen() {
       ) : (
         <View style={[styles.hero, { backgroundColor: colors.hero }]}>
           <View style={styles.heroCopy}>
-            <Text style={[styles.heroKicker, { color: colors.primary }]}>Année scolaire · {activeClass!.academicYear}</Text>
+            <Text style={[styles.heroKicker, { color: colors.primary }]}>
+              {activeClass!.academicYear} · {activeEvaluationPeriod?.name ?? 'Aucune période'}
+            </Text>
             <Text style={[styles.heroTitle, { color: colors.heroForeground }]}>Évaluation continue</Text>
             <Text style={[styles.heroMeta, { color: colors.heroForeground }]}>
               {className} · Notes, présences et discipline dans un seul suivi.
@@ -262,26 +250,17 @@ export default function DashboardScreen() {
 
       {hasClasses ? (
         <>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={indicatorsExpanded ? 'Réduire les repères de la classe' : 'Afficher les repères de la classe'}
-            accessibilityState={{ expanded: indicatorsExpanded }}
-            onPress={() => setIndicatorsExpanded((expanded) => !expanded)}
-            style={styles.disclosureHeader}
-          >
+          <View style={styles.disclosureHeader}>
             <View style={styles.disclosureCopy}>
               <Text style={[styles.disclosureTitle, { color: colors.foreground }]}>Repères de la classe</Text>
-              {!indicatorsExpanded ? (
-                <Text style={[styles.disclosureSummary, { color: colors.mutedForeground }]} numberOfLines={1}>
-                  {continuousEvaluatedCount}/{pupilCount} complètes
-                  {' · '}Moyenne {manualScoreAverage}/5
-                  {' · '}Présence {attendanceRate === null ? '—' : `${attendanceRate}%`}
-                </Text>
-              ) : null}
+              <Text style={[styles.disclosureSummary, { color: colors.mutedForeground }]} numberOfLines={1}>
+                {continuousEvaluatedCount}/{pupilCount} complètes
+                {' · '}Moyenne {manualScoreAverage}/5
+                {' · '}Présence {attendanceRate === null ? '—' : `${attendanceRate}%`}
+              </Text>
             </View>
-            <Feather name={indicatorsExpanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.mutedForeground} />
-          </Pressable>
-          {indicatorsExpanded ? <View style={styles.indicatorGrid}>
+          </View>
+          <View style={styles.indicatorGrid}>
             <Surface style={styles.indicatorCard}>
               <Feather name="check-circle" size={17} color={colors.primary} />
               <Text style={[styles.indicatorValue, { color: colors.foreground }]}>
@@ -309,7 +288,7 @@ export default function DashboardScreen() {
                 présence moyenne
               </Text>
             </Surface>
-          </View> : null}
+          </View>
         </>
       ) : null}
 
@@ -420,24 +399,15 @@ export default function DashboardScreen() {
         </Surface>
       )}
 
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={quickAccessExpanded ? 'Réduire les accès rapides' : 'Afficher les accès rapides'}
-        accessibilityState={{ expanded: quickAccessExpanded }}
-        onPress={() => setQuickAccessExpanded((expanded) => !expanded)}
-        style={styles.disclosureHeader}
-      >
+      <View style={styles.disclosureHeader}>
         <View style={styles.disclosureCopy}>
           <Text style={[styles.disclosureTitle, { color: colors.foreground }]}>Accès rapide</Text>
-          {!quickAccessExpanded ? (
-            <Text style={[styles.disclosureSummary, { color: colors.mutedForeground }]}>
-              Évaluation continue · Classes & élèves
-            </Text>
-          ) : null}
+          <Text style={[styles.disclosureSummary, { color: colors.mutedForeground }]}>
+            Évaluation continue · Classes & élèves
+          </Text>
         </View>
-        <Feather name={quickAccessExpanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.mutedForeground} />
-      </Pressable>
-      {quickAccessExpanded ? <View style={styles.quickGrid}>
+      </View>
+      <View style={styles.quickGrid}>
         <Pressable
           onPress={() => router.push('/continuous')}
           style={[styles.quickCard, { backgroundColor: colors.card, borderColor: colors.border }]}
@@ -458,7 +428,7 @@ export default function DashboardScreen() {
             {data.classes.length} classe{data.classes.length > 1 ? 's' : ''}
           </Text>
         </Pressable>
-      </View> : null}
+      </View>
       <View style={styles.overviewFooter}>
         <Text style={[styles.overviewFooterText, { color: colors.mutedForeground }]}>
           Vue d’ensemble · {data.classes.length} classe{data.classes.length === 1 ? '' : 's'} · {data.pupils.length} élève{data.pupils.length === 1 ? '' : 's'}

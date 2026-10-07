@@ -24,6 +24,12 @@ export default function PupilDetailScreen() {
   const pupilClass = data.classes.find(
     (classItem) => classItem.id === pupil?.classId,
   );
+  const continuousPeriods = pupilClass
+    ? data.getContinuousEvaluationPeriods(pupilClass.academicYear)
+    : [];
+  const activeEvaluationPeriod = pupilClass
+    ? data.getActiveContinuousEvaluationPeriod(pupilClass.academicYear)
+    : undefined;
   const pupilAssessments = data.assessments.filter(
     (assessment) => assessment.classId === pupil?.classId,
   );
@@ -38,13 +44,22 @@ export default function PupilDetailScreen() {
     ? data.getEvaluationsForAssessment(pupilAssessment.id)[pupil?.id ?? ''] ?? {}
     : {};
   const continuousEvaluation = pupil && pupilClass
-    ? data.getContinuousEvaluation(pupil.id, pupilClass.id, pupilClass.academicYear)
+    ? data.getContinuousEvaluation(
+        pupil.id,
+        pupilClass.id,
+        pupilClass.academicYear,
+        activeEvaluationPeriod?.id,
+      )
     : undefined;
   const disciplineEvents = continuousEvaluation
     ? data.getDisciplineEventsForEvaluation(continuousEvaluation.id)
     : [];
   const attendanceRecords = pupilClass
-    ? data.getAttendanceRecordsForClass(pupilClass.id)
+    ? data.getAttendanceRecordsForClass(pupilClass.id).filter((record) =>
+        !activeEvaluationPeriod ||
+        (record.date >= activeEvaluationPeriod.startDate &&
+          record.date <= activeEvaluationPeriod.endDate),
+      )
     : [];
   const absenceStatistics = attendanceRecords.reduce(
     (statistics, record) => {
@@ -86,7 +101,12 @@ export default function PupilDetailScreen() {
   useEffect(() => {
     setCahierInput(String(continuousEvaluation?.cahierScore ?? 0));
     setParticipationInput(String(continuousEvaluation?.participationScore ?? 0));
-  }, [continuousEvaluation?.id, continuousEvaluation?.cahierScore, continuousEvaluation?.participationScore]);
+  }, [
+    activeEvaluationPeriod?.id,
+    continuousEvaluation?.id,
+    continuousEvaluation?.cahierScore,
+    continuousEvaluation?.participationScore,
+  ]);
 
   useEffect(() => {
     setDisciplinePenaltyInput(String(data.continuousEvaluationSettings.disciplinePenalty));
@@ -108,6 +128,7 @@ export default function PupilDetailScreen() {
       pupilClass.academicYear,
       field,
       score,
+      activeEvaluationPeriod?.id,
     )) {
       Alert.alert('Enregistrement impossible', 'La note n’a pas pu être sauvegardée.');
     }
@@ -133,6 +154,7 @@ export default function PupilDetailScreen() {
       pupilClass.id,
       pupilClass.academicYear,
       disciplineComment,
+      activeEvaluationPeriod?.id,
     )) {
       Alert.alert('Enregistrement impossible', 'La pénalité disciplinaire n’a pas pu être enregistrée.');
       return;
@@ -203,7 +225,36 @@ export default function PupilDetailScreen() {
           <Feather name="edit-2" size={16} color={colors.primary} />
         </Pressable>
       </Surface>
-      <SectionTitle title="Évaluation continue" />
+      <SectionTitle
+        title={`Évaluation continue${activeEvaluationPeriod ? ` · ${activeEvaluationPeriod.name}` : ''}`}
+        action="Périodes"
+        onAction={() => router.push('/continuous')}
+      />
+      <View style={styles.periodSelector}>
+        {continuousPeriods.map((period) => (
+          <Pressable
+            key={period.id}
+            accessibilityRole="button"
+            accessibilityState={{ selected: period.id === activeEvaluationPeriod?.id }}
+            onPress={() => pupilClass && data.setActiveContinuousEvaluationPeriod(pupilClass.academicYear, period.id)}
+            style={[
+              styles.periodChip,
+              {
+                backgroundColor: period.id === activeEvaluationPeriod?.id ? colors.primary : colors.card,
+                borderColor: period.id === activeEvaluationPeriod?.id ? colors.primary : colors.border,
+              },
+            ]}
+          >
+            <Text style={{
+              color: period.id === activeEvaluationPeriod?.id ? colors.primaryForeground : colors.foreground,
+              fontSize: 12,
+              fontWeight: '700',
+            }}>
+              {period.name}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
       <Surface style={[styles.continuousCard, { borderColor: colors.border }]}>
         <View style={styles.scoreRow}>
           <Text style={[styles.scoreLabel, { color: colors.foreground }]}>Cahier</Text>
@@ -420,6 +471,8 @@ export default function PupilDetailScreen() {
 }
 
 const styles = StyleSheet.create({
+  periodSelector: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginTop: -6, marginBottom: 8 },
+  periodChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
   profile: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, marginBottom: 4 },
   profileCopy: { flex: 1, minWidth: 0 },
   editButton: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
