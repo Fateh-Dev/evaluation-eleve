@@ -687,6 +687,224 @@ export async function downloadFile(
   }
 }
 
+export type ContinuousEvaluationExportData = {
+  schoolName?: string;
+  teacherName?: string;
+  className: string;
+  level: string;
+  academicYear: string;
+  pupils: Array<{
+    registrationNumber: string;
+    firstName: string;
+    lastName: string;
+    cahierScore?: number;
+    participationScore?: number;
+    absenceScore: number;
+    disciplineScore: number;
+    totalScore: number;
+    evaluationComplete: boolean;
+    presentSessions: number;
+    absentSessions: number;
+    attendanceSessions: number;
+  }>;
+};
+
+const escapeExportHtml = (value: string) => value.replace(/[&<>"']/g, (character) => ({
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+})[character] ?? character);
+
+export function generateContinuousEvaluationPdfHtml(
+  data: ContinuousEvaluationExportData,
+): string {
+  const rows = data.pupils.map((pupil, index) => {
+    const fullName = `${pupil.lastName} ${pupil.firstName}`.trim();
+    const score = (value: number | undefined) =>
+      value === undefined ? '—' : String(value);
+    const total = pupil.evaluationComplete ? `${pupil.totalScore}/20` : 'À compléter';
+    const attendanceRate = pupil.attendanceSessions
+      ? `${Math.round((pupil.presentSessions / pupil.attendanceSessions) * 100)} %`
+      : '—';
+    return `<tr><td>${index + 1}</td><td>${escapeExportHtml(pupil.registrationNumber)}</td><td class="name">${escapeExportHtml(fullName)}</td><td>${score(pupil.cahierScore)}</td><td>${score(pupil.participationScore)}</td><td>${pupil.absenceScore}</td><td>${pupil.disciplineScore}</td><td>${total}</td><td>${pupil.presentSessions}</td><td>${pupil.absentSessions}</td><td>${attendanceRate}</td></tr>`;
+  }).join('');
+  const metadata = [
+    data.schoolName ? `Établissement : ${data.schoolName}` : '',
+    data.teacherName ? `Enseignant(e) : ${data.teacherName}` : '',
+    `Niveau : ${data.level}`,
+    `Année scolaire : ${data.academicYear}`,
+  ].filter(Boolean).map(escapeExportHtml).join(' · ');
+
+  return `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>Évaluation continue — ${escapeExportHtml(data.className)}</title>
+    <style>
+      @page { size: A4 landscape; margin: 12mm; }
+      * { box-sizing: border-box; }
+      body { font-family: Arial, "DejaVu Sans", sans-serif; color: #1f2933; font-size: 9pt; margin: 0; }
+      header { text-align: center; margin-bottom: 16px; }
+      h1 { margin: 0 0 5px; font-size: 18pt; color: #183143; }
+      .class { font-size: 12pt; font-weight: 700; margin: 0 0 5px; }
+      .meta { color: #52616b; font-size: 8.5pt; margin: 0; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { border: 1px solid #9aa4aa; padding: 5px 4px; text-align: center; }
+      th { background: #eef2f4; font-size: 8pt; }
+      td.name { text-align: left; }
+      tbody tr:nth-child(even) { background: #f8fafb; }
+      footer { margin-top: 12px; text-align: right; color: #52616b; font-size: 8pt; }
+      .empty { text-align: center; color: #52616b; padding: 18px; }
+      @media print { body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
+    </style></head><body>
+    <header><h1>Évaluation continue</h1><p class="class">${escapeExportHtml(data.className)} · ${escapeExportHtml(data.level)}</p><p class="meta">${metadata}</p></header>
+    <table><thead><tr><th>N°</th><th>Matricule</th><th>Nom et prénom</th><th>Cahier /5</th><th>Participation /5</th><th>Absences /5</th><th>Discipline /5</th><th>Total /20</th><th>Présences</th><th>Absences</th><th>Taux de présence</th></tr></thead>
+    <tbody>${rows || '<tr><td class="empty" colspan="11">Aucun élève dans cette classe.</td></tr>'}</tbody></table>
+    <footer>${data.pupils.length} élève${data.pupils.length === 1 ? '' : 's'} · ${data.pupils.filter((pupil) => pupil.evaluationComplete).length} évaluation${data.pupils.filter((pupil) => pupil.evaluationComplete).length === 1 ? '' : 's'} complète${data.pupils.filter((pupil) => pupil.evaluationComplete).length === 1 ? '' : 's'} · Document généré le ${new Date().toLocaleDateString('fr-FR')}</footer>
+    </body></html>`;
+}
+
+export async function exportContinuousEvaluationPdf(
+  data: ContinuousEvaluationExportData,
+): Promise<void> {
+  const html = generateContinuousEvaluationPdfHtml(data);
+  if (Platform.OS === 'web') {
+    await Print.printAsync({ html });
+    return;
+  }
+
+  const { base64 } = await Print.printToFileAsync({ html, base64: true });
+  if (!base64) throw new Error('Expo Print n’a pas fourni le contenu du PDF.');
+  const safeClassName = data.className.replace(/[^\p{L}\p{N}-]+/gu, '_');
+  const filename = `Evaluation_continue_${safeClassName}_${data.academicYear.replace(/[^\p{L}\p{N}-]+/gu, '_')}.pdf`;
+  const cacheDirectory = LegacyFS.cacheDirectory ?? Paths.cache.uri;
+  const targetUri = `${cacheDirectory.endsWith('/') ? cacheDirectory : `${cacheDirectory}/`}${Date.now()}-${filename}`;
+  await LegacyFS.writeAsStringAsync(targetUri, base64, { encoding: LegacyFS.EncodingType.Base64 });
+  const fileInfo = await LegacyFS.getInfoAsync(targetUri);
+  if (!fileInfo.exists || fileInfo.size === 0) {
+    throw new Error('Le PDF de l’évaluation continue n’a pas été enregistré correctement.');
+  }
+  if (!(await Sharing.isAvailableAsync())) {
+    Alert.alert('PDF généré', `Le fichier a été créé dans le cache de l’application : ${filename}`);
+    return;
+  }
+  await Sharing.shareAsync(targetUri, {
+    mimeType: 'application/pdf',
+    dialogTitle: `Enregistrer ou partager l’évaluation continue — ${data.className}`,
+    UTI: 'com.adobe.pdf',
+  });
+}
+
+export async function generateContinuousEvaluationWorkbook(
+  data: ContinuousEvaluationExportData,
+): Promise<Uint8Array> {
+  type Cell = string | number | null;
+  const zip = new JSZip();
+  const escapeXml = (value: string) => value.replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&apos;',
+  })[character] ?? character);
+  const rows: Cell[][] = [
+    ['ÉVALUATION CONTINUE', null, null, null, null, null, null, null, null, null, null, null],
+    [`Classe : ${data.className}`, `Niveau : ${data.level}`, `Année scolaire : ${data.academicYear}`, `Établissement : ${data.schoolName ?? ''}`, `Enseignant(e) : ${data.teacherName ?? ''}`],
+    [],
+    ['N°', 'Matricule', 'Nom', 'Prénom', 'Cahier /5', 'Participation /5', 'Absences /5', 'Discipline /5', 'Total /20', 'État', 'Présences', 'Absences', 'Appels', 'Taux de présence'],
+    ...data.pupils.map((pupil, index) => [
+      index + 1,
+      pupil.registrationNumber,
+      pupil.lastName,
+      pupil.firstName,
+      pupil.cahierScore ?? '',
+      pupil.participationScore ?? '',
+      pupil.absenceScore,
+      pupil.disciplineScore,
+      pupil.evaluationComplete ? pupil.totalScore : '',
+      pupil.evaluationComplete ? 'Complète' : 'À compléter',
+      pupil.presentSessions,
+      pupil.absentSessions,
+      pupil.attendanceSessions,
+      pupil.attendanceSessions
+        ? `${Math.round((pupil.presentSessions / pupil.attendanceSessions) * 100)} %`
+        : '—',
+    ]),
+    [],
+    [
+      'Évaluations complètes',
+      data.pupils.filter((pupil) => pupil.evaluationComplete).length,
+      'Élèves',
+      data.pupils.length,
+    ],
+  ];
+  const columnName = (columnIndex: number) => {
+    let number = columnIndex + 1;
+    let name = '';
+    while (number > 0) {
+      const remainder = (number - 1) % 26;
+      name = String.fromCharCode(65 + remainder) + name;
+      number = Math.floor((number - 1) / 26);
+    }
+    return name;
+  };
+  const worksheetRows = rows.map((row, rowIndex) => {
+    const cells = row.map((value, columnIndex) => {
+      if (value === null || value === '') return '';
+      const reference = `${columnName(columnIndex)}${rowIndex + 1}`;
+      const style = rowIndex === 0 ? 1 : rowIndex === 3 ? 2 : 0;
+      if (typeof value === 'number') {
+        return `<c r="${reference}" s="${style}"><v>${value}</v></c>`;
+      }
+      return `<c r="${reference}" s="${style}" t="inlineStr"><is><t xml:space="preserve">${escapeXml(String(value))}</t></is></c>`;
+    }).join('');
+    return `<row r="${rowIndex + 1}">${cells}</row>`;
+  }).join('');
+  const columns = [
+    '<col min="1" max="1" width="7" customWidth="1"/>',
+    '<col min="2" max="4" width="22" customWidth="1"/>',
+    '<col min="5" max="9" width="16" customWidth="1"/>',
+    '<col min="10" max="10" width="17" customWidth="1"/>',
+    '<col min="11" max="14" width="16" customWidth="1"/>',
+  ].join('');
+  zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+</Types>`);
+  zip.folder('_rels')?.file('.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`);
+  zip.folder('xl')?.file('workbook.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<sheets><sheet name="Évaluation continue" sheetId="1" r:id="rId1"/></sheets></workbook>`);
+  zip.folder('xl')?.folder('_rels')?.file('workbook.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`);
+  zip.folder('xl')?.file('styles.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<fonts count="3"><font><sz val="10"/><name val="Arial"/></font><font><b/><color rgb="FFFFFFFF"/><sz val="16"/><name val="Arial"/></font><font><b/><color rgb="FFFFFFFF"/><sz val="10"/><name val="Arial"/></font></fonts>
+<fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF1F4E78"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FF527A9E"/><bgColor indexed="64"/></patternFill></fill></fills>
+<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FF9AA9B8"/></left><right style="thin"><color rgb="FF9AA9B8"/></right><top style="thin"><color rgb="FF9AA9B8"/></top><bottom style="thin"><color rgb="FF9AA9B8"/></bottom><diagonal/></border></borders>
+<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+<cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="center"/></xf><xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="center"/></xf><xf numFmtId="0" fontId="2" fillId="3" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="center" horizontal="center" wrapText="1"/></xf></cellXfs>
+</styleSheet>`);
+  zip.folder('xl')?.folder('worksheets')?.file('sheet1.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<sheetViews><sheetView workbookViewId="0"><pane ySplit="4" topLeftCell="A5" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
+<sheetFormatPr defaultRowHeight="21"/><cols>${columns}</cols><sheetData>${worksheetRows}</sheetData>
+<mergeCells count="1"><mergeCell ref="A1:N1"/></mergeCells>
+<autoFilter ref="A4:N${Math.max(4, data.pupils.length + 4)}"/>
+<pageMargins left="0.25" right="0.25" top="0.5" bottom="0.5" header="0.2" footer="0.2"/>
+<pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="0"/>
+</worksheet>`);
+  return zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' });
+}
+
 /**
  * Generates formatted HTML for PDF printing and exporting.
  */

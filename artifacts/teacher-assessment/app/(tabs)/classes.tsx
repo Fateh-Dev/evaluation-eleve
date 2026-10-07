@@ -37,24 +37,12 @@ export default function ClassesScreen() {
   const [newClassYear, setNewClassYear] = useState(
     data.academicYear || '2026-2027',
   );
-  const [selectedCompetencyIds, setSelectedCompetencyIds] = useState<string[]>(
-    [],
-  );
-  const [newCompetencyName, setNewCompetencyName] = useState('');
-  const [objectiveInputs, setObjectiveInputs] = useState<
-    Record<string, string>
-  >({});
-  const [objectivesExpanded, setObjectivesExpanded] = useState(false);
   const [visibleYear, setVisibleYear] = useState(data.academicYear);
 
   const selectedYearConfiguration =
     data.getSchoolYearConfiguration(newClassYear);
   const selectedLevel = selectedYearConfiguration?.levels.find(
     (level) => level.id === newClassLevelId,
-  );
-  const configuredCompetencies = data.getCompetenciesForLevel(
-    newClassYear,
-    newClassLevelId,
   );
   const visibleClasses = data.classes.filter(
     (item) => item.academicYear === visibleYear,
@@ -68,83 +56,27 @@ export default function ClassesScreen() {
     const year = data.academicYear;
     const config = data.getSchoolYearConfiguration(year);
     const level = config?.levels[0];
-    const competencies = level
-      ? data.getCompetenciesForLevel(year, level.id)
-      : [];
     setNewClassName('');
     setNewClassYear(year);
     setNewClassLevelId(level?.id ?? '');
-    setSelectedCompetencyIds(competencies.slice(0, 1).map((item) => item.id));
-    setNewCompetencyName('');
-    setObjectiveInputs({});
-    setObjectivesExpanded(false);
     setModalVisible(true);
-  };
-
-  const toggleCompetency = (id: string) => {
-    setSelectedCompetencyIds((prev) =>
-      prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id],
-    );
   };
 
   const resetModal = () => {
     setNewClassName('');
     setNewClassLevelId('');
-    setSelectedCompetencyIds([]);
-    setNewCompetencyName('');
-    setObjectiveInputs({});
-    setObjectivesExpanded(false);
     setModalVisible(false);
   };
 
   const selectClassYear = (year: string) => {
     const config = data.getSchoolYearConfiguration(year);
     const level = config?.levels[0];
-    const competencies = level
-      ? data.getCompetenciesForLevel(year, level.id)
-      : [];
     setNewClassYear(year);
     setNewClassLevelId(level?.id ?? '');
-    setSelectedCompetencyIds(competencies.slice(0, 1).map((item) => item.id));
-    setObjectiveInputs({});
   };
 
   const selectClassLevel = (levelId: string) => {
-    const competencies = data.getCompetenciesForLevel(newClassYear, levelId);
     setNewClassLevelId(levelId);
-    setSelectedCompetencyIds(competencies.slice(0, 1).map((item) => item.id));
-    setObjectiveInputs({});
-  };
-
-  const addCompetency = () => {
-    if (!newClassLevelId || !newCompetencyName.trim()) return;
-    const competencyId = data.addOrAssociateCompetency(
-      newClassYear,
-      newClassLevelId,
-      newCompetencyName,
-    );
-    if (!competencyId) return;
-    setSelectedCompetencyIds((previous) =>
-      previous.includes(competencyId) ? previous : [...previous, competencyId],
-    );
-    setNewCompetencyName('');
-  };
-
-  const addConfiguredObjective = (competencyId: string) => {
-    const description = objectiveInputs[competencyId]?.trim();
-    if (!description) return;
-    const current = data
-      .getObjectivesForLevelCompetency(
-        newClassYear,
-        newClassLevelId,
-        competencyId,
-      )
-      .map((item) => item.description);
-    data.setConfiguredObjectives(newClassYear, newClassLevelId, competencyId, [
-      ...current,
-      description,
-    ]);
-    setObjectiveInputs((previous) => ({ ...previous, [competencyId]: '' }));
   };
 
   const handleCreateClass = () => {
@@ -155,28 +87,11 @@ export default function ClassesScreen() {
       );
       return;
     }
-    if (selectedCompetencyIds.length === 0) {
-      Alert.alert(
-        'Compétence requise',
-        'Veuillez sélectionner au moins une compétence.',
-      );
-      return;
-    }
     const createdId = data.createClass({
       name: newClassName.trim(),
       level: selectedLevel.name,
       levelId: selectedLevel.id,
       academicYear: newClassYear.trim(),
-      competencySelections: selectedCompetencyIds.map((competencyId) => ({
-        competencyId,
-        objectives: data
-          .getObjectivesForLevelCompetency(
-            newClassYear,
-            selectedLevel.id,
-            competencyId,
-          )
-          .map((item) => item.description),
-      })),
     });
     setVisibleYear(newClassYear);
     resetModal();
@@ -315,7 +230,6 @@ export default function ClassesScreen() {
         <View style={styles.classesList}>
           {visibleClasses.map((cls) => {
             const classPupils = data.getPupilsForClass(cls.id);
-            const classAssessments = data.getAssessmentsForClass(cls.id);
             const isActive = cls.id === data.activeClassId;
 
             return (
@@ -392,42 +306,8 @@ export default function ClassesScreen() {
                     ]}
                   >
                     {classPupils.length} élève
-                    {classPupils.length > 1 ? 's' : ''} ·{' '}
-                    {classAssessments.length} compétence
-                    {classAssessments.length > 1 ? 's' : ''}
+                    {classPupils.length > 1 ? 's' : ''}
                   </Text>
-
-                  <View style={styles.competenciesPreview}>
-                    {classAssessments.slice(0, 3).map((a) => (
-                      <View
-                        key={a.id}
-                        style={[
-                          styles.competencyTag,
-                          { backgroundColor: colors.secondary },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.competencyTagText,
-                            { color: colors.foreground },
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {a.competency}
-                        </Text>
-                      </View>
-                    ))}
-                    {classAssessments.length > 3 && (
-                      <Text
-                        style={[
-                          styles.moreCount,
-                          { color: colors.mutedForeground },
-                        ]}
-                      >
-                        +{classAssessments.length - 3}
-                      </Text>
-                    )}
-                  </View>
                 </View>
 
                 <View style={styles.cardActionsRow}>
@@ -598,273 +478,16 @@ export default function ClassesScreen() {
                 )}
               </View>
 
-              {/* Competencies */}
               <View style={styles.formGroup}>
                 <Text
                   style={[styles.fieldLabel, { color: colors.mutedForeground }]}
                 >
-                  COMPÉTENCES À ÉVALUER ({selectedCompetencyIds.length}{' '}
-                  sélectionnée{selectedCompetencyIds.length > 1 ? 's' : ''})
+                  TEST DE NIVEAU INITIAL
                 </Text>
-                <Text
-                  style={[styles.fieldHint, { color: colors.mutedForeground }]}
-                >
-                  Les compétences proposées sont liées à ce niveau. Leur
-                  configuration reste réutilisable pour d’autres classes.
+                <Text style={[styles.fieldHint, { color: colors.mutedForeground }]}>
+                  Le test initial se cr?e s?par?ment depuis ? Plus ?, une seule
+                  fois par classe et par ann?e scolaire.
                 </Text>
-                <View style={styles.competencyGrid}>
-                  {configuredCompetencies.map((competency) => {
-                    const isSelected = selectedCompetencyIds.includes(
-                      competency.id,
-                    );
-                    const icons: Record<string, string> = {
-                      'comprehension-ecrite': 'book-open',
-                      'comprehension-orale': 'headphones',
-                      'production-ecrite': 'edit-3',
-                      'production-orale': 'mic',
-                    };
-                    const iconName = (icons[competency.templateId ?? ''] ||
-                      'award') as any;
-                    return (
-                      <Pressable
-                        key={competency.id}
-                        onPress={() => toggleCompetency(competency.id)}
-                        style={[
-                          styles.competencyChip,
-                          {
-                            backgroundColor: isSelected
-                              ? colors.primary
-                              : colors.secondary,
-                            borderColor: isSelected
-                              ? colors.primary
-                              : colors.border,
-                          },
-                        ]}
-                      >
-                        <Feather
-                          name={iconName}
-                          size={15}
-                          color={
-                            isSelected
-                              ? colors.primaryForeground
-                              : colors.foreground
-                          }
-                        />
-                        <Text
-                          style={[
-                            styles.competencyChipText,
-                            {
-                              color: isSelected
-                                ? colors.primaryForeground
-                                : colors.foreground,
-                            },
-                          ]}
-                          numberOfLines={2}
-                        >
-                          {competency.name}
-                        </Text>
-                        {isSelected && (
-                          <Feather
-                            name="check"
-                            size={13}
-                            color={colors.primaryForeground}
-                          />
-                        )}
-                      </Pressable>
-                    );
-                  })}
-                </View>
-
-                {configuredCompetencies.length === 0 && (
-                  <Text
-                    style={[
-                      styles.fieldHint,
-                      { color: colors.mutedForeground },
-                    ]}
-                  >
-                    Aucune compétence n’est associée à ce niveau. Ajoutez-en
-                    ci-dessous ou dans Paramètres.
-                  </Text>
-                )}
-
-                {selectedYearConfiguration && selectedLevel && (
-                  <View style={styles.inlineCreateRow}>
-                    <TextInput
-                      value={newCompetencyName}
-                      onChangeText={setNewCompetencyName}
-                      placeholder="Nouvelle compétence à associer"
-                      placeholderTextColor={colors.mutedForeground}
-                      style={[
-                        styles.input,
-                        styles.inlineCreateInput,
-                        {
-                          color: colors.foreground,
-                          borderColor: colors.border,
-                          backgroundColor: colors.background,
-                        },
-                      ]}
-                    />
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Ajouter et associer la compétence"
-                      onPress={addCompetency}
-                      style={[
-                        styles.inlineAddButton,
-                        { backgroundColor: colors.accent },
-                      ]}
-                    >
-                      <Feather name="plus" size={16} color={colors.primary} />
-                      <Text
-                        style={[
-                          styles.inlineAddText,
-                          { color: colors.primary },
-                        ]}
-                      >
-                        Ajouter
-                      </Text>
-                    </Pressable>
-                  </View>
-                )}
-
-                {/* Objectives preview for selected competencies */}
-                {selectedCompetencyIds.length > 0 && (
-                  <View
-                    style={[
-                      styles.objectivesSummary,
-                      {
-                        backgroundColor: colors.background,
-                        borderColor: colors.border,
-                      },
-                    ]}
-                  >
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel={
-                        objectivesExpanded
-                          ? 'Masquer les objectifs de la configuration'
-                          : 'Afficher les objectifs de la configuration'
-                      }
-                      accessibilityState={{ expanded: objectivesExpanded }}
-                      onPress={() =>
-                        setObjectivesExpanded((expanded) => !expanded)
-                      }
-                      style={styles.objectivesSummaryHeader}
-                    >
-                      <Text
-                        style={[
-                          styles.objectivesSummaryTitle,
-                          { color: colors.foreground },
-                        ]}
-                      >
-                        Objectifs de la configuration
-                      </Text>
-                      <Feather
-                        name={objectivesExpanded ? 'chevron-up' : 'chevron-down'}
-                        size={18}
-                        color={colors.mutedForeground}
-                      />
-                    </Pressable>
-                    {objectivesExpanded &&
-                      configuredCompetencies
-                        .filter((item) =>
-                          selectedCompetencyIds.includes(item.id),
-                        )
-                        .map((competency) => {
-                          const objectiveDescriptions = selectedLevel
-                            ? data
-                                .getObjectivesForLevelCompetency(
-                                  newClassYear,
-                                  selectedLevel.id,
-                                  competency.id,
-                                )
-                                .map((item) => item.description)
-                            : [];
-                          return (
-                            <View
-                              key={competency.id}
-                              style={[
-                                styles.objectiveGroup,
-                                { borderTopColor: colors.border },
-                              ]}
-                            >
-                              <Text
-                                style={[
-                                  styles.objectiveGroupName,
-                                  { color: colors.primary },
-                                ]}
-                              >
-                                {competency.name} (
-                                {objectiveDescriptions.length} objectifs)
-                              </Text>
-                              {objectiveDescriptions
-                                .slice(0, 3)
-                                .map((obj, idx) => (
-                                  <Text
-                                    key={idx}
-                                    style={[
-                                      styles.objectivePreview,
-                                      { color: colors.mutedForeground },
-                                    ]}
-                                    numberOfLines={1}
-                                  >
-                                    {String(idx + 1).padStart(2, '0')}. {obj}
-                                  </Text>
-                                ))}
-                              {objectiveDescriptions.length > 3 && (
-                                <Text
-                                  style={[
-                                    styles.objectivePreview,
-                                    { color: colors.mutedForeground },
-                                  ]}
-                                >
-                                  … +{objectiveDescriptions.length - 3}{' '}
-                                  objectifs
-                                </Text>
-                              )}
-                              <View style={styles.objectiveAddRow}>
-                                <TextInput
-                                  value={objectiveInputs[competency.id] ?? ''}
-                                  onChangeText={(value) =>
-                                    setObjectiveInputs((previous) => ({
-                                      ...previous,
-                                      [competency.id]: value,
-                                    }))
-                                  }
-                                  placeholder="Ajouter un objectif à cette configuration"
-                                  placeholderTextColor={colors.mutedForeground}
-                                  style={[
-                                    styles.input,
-                                    styles.objectiveInput,
-                                    {
-                                      color: colors.foreground,
-                                      borderColor: colors.border,
-                                      backgroundColor: colors.card,
-                                    },
-                                  ]}
-                                />
-                                <Pressable
-                                  accessibilityRole="button"
-                                  accessibilityLabel={`Ajouter un objectif à ${competency.name}`}
-                                  onPress={() =>
-                                    addConfiguredObjective(competency.id)
-                                  }
-                                  style={[
-                                    styles.objectiveAddButton,
-                                    { backgroundColor: colors.accent },
-                                  ]}
-                                >
-                                  <Feather
-                                    name="plus"
-                                    size={16}
-                                    color={colors.primary}
-                                  />
-                                </Pressable>
-                              </View>
-                            </View>
-                          );
-                        })}
-                  </View>
-                )}
               </View>
 
               <View style={[styles.modalActions, { marginTop: 8 }]}>
@@ -961,27 +584,6 @@ const styles = StyleSheet.create({
   classMeta: {
     fontSize: 12.5,
   },
-  competenciesPreview: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 4,
-  },
-  competencyTag: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    maxWidth: 160,
-  },
-  competencyTagText: {
-    fontSize: 10.5,
-    fontWeight: '600',
-  },
-  moreCount: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
   // Modal Styles
   modalOverlay: {
     flex: 1,
@@ -1065,102 +667,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 16,
     marginBottom: 2,
-  },
-  inlineCreateRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 4,
-  },
-  inlineCreateInput: {
-    flex: 1,
-    minWidth: 0,
-  },
-  inlineAddButton: {
-    minHeight: 44,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 5,
-  },
-  inlineAddText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  competencyGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 4,
-  },
-  competencyChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 10,
-    borderWidth: 1,
-    minWidth: '45%',
-    flex: 1,
-  },
-  competencyChipText: {
-    flex: 1,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  objectivesSummary: {
-    borderRadius: 10,
-    borderWidth: 1,
-    padding: 12,
-    gap: 10,
-  },
-  objectivesSummaryHeader: {
-    minHeight: 28,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  objectivesSummaryTitle: {
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-    flex: 1,
-  },
-  objectiveGroup: {
-    gap: 5,
-    paddingTop: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  objectiveAddRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 5,
-  },
-  objectiveInput: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 12,
-  },
-  objectiveAddButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  objectiveGroupName: {
-    fontSize: 11,
-    fontWeight: '700',
-    marginBottom: 2,
-  },
-  objectivePreview: {
-    fontSize: 10.5,
-    lineHeight: 15,
   },
   cardActionsRow: {
     flexDirection: 'row',

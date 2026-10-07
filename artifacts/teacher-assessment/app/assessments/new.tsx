@@ -33,6 +33,15 @@ export default function NewAssessmentScreen() {
 
   const selectedClass =
     data.classes.find((c) => c.id === selectedClassId) ?? data.activeClass;
+  const existingLevelTest = data.getLevelTestForClassYear(
+    selectedClassId,
+    selectedClass.academicYear,
+  );
+  const existingCompetencyCount = existingLevelTest
+    ? data.assessments.filter(
+        (assessment) => assessment.levelTestId === existingLevelTest.id,
+      ).length
+    : 0;
 
   const competencies = useMemo(
     () =>
@@ -188,10 +197,21 @@ export default function NewAssessmentScreen() {
     <Screen onTouchStart={() => setRemoveArmedObjectiveIndex(null)}>
       <AppHeader
         eyebrow="Test de niveau"
-        title="Nouveau test de niveau"
+        title={
+          existingLevelTest
+            ? 'Ajouter une compétence'
+            : 'Créer le test initial'
+        }
         onBack={() => router.back()}
         compact
       />
+      <Surface style={styles.sectionCard}>
+        <Text style={[styles.templateCount, { color: colors.mutedForeground }]}>
+          {existingLevelTest
+            ? `Le test initial de ${selectedClass.name} pour ${selectedClass.academicYear} existe déjà. Ajoutez-y une compétence (${existingCompetencyCount} actuellement) ; un seul test initial est conservé par classe et par année.`
+            : `Vous créez le test initial de ${selectedClass.name} pour ${selectedClass.academicYear}. Les compétences ajoutées ensuite feront partie du même test.`}
+        </Text>
+      </Surface>
 
       {/* Class Selector */}
       <Surface

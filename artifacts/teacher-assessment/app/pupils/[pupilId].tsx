@@ -1,11 +1,17 @@
 import { Alert } from '@/components/AppDialog';
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { AppHeader, Button, KeyboardAvoidingViewCompat, Screen, SectionTitle, Surface, ValueMark } from '@/components/AppShell';
 import { useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
+import {
+  calculateAbsenceScore,
+  calculateContinuousTotal,
+  calculateDisciplineScore,
+  isValidManualScore,
+} from '@/services/continuousEvaluation';
 
 export default function PupilDetailScreen() {
   const colors = useColors();
@@ -31,6 +37,124 @@ export default function PupilDetailScreen() {
   const pupilEvaluations = pupilAssessment
     ? data.getEvaluationsForAssessment(pupilAssessment.id)[pupil?.id ?? ''] ?? {}
     : {};
+  const continuousEvaluation = pupil && pupilClass
+    ? data.getContinuousEvaluation(pupil.id, pupilClass.id, pupilClass.academicYear)
+    : undefined;
+  const disciplineEvents = continuousEvaluation
+    ? data.getDisciplineEventsForEvaluation(continuousEvaluation.id)
+    : [];
+  const attendanceRecords = pupilClass
+    ? data.getAttendanceRecordsForClass(pupilClass.id)
+    : [];
+  const absenceStatistics = attendanceRecords.reduce(
+    (statistics, record) => {
+      const status = pupil ? record.statuses[pupil.id] : undefined;
+      if (status === 'present') {
+        statistics.totalSessions += 1;
+        statistics.presentCount += 1;
+      } else if (status === 'absent') {
+        statistics.totalSessions += 1;
+        statistics.absentCount += 1;
+      }
+      return statistics;
+    },
+    { totalSessions: 0, presentCount: 0, absentCount: 0 },
+  );
+  const absenceScore = calculateAbsenceScore(absenceStatistics, {
+    penaltyPerAbsence: data.continuousEvaluationSettings.absencePenaltyPerAbsence,
+    maximumScore: 5,
+  });
+  const disciplineScore = calculateDisciplineScore(
+    disciplineEvents.map((event) => event.penalty),
+  );
+  const totalScore = calculateContinuousTotal({
+    cahierScore: continuousEvaluation?.cahierScore ?? 0,
+    participationScore: continuousEvaluation?.participationScore ?? 0,
+    absenceScore,
+    disciplineScore,
+  });
+  const [cahierInput, setCahierInput] = useState('0');
+  const [participationInput, setParticipationInput] = useState('0');
+  const [disciplineComment, setDisciplineComment] = useState('');
+  const [disciplinePenaltyInput, setDisciplinePenaltyInput] = useState(
+    String(data.continuousEvaluationSettings.disciplinePenalty),
+  );
+  const [absencePenaltyInput, setAbsencePenaltyInput] = useState(
+    String(data.continuousEvaluationSettings.absencePenaltyPerAbsence),
+  );
+
+  useEffect(() => {
+    setCahierInput(String(continuousEvaluation?.cahierScore ?? 0));
+    setParticipationInput(String(continuousEvaluation?.participationScore ?? 0));
+  }, [continuousEvaluation?.id, continuousEvaluation?.cahierScore, continuousEvaluation?.participationScore]);
+
+  useEffect(() => {
+    setDisciplinePenaltyInput(String(data.continuousEvaluationSettings.disciplinePenalty));
+    setAbsencePenaltyInput(String(data.continuousEvaluationSettings.absencePenaltyPerAbsence));
+  }, [data.continuousEvaluationSettings.disciplinePenalty, data.continuousEvaluationSettings.absencePenaltyPerAbsence]);
+
+  const saveContinuousScore = (field: 'cahierScore' | 'participationScore', value: string) => {
+    if (!pupil || !pupilClass) return;
+    const score = Number(value.replace(',', '.'));
+    if (!value.trim() || !isValidManualScore(score)) {
+      Alert.alert('Note invalide', 'La note doit être comprise entre 0 et 5.');
+      setCahierInput(String(continuousEvaluation?.cahierScore ?? 0));
+      setParticipationInput(String(continuousEvaluation?.participationScore ?? 0));
+      return;
+    }
+    if (!data.setContinuousEvaluationScore(
+      pupil.id,
+      pupilClass.id,
+      pupilClass.academicYear,
+      field,
+      score,
+    )) {
+      Alert.alert('Enregistrement impossible', 'La note n’a pas pu être sauvegardée.');
+    }
+  };
+
+  const savePenaltySettings = (field: 'disciplinePenalty' | 'absencePenaltyPerAbsence', value: string) => {
+    const penalty = Number(value.replace(',', '.'));
+    const valid = Boolean(value.trim()) &&
+      Number.isFinite(penalty) &&
+      penalty >= (field === 'disciplinePenalty' ? 0.01 : 0) &&
+      penalty <= 5;
+    if (!valid || !data.updateContinuousEvaluationSettings({ [field]: penalty })) {
+      Alert.alert('Valeur invalide', 'Saisissez une valeur comprise entre 0 et 5 (strictement supérieure à 0 pour la discipline).');
+      setDisciplinePenaltyInput(String(data.continuousEvaluationSettings.disciplinePenalty));
+      setAbsencePenaltyInput(String(data.continuousEvaluationSettings.absencePenaltyPerAbsence));
+    }
+  };
+
+  const addDisciplineEvent = () => {
+    if (!pupil || !pupilClass) return;
+    if (!data.addDisciplinePenalty(
+      pupil.id,
+      pupilClass.id,
+      pupilClass.academicYear,
+      disciplineComment,
+    )) {
+      Alert.alert('Enregistrement impossible', 'La pénalité disciplinaire n’a pas pu être enregistrée.');
+      return;
+    }
+    setDisciplineComment('');
+  };
+
+  const removeDisciplineEvent = (eventId: string) => {
+    Alert.alert('Annuler cette pénalité ?', 'La note de discipline sera recalculée à partir de l’historique.', [
+      { text: 'Garder', style: 'cancel' },
+      {
+        text: 'Supprimer',
+        style: 'destructive',
+        onPress: () => {
+          if (!data.deleteDisciplineEvent(eventId)) {
+            Alert.alert('Suppression impossible', 'Cette pénalité n’a pas pu être supprimée.');
+          }
+        },
+      },
+    ]);
+  };
+
   const openEditModal = () => {
     if (!pupil) return;
     setFirstNameInput(pupil.firstName);
@@ -79,17 +203,118 @@ export default function PupilDetailScreen() {
           <Feather name="edit-2" size={16} color={colors.primary} />
         </Pressable>
       </Surface>
-      <Button
-        label="Évaluer cet élève"
-        icon="check-square"
-        disabled={!pupilAssessment}
-        onPress={() => {
-          if (pupilAssessment) {
-            router.push(`/assessments/${pupilAssessment.id}?pupilId=${pupil.id}`);
-          }
-        }}
-      />
-      <SectionTitle title="Historique d’évaluation" />
+      <SectionTitle title="Évaluation continue" />
+      <Surface style={[styles.continuousCard, { borderColor: colors.border }]}>
+        <View style={styles.scoreRow}>
+          <Text style={[styles.scoreLabel, { color: colors.foreground }]}>Cahier</Text>
+          <TextInput
+            accessibilityLabel="Note du cahier sur 5"
+            value={cahierInput}
+            onChangeText={setCahierInput}
+            onEndEditing={(event) => saveContinuousScore('cahierScore', event.nativeEvent.text)}
+            keyboardType="decimal-pad"
+            selectTextOnFocus
+            style={[styles.scoreInput, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]}
+          />
+          <Text style={[styles.scoreDenominator, { color: colors.mutedForeground }]}>/ 5</Text>
+        </View>
+        <View style={styles.scoreRow}>
+          <Text style={[styles.scoreLabel, { color: colors.foreground }]}>Participation</Text>
+          <TextInput
+            accessibilityLabel="Note de participation sur 5"
+            value={participationInput}
+            onChangeText={setParticipationInput}
+            onEndEditing={(event) => saveContinuousScore('participationScore', event.nativeEvent.text)}
+            keyboardType="decimal-pad"
+            selectTextOnFocus
+            style={[styles.scoreInput, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]}
+          />
+          <Text style={[styles.scoreDenominator, { color: colors.mutedForeground }]}>/ 5</Text>
+        </View>
+        <View style={[styles.scoreRow, styles.calculatedRow, { borderTopColor: colors.border }]}>
+          <View style={styles.calculatedCopy}>
+            <Text style={[styles.scoreLabel, { color: colors.foreground }]}>Absences</Text>
+            <Text style={[styles.calculatedHint, { color: colors.mutedForeground }]}>
+              Calcul automatique · {absenceStatistics.absentCount}/{absenceStatistics.totalSessions} absence(s)
+            </Text>
+          </View>
+          <Text style={[styles.calculatedScore, { color: colors.foreground }]}>{absenceScore} / 5</Text>
+        </View>
+        <View style={[styles.scoreRow, styles.calculatedRow, { borderTopColor: colors.border }]}>
+          <View style={styles.calculatedCopy}>
+            <Text style={[styles.scoreLabel, { color: colors.foreground }]}>Discipline</Text>
+            <Text style={[styles.calculatedHint, { color: colors.mutedForeground }]}>
+              Pénalité : {data.continuousEvaluationSettings.disciplinePenalty} point(s)
+            </Text>
+          </View>
+          <Text style={[styles.calculatedScore, { color: colors.foreground }]}>{disciplineScore} / 5</Text>
+        </View>
+        <TextInput
+          accessibilityLabel="Commentaire facultatif sur la pénalité"
+          value={disciplineComment}
+          onChangeText={setDisciplineComment}
+          placeholder="Commentaire facultatif"
+          placeholderTextColor={colors.mutedForeground}
+          style={[styles.commentInput, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]}
+        />
+        <Button label={`− Ajouter une pénalité (${data.continuousEvaluationSettings.disciplinePenalty})`} secondary onPress={addDisciplineEvent} />
+        <Text style={[styles.settingsLabel, { color: colors.mutedForeground }]}>RÈGLES DE CALCUL</Text>
+        <View style={styles.settingsRow}>
+          <Text style={[styles.settingsText, { color: colors.foreground }]}>Pénalité discipline</Text>
+          <TextInput
+            accessibilityLabel="Pénalité par événement disciplinaire"
+            value={disciplinePenaltyInput}
+            onChangeText={setDisciplinePenaltyInput}
+            onEndEditing={(event) => savePenaltySettings('disciplinePenalty', event.nativeEvent.text)}
+            keyboardType="decimal-pad"
+            style={[styles.settingInput, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]}
+          />
+        </View>
+        <View style={styles.settingsRow}>
+          <Text style={[styles.settingsText, { color: colors.foreground }]}>Par absence</Text>
+          <TextInput
+            accessibilityLabel="Points retirés par absence"
+            value={absencePenaltyInput}
+            onChangeText={setAbsencePenaltyInput}
+            onEndEditing={(event) => savePenaltySettings('absencePenaltyPerAbsence', event.nativeEvent.text)}
+            keyboardType="decimal-pad"
+            style={[styles.settingInput, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]}
+          />
+        </View>
+        <Text style={[styles.settingsHint, { color: colors.mutedForeground }]}>
+          Absences : 5 points moins {data.continuousEvaluationSettings.absencePenaltyPerAbsence} par absence, avec un minimum de 0.
+        </Text>
+        <SectionTitle title={`Historique disciplinaire (${disciplineEvents.length})`} compact />
+        {disciplineEvents.length ? disciplineEvents.map((event) => (
+          <View key={event.id} style={[styles.eventRow, { borderTopColor: colors.border }]}>
+            <View style={styles.eventCopy}>
+              <Text style={[styles.eventDate, { color: colors.foreground }]}>
+                {new Date(`${event.date}T00:00:00`).toLocaleDateString('fr-FR')} · −{event.penalty}
+              </Text>
+              {event.comment ? (
+                <Text style={[styles.calculatedHint, { color: colors.mutedForeground }]}>{event.comment}</Text>
+              ) : null}
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Annuler la pénalité"
+              onPress={() => removeDisciplineEvent(event.id)}
+              style={[styles.removeEventButton, { backgroundColor: colors.secondary }]}
+            >
+              <Feather name="trash-2" size={15} color={colors.foreground} />
+            </Pressable>
+          </View>
+        )) : (
+          <Text style={[styles.emptyHistory, { color: colors.mutedForeground }]}>
+            Aucune pénalité enregistrée.
+          </Text>
+        )}
+        <View style={[styles.totalRow, { borderTopColor: colors.border }]}>
+          <Text style={[styles.scoreLabel, { color: colors.foreground }]}>Total</Text>
+          <Text style={[styles.totalScore, { color: colors.primary }]}>{totalScore} / 20</Text>
+        </View>
+      </Surface>
+      <SectionTitle title="Historique du test de niveau" />
       <Surface style={styles.historyCard}>
         {pupilAssessment ? (
           <>
@@ -202,6 +427,27 @@ const styles = StyleSheet.create({
   avatarText: { fontSize: 17, fontWeight: '800' },
   profileName: { fontSize: 18, fontWeight: '700', marginBottom: 4 },
   profileMeta: { fontSize: 13 },
+  continuousCard: { gap: 10, padding: 14, marginBottom: 4 },
+  scoreRow: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  scoreLabel: { flex: 1, fontSize: 14, fontWeight: '700' },
+  scoreInput: { width: 70, height: 38, borderWidth: 1, borderRadius: 9, paddingHorizontal: 8, textAlign: 'center', fontSize: 15 },
+  scoreDenominator: { width: 25, fontSize: 13 },
+  calculatedRow: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 9 },
+  calculatedCopy: { flex: 1, gap: 3 },
+  calculatedHint: { fontSize: 11, lineHeight: 16 },
+  calculatedScore: { fontSize: 15, fontWeight: '700' },
+  commentInput: { minHeight: 42, borderWidth: 1, borderRadius: 9, paddingHorizontal: 10, fontSize: 13 },
+  settingsLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 1, marginTop: 3 },
+  settingsRow: { minHeight: 36, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  settingsText: { flex: 1, fontSize: 12 },
+  settingInput: { width: 68, height: 34, borderWidth: 1, borderRadius: 8, paddingHorizontal: 7, textAlign: 'center', fontSize: 13 },
+  settingsHint: { fontSize: 11, lineHeight: 16 },
+  eventRow: { minHeight: 48, borderTopWidth: StyleSheet.hairlineWidth, flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 },
+  eventCopy: { flex: 1, gap: 2 },
+  eventDate: { fontSize: 12, fontWeight: '600' },
+  removeEventButton: { width: 34, height: 34, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  totalRow: { borderTopWidth: 1, minHeight: 48, flexDirection: 'row', alignItems: 'center', marginTop: 2, paddingTop: 8 },
+  totalScore: { fontSize: 18, fontWeight: '800' },
   historyCard: { gap: 4, paddingHorizontal: 14, paddingVertical: 10 },
   historyHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 7, paddingHorizontal: 2 },
   historyHeading: { gap: 3 },

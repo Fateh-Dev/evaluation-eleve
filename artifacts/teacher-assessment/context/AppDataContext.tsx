@@ -21,6 +21,12 @@ import {
   type SchoolLevel,
   type SchoolYearConfiguration,
 } from '@/services/pedagogicalConfiguration';
+import {
+  DEFAULT_ABSENCE_SCORING_CONFIGURATION,
+  DEFAULT_DISCIPLINE_PENALTY,
+  isValidManualScore,
+  normalizeScore,
+} from '@/services/continuousEvaluation';
 
 export type EvaluationValue =
   'NotEvaluated' | 'Acquired' | 'PartiallyAcquired' | 'NotAcquired';
@@ -59,6 +65,43 @@ export type AttendanceRecord = {
   statuses: Record<string, AttendanceStatus>;
 };
 
+export type ContinuousEvaluationRecord = {
+  id: string;
+  pupilId: string;
+  classId: string;
+  schoolYearId: string;
+  evaluationPeriodId?: string;
+  cahierScore?: number;
+  participationScore?: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DisciplineEvent = {
+  id: string;
+  studentId: string;
+  classId: string;
+  schoolYearId: string;
+  evaluationId: string;
+  date: string;
+  type: 'MINUS';
+  penalty: number;
+  comment?: string;
+  createdAt: string;
+};
+
+export type ContinuousEvaluationSettings = {
+  absencePenaltyPerAbsence: number;
+  disciplinePenalty: number;
+};
+
+export type LevelTest = {
+  id: string;
+  classId: string;
+  schoolYearId: string;
+  createdAt: string;
+};
+
 export type Pupil = {
   id: string;
   registrationNumber: string;
@@ -79,6 +122,7 @@ export type Objective = {
 export type Assessment = {
   id: string;
   classId: string;
+  levelTestId?: string;
   title: string;
   date: string;
   subject: string;
@@ -114,6 +158,10 @@ export type AppState = {
   classes: ClassItem[];
   scheduleSessions: ScheduleSession[];
   attendanceRecords: AttendanceRecord[];
+  continuousEvaluations: ContinuousEvaluationRecord[];
+  disciplineEvents: DisciplineEvent[];
+  continuousEvaluationSettings: ContinuousEvaluationSettings;
+  levelTests: LevelTest[];
   activeClassId: string;
   pupils: Pupil[];
   assessments: Assessment[];
@@ -145,6 +193,10 @@ export type AppDataContextValue = {
   classes: ClassItem[];
   scheduleSessions: ScheduleSession[];
   attendanceRecords: AttendanceRecord[];
+  continuousEvaluations: ContinuousEvaluationRecord[];
+  disciplineEvents: DisciplineEvent[];
+  continuousEvaluationSettings: ContinuousEvaluationSettings;
+  levelTests: LevelTest[];
   activeClassId: string;
   pupils: Pupil[];
   assessments: Assessment[];
@@ -231,11 +283,6 @@ export type AppDataContextValue = {
     level: string;
     levelId?: string;
     academicYear?: string;
-    competencyIds?: string[];
-    competencySelections?: Array<{
-      competencyId: string;
-      objectives?: string[];
-    }>;
   }) => string;
   setActiveClass: (classId: string) => void;
   addScheduleSession: (input: Omit<ScheduleSession, 'id'>) => string | undefined;
@@ -268,6 +315,32 @@ export type AppDataContextValue = {
   ) => AttendanceRecord | undefined;
   getAttendanceRecordsForClass: (classId: string) => AttendanceRecord[];
   saveAttendanceRecord: (record: Omit<AttendanceRecord, 'id'>) => boolean;
+  getContinuousEvaluation: (
+    pupilId: string,
+    classId: string,
+    schoolYearId: string,
+    evaluationPeriodId?: string,
+  ) => ContinuousEvaluationRecord | undefined;
+  setContinuousEvaluationScore: (
+    pupilId: string,
+    classId: string,
+    schoolYearId: string,
+    field: 'cahierScore' | 'participationScore',
+    score: number,
+    evaluationPeriodId?: string,
+  ) => boolean;
+  getDisciplineEventsForEvaluation: (evaluationId: string) => DisciplineEvent[];
+  addDisciplinePenalty: (
+    pupilId: string,
+    classId: string,
+    schoolYearId: string,
+    comment?: string,
+    evaluationPeriodId?: string,
+  ) => string | undefined;
+  deleteDisciplineEvent: (eventId: string) => boolean;
+  updateContinuousEvaluationSettings: (
+    settings: Partial<ContinuousEvaluationSettings>,
+  ) => boolean;
 
   // Assessment / Competency Actions
   createAssessment: (input: {
@@ -286,6 +359,7 @@ export type AppDataContextValue = {
   deleteAssessment: (assessmentId: string) => void;
   getAssessment: (assessmentId: string) => Assessment | undefined;
   getAssessmentsForClass: (classId: string) => Assessment[];
+  getLevelTestForClassYear: (classId: string, schoolYearId: string) => LevelTest | undefined;
 
   // Objective Actions
   addObjective: (assessmentId: string, description: string) => string;
@@ -368,6 +442,90 @@ function isAttendanceRecord(value: unknown): value is AttendanceRecord {
     Object.values(record.statuses).every((status) => status === 'present' || status === 'absent');
 }
 
+function isContinuousEvaluationRecord(value: unknown): value is ContinuousEvaluationRecord {
+  if (!value || typeof value !== 'object') return false;
+  const evaluation = value as Partial<ContinuousEvaluationRecord>;
+  return typeof evaluation.id === 'string' &&
+    typeof evaluation.pupilId === 'string' &&
+    typeof evaluation.classId === 'string' &&
+    typeof evaluation.schoolYearId === 'string' &&
+    (evaluation.evaluationPeriodId === undefined || typeof evaluation.evaluationPeriodId === 'string') &&
+    (evaluation.cahierScore === undefined || isValidManualScore(evaluation.cahierScore)) &&
+    (evaluation.participationScore === undefined || isValidManualScore(evaluation.participationScore)) &&
+    typeof evaluation.createdAt === 'string' &&
+    typeof evaluation.updatedAt === 'string';
+}
+
+function isDisciplineEvent(value: unknown): value is DisciplineEvent {
+  if (!value || typeof value !== 'object') return false;
+  const event = value as Partial<DisciplineEvent>;
+  const dateValue = typeof event.date === 'string' ? event.date : '';
+  const [year, month, day] = dateValue.split('-').map(Number);
+  const eventDate = new Date(year, month - 1, day);
+  return typeof event.id === 'string' &&
+    typeof event.studentId === 'string' &&
+    typeof event.classId === 'string' &&
+    typeof event.schoolYearId === 'string' &&
+    typeof event.evaluationId === 'string' &&
+    /^\d{4}-\d{2}-\d{2}$/.test(dateValue) &&
+    eventDate.getFullYear() === year &&
+    eventDate.getMonth() === month - 1 &&
+    eventDate.getDate() === day &&
+    event.type === 'MINUS' &&
+    typeof event.penalty === 'number' &&
+    Number.isFinite(event.penalty) &&
+    event.penalty > 0 &&
+    (event.comment === undefined || typeof event.comment === 'string') &&
+    typeof event.createdAt === 'string';
+}
+
+function isLevelTest(value: unknown): value is LevelTest {
+  if (!value || typeof value !== 'object') return false;
+  const test = value as Partial<LevelTest>;
+  return typeof test.id === 'string' &&
+    typeof test.classId === 'string' &&
+    typeof test.schoolYearId === 'string' &&
+    typeof test.createdAt === 'string';
+}
+
+function migrateLevelTests(
+  classes: ClassItem[],
+  assessments: Assessment[],
+  storedTests: unknown,
+): { levelTests: LevelTest[]; assessments: Assessment[] } {
+  const validTests = Array.isArray(storedTests)
+    ? storedTests.filter(isLevelTest).filter((test) =>
+        classes.some((classItem) =>
+          classItem.id === test.classId &&
+          classItem.academicYear === test.schoolYearId,
+        ),
+      )
+    : [];
+  const byClassYear = new Map<string, LevelTest>();
+  for (const test of validTests) {
+    const key = `${test.classId}::${test.schoolYearId}`;
+    if (!byClassYear.has(key)) byClassYear.set(key, test);
+  }
+  const now = new Date().toISOString();
+  for (const assessment of assessments) {
+    const classItem = classes.find((item) => item.id === assessment.classId);
+    if (!classItem) continue;
+    const key = `${classItem.id}::${classItem.academicYear}`;
+    const existing = byClassYear.get(key);
+    const levelTest = existing ?? {
+      id: createConfigId('level-test'),
+      classId: classItem.id,
+      schoolYearId: classItem.academicYear,
+      createdAt: now,
+    };
+    if (!existing) {
+      byClassYear.set(key, levelTest);
+    }
+    assessment.levelTestId = levelTest.id;
+  }
+  return { levelTests: Array.from(byClassYear.values()), assessments };
+}
+
 export function createEmptyState(): AppState {
   return {
     school: {
@@ -383,6 +541,13 @@ export function createEmptyState(): AppState {
     classes: [],
     scheduleSessions: [],
     attendanceRecords: [],
+    continuousEvaluations: [],
+    disciplineEvents: [],
+    continuousEvaluationSettings: {
+      absencePenaltyPerAbsence: DEFAULT_ABSENCE_SCORING_CONFIGURATION.penaltyPerAbsence,
+      disciplinePenalty: DEFAULT_DISCIPLINE_PENALTY,
+    },
+    levelTests: [],
     activeClassId: '',
     pupils: [],
     assessments: [],
@@ -411,10 +576,32 @@ export function AppDataProvider({ children }: PropsWithChildren) {
             const parsed = JSON.parse(stored) as Partial<AppState>;
             const academicYear = parsed.academicYear ?? '2026-2027';
             const classes = Array.isArray(parsed.classes) ? parsed.classes : [];
-            const assessments = Array.isArray(parsed.assessments)
+            const rawAssessments = Array.isArray(parsed.assessments)
               ? parsed.assessments
               : [];
+            const migratedLevelTests = migrateLevelTests(
+              classes,
+              rawAssessments.map((assessment) => ({ ...assessment })),
+              parsed.levelTests,
+            );
+            const assessments = migratedLevelTests.assessments;
             const objectives = parsed.objectives ?? {};
+            const pupils = Array.isArray(parsed.pupils) ? parsed.pupils : [];
+            const validEvaluations = Array.isArray(parsed.continuousEvaluations)
+              ? parsed.continuousEvaluations
+                  .filter(isContinuousEvaluationRecord)
+                  .filter((evaluation) =>
+                    classes.some((classItem) =>
+                      classItem.id === evaluation.classId &&
+                      classItem.academicYear === evaluation.schoolYearId &&
+                      pupils.some((pupil) =>
+                        pupil.id === evaluation.pupilId &&
+                        pupil.classId === evaluation.classId,
+                      ),
+                    ),
+                  )
+              : [];
+            const evaluationIds = new Set(validEvaluations.map((item) => item.id));
             setState((prev) => ({
               ...prev,
               ...parsed,
@@ -435,8 +622,35 @@ export function AppDataProvider({ children }: PropsWithChildren) {
               attendanceRecords: Array.isArray(parsed.attendanceRecords)
                 ? parsed.attendanceRecords.filter(isAttendanceRecord).filter((record) => classes.some((classItem) => classItem.id === record.classId))
                 : [],
-              pupils: Array.isArray(parsed.pupils) ? parsed.pupils : [],
+              continuousEvaluations: validEvaluations,
+              disciplineEvents: Array.isArray(parsed.disciplineEvents)
+                ? parsed.disciplineEvents
+                    .filter(isDisciplineEvent)
+                    .filter((event) => {
+                      const evaluation = validEvaluations.find(
+                        (item) => item.id === event.evaluationId,
+                      );
+                      return evaluationIds.has(event.evaluationId) &&
+                        evaluation?.pupilId === event.studentId &&
+                        evaluation.classId === event.classId &&
+                        evaluation.schoolYearId === event.schoolYearId;
+                    })
+                : [],
+              continuousEvaluationSettings: {
+                absencePenaltyPerAbsence: isValidManualScore(
+                  parsed.continuousEvaluationSettings?.absencePenaltyPerAbsence ?? Number.NaN,
+                )
+                  ? parsed.continuousEvaluationSettings!.absencePenaltyPerAbsence
+                  : DEFAULT_ABSENCE_SCORING_CONFIGURATION.penaltyPerAbsence,
+                disciplinePenalty: isValidManualScore(
+                  parsed.continuousEvaluationSettings?.disciplinePenalty ?? Number.NaN,
+                ) && parsed.continuousEvaluationSettings!.disciplinePenalty > 0
+                  ? parsed.continuousEvaluationSettings!.disciplinePenalty
+                  : DEFAULT_DISCIPLINE_PENALTY,
+              },
+              pupils,
               assessments,
+              levelTests: migratedLevelTests.levelTests,
               objectives,
               evaluations: parsed.evaluations ?? {},
               absentPupilIds: parsed.absentPupilIds ?? {},
@@ -609,11 +823,6 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     level: string;
     levelId?: string;
     academicYear?: string;
-    competencyIds?: string[];
-    competencySelections?: Array<{
-      competencyId: string;
-      objectives?: string[];
-    }>;
   }) => {
     const newId = createConfigId('class');
     const academicYear = (input.academicYear ?? state.academicYear).trim();
@@ -643,100 +852,6 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       active: true,
     };
 
-    const requestedSelections: Array<{
-      competencyId: string;
-      objectives?: string[];
-    }> =
-      input.competencySelections ??
-      (input.competencyIds ?? []).map((competencyId) => ({ competencyId }));
-    const availableCompetencies = configuration.competencies.filter(
-      (competency) =>
-        configuration.associations.some(
-          (association) =>
-            association.levelId === level!.id &&
-            association.competencyId === competency.id,
-        ),
-    );
-    const selectionsForClass: Array<{
-      competencyId: string;
-      objectives?: string[];
-    }> = requestedSelections.length
-      ? requestedSelections
-      : availableCompetencies
-          .slice(0, 1)
-          .map((competency) => ({ competencyId: competency.id }));
-    const selectedCompetencies = selectionsForClass.flatMap((selection) => {
-      const competency = configuration.competencies.find(
-        (item) => item.id === selection.competencyId,
-      );
-      const linked = configuration.associations.some(
-        (association) =>
-          association.levelId === level!.id &&
-          association.competencyId === selection.competencyId,
-      );
-      return competency && linked
-        ? [{ competency, objectives: selection.objectives }]
-        : [];
-    });
-
-    const newAssessments: Assessment[] = [];
-    const newObjectivesMap: Record<string, Objective[]> = {};
-    const newEvaluationsMap: Record<
-      string,
-      Record<string, Record<string, EvaluationValue>>
-    > = {};
-    const newRemediationsMap: Record<
-      string,
-      { individual: string; classroom: string }
-    > = {};
-
-    selectedCompetencies.forEach(({ competency, objectives }) => {
-      const template = COMPETENCY_TEMPLATES.find(
-        (item) =>
-          item.id === competency.templateId ||
-          normalizeLabel(item.name) === normalizeLabel(competency.name),
-      );
-      const configuredDescriptions = getObjectivesForPair(
-        configuration,
-        level!.id,
-        competency.id,
-      ).map((item) => item.description);
-      const selectedDescriptions = (objectives ?? []).filter((item) =>
-        item.trim(),
-      );
-      const objectiveDescriptions = selectedDescriptions.length
-        ? selectedDescriptions
-        : configuredDescriptions.length
-          ? configuredDescriptions
-          : (template?.defaultObjectives ?? ['Objectif 1']);
-      const newAssessmentId = createConfigId('assessment');
-      newAssessments.push({
-        id: newAssessmentId,
-        classId: newId,
-        title: template?.defaultTitle ?? competency.name,
-        date: new Date().toLocaleDateString('fr-FR'),
-        subject: 'Français',
-        level: newClass.level,
-        competency: competency.name,
-        competencyId: competency.id,
-        support: template?.defaultSupport ?? '',
-        sessionObjectives: template?.defaultSessionObjectives ?? '',
-        status: 'Draft',
-      });
-      newObjectivesMap[newAssessmentId] = objectiveDescriptions.map(
-        (desc, idx) => ({
-          id: `obj-${newAssessmentId}-${idx + 1}`,
-          assessmentId: newAssessmentId,
-          order: idx + 1,
-          description: desc,
-        }),
-      );
-      newEvaluationsMap[newAssessmentId] = {};
-      newRemediationsMap[newAssessmentId] = { individual: '', classroom: '' };
-    });
-
-    const firstAssessmentId = newAssessments[0]?.id ?? '';
-
     setState((prev) => {
       const hasConfiguration = prev.schoolYearConfigurations.some(
         (item) => normalizeLabel(item.year) === normalizeLabel(academicYear),
@@ -752,20 +867,6 @@ export function AppDataProvider({ children }: PropsWithChildren) {
           : [...prev.schoolYearConfigurations, configuration],
         classes: [...prev.classes, newClass],
         activeClassId: newId,
-        assessments: [...prev.assessments, ...newAssessments],
-        activeAssessmentId: firstAssessmentId,
-        objectives: {
-          ...prev.objectives,
-          ...newObjectivesMap,
-        },
-        evaluations: {
-          ...prev.evaluations,
-          ...newEvaluationsMap,
-        },
-        remediations: {
-          ...prev.remediations,
-          ...newRemediationsMap,
-        },
       };
     });
     return newId;
@@ -958,6 +1059,21 @@ export function AppDataProvider({ children }: PropsWithChildren) {
           ? { ...item, academicYear: cleanName }
           : item,
       ),
+      levelTests: prev.levelTests.map((test) =>
+        normalizeLabel(test.schoolYearId) === normalizeLabel(configuration.year)
+          ? { ...test, schoolYearId: cleanName }
+          : test,
+      ),
+      continuousEvaluations: prev.continuousEvaluations.map((evaluation) =>
+        normalizeLabel(evaluation.schoolYearId) === normalizeLabel(configuration.year)
+          ? { ...evaluation, schoolYearId: cleanName }
+          : evaluation,
+      ),
+      disciplineEvents: prev.disciplineEvents.map((event) =>
+        normalizeLabel(event.schoolYearId) === normalizeLabel(configuration.year)
+          ? { ...event, schoolYearId: cleanName }
+          : event,
+      ),
       academicYear:
         normalizeLabel(prev.academicYear) === normalizeLabel(configuration.year)
           ? cleanName
@@ -1020,6 +1136,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         schoolYearConfigurations,
         academicYear: defaultYear,
         classes,
+        levelTests: prev.levelTests.filter((test) => !classIds.has(test.classId)),
         activeClassId,
         pupils: prev.pupils.filter((item) => !classIds.has(item.classId)),
         assessments,
@@ -1038,6 +1155,12 @@ export function AppDataProvider({ children }: PropsWithChildren) {
           Object.entries(prev.remediations).filter(
             ([assessmentId]) => !deletedAssessmentIds.has(assessmentId),
           ),
+        ),
+        continuousEvaluations: prev.continuousEvaluations.filter(
+          (evaluation) => !classIds.has(evaluation.classId),
+        ),
+        disciplineEvents: prev.disciplineEvents.filter(
+          (event) => !classIds.has(event.classId),
         ),
       };
     });
@@ -1355,6 +1478,27 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       throw new Error('Cette sauvegarde ne correspond pas à une sauvegarde Évaluation Élève.');
     }
     const restoredClasses = candidate.classes;
+    const restoredPupils = candidate.pupils;
+    const migratedLevelTests = migrateLevelTests(
+      restoredClasses,
+      candidate.assessments.map((assessment) => ({ ...assessment })),
+      candidate.levelTests,
+    );
+    const continuousEvaluations = Array.isArray(candidate.continuousEvaluations)
+      ? candidate.continuousEvaluations
+          .filter(isContinuousEvaluationRecord)
+          .filter((evaluation) =>
+            restoredClasses.some((classItem) =>
+              classItem.id === evaluation.classId &&
+              classItem.academicYear === evaluation.schoolYearId &&
+              restoredPupils.some((pupil) =>
+                pupil.id === evaluation.pupilId &&
+                pupil.classId === evaluation.classId,
+              ),
+            ),
+          )
+      : [];
+    const evaluationIds = new Set(continuousEvaluations.map((item) => item.id));
     const restored: AppState = {
       ...createEmptyState(),
       ...candidate,
@@ -1365,8 +1509,9 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         ? candidate.schoolYearConfigurations
         : createEmptyState().schoolYearConfigurations,
       classes: candidate.classes,
-      pupils: candidate.pupils,
-      assessments: candidate.assessments,
+      pupils: restoredPupils,
+      assessments: migratedLevelTests.assessments,
+      levelTests: migratedLevelTests.levelTests,
       objectives: candidate.objectives ?? {},
       evaluations: candidate.evaluations ?? {},
       absentPupilIds: candidate.absentPupilIds ?? {},
@@ -1379,6 +1524,32 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       attendanceRecords: Array.isArray(candidate.attendanceRecords)
         ? candidate.attendanceRecords.filter(isAttendanceRecord).filter((record) => restoredClasses.some((classItem) => classItem.id === record.classId))
         : [],
+      continuousEvaluations,
+      disciplineEvents: Array.isArray(candidate.disciplineEvents)
+        ? candidate.disciplineEvents
+            .filter(isDisciplineEvent)
+            .filter((event) => {
+              const evaluation = continuousEvaluations.find(
+                (item) => item.id === event.evaluationId,
+              );
+              return evaluationIds.has(event.evaluationId) &&
+                evaluation?.pupilId === event.studentId &&
+                evaluation.classId === event.classId &&
+                evaluation.schoolYearId === event.schoolYearId;
+            })
+        : [],
+      continuousEvaluationSettings: {
+        absencePenaltyPerAbsence: isValidManualScore(
+          candidate.continuousEvaluationSettings?.absencePenaltyPerAbsence ?? Number.NaN,
+        )
+          ? candidate.continuousEvaluationSettings!.absencePenaltyPerAbsence
+          : DEFAULT_ABSENCE_SCORING_CONFIGURATION.penaltyPerAbsence,
+        disciplinePenalty: isValidManualScore(
+          candidate.continuousEvaluationSettings?.disciplinePenalty ?? Number.NaN,
+        ) && candidate.continuousEvaluationSettings!.disciplinePenalty > 0
+          ? candidate.continuousEvaluationSettings!.disciplinePenalty
+          : DEFAULT_DISCIPLINE_PENALTY,
+      },
     };
     setState(restored);
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(restored));
@@ -1445,6 +1616,9 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         remediations: nextRemediations,
         absentPupilIds: nextAbsences,
         attendanceRecords: prev.attendanceRecords.filter((record) => record.classId !== classId),
+        continuousEvaluations: prev.continuousEvaluations.filter((evaluation) => evaluation.classId !== classId),
+        disciplineEvents: prev.disciplineEvents.filter((event) => event.classId !== classId),
+        levelTests: prev.levelTests.filter((test) => test.classId !== classId),
       };
     });
   };
@@ -1500,6 +1674,183 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         ),
         { ...record, id },
       ],
+    }));
+    return true;
+  };
+
+  const getContinuousEvaluation = (
+    pupilId: string,
+    classId: string,
+    schoolYearId: string,
+    evaluationPeriodId?: string,
+  ) => state.continuousEvaluations.find((evaluation) =>
+    evaluation.pupilId === pupilId &&
+    evaluation.classId === classId &&
+    evaluation.schoolYearId === schoolYearId &&
+    (evaluation.evaluationPeriodId ?? '') === (evaluationPeriodId ?? ''),
+  );
+
+  const setContinuousEvaluationScore = (
+    pupilId: string,
+    classId: string,
+    schoolYearId: string,
+    field: 'cahierScore' | 'participationScore',
+    score: number,
+    evaluationPeriodId?: string,
+  ) => {
+    const classItem = state.classes.find((item) => item.id === classId);
+    if (
+      !isValidManualScore(score) ||
+      !classItem ||
+      classItem.academicYear !== schoolYearId ||
+      !state.pupils.some((pupil) => pupil.id === pupilId && pupil.classId === classId)
+    ) {
+      return false;
+    }
+    const now = new Date().toISOString();
+    const newId = createConfigId('continuous-evaluation');
+    setState((prev) => {
+      const existing = prev.continuousEvaluations.find((evaluation) =>
+        evaluation.pupilId === pupilId &&
+        evaluation.classId === classId &&
+        evaluation.schoolYearId === schoolYearId &&
+        (evaluation.evaluationPeriodId ?? '') === (evaluationPeriodId ?? ''),
+      );
+      const updated: ContinuousEvaluationRecord = existing
+        ? { ...existing, [field]: normalizeScore(score), updatedAt: now }
+        : {
+            id: newId,
+            pupilId,
+            classId,
+            schoolYearId,
+            evaluationPeriodId,
+            cahierScore: field === 'cahierScore' ? normalizeScore(score) : undefined,
+            participationScore: field === 'participationScore' ? normalizeScore(score) : undefined,
+            createdAt: now,
+            updatedAt: now,
+          };
+      return {
+        ...prev,
+        continuousEvaluations: existing
+          ? prev.continuousEvaluations.map((evaluation) =>
+              evaluation.id === existing.id ? updated : evaluation,
+            )
+          : [...prev.continuousEvaluations, updated],
+      };
+    });
+    return true;
+  };
+
+  const getDisciplineEventsForEvaluation = (evaluationId: string) =>
+    state.disciplineEvents
+      .filter((event) => event.evaluationId === evaluationId)
+      .sort((left, right) => right.date.localeCompare(left.date));
+
+  const addDisciplinePenalty = (
+    pupilId: string,
+    classId: string,
+    schoolYearId: string,
+    comment?: string,
+    evaluationPeriodId?: string,
+  ) => {
+    const classItem = state.classes.find((item) => item.id === classId);
+    const pupilExists = state.pupils.some(
+      (pupil) => pupil.id === pupilId && pupil.classId === classId,
+    );
+    const penalty = state.continuousEvaluationSettings.disciplinePenalty;
+    if (
+      !classItem ||
+      classItem.academicYear !== schoolYearId ||
+      !pupilExists ||
+      !Number.isFinite(penalty) ||
+      penalty <= 0 ||
+      penalty > 5
+    ) {
+      return undefined;
+    }
+    const eventDate = new Date();
+    const now = eventDate.toISOString();
+    const evaluationId = getContinuousEvaluation(
+      pupilId,
+      classId,
+      schoolYearId,
+      evaluationPeriodId,
+    )?.id ?? createConfigId('continuous-evaluation');
+    const event: DisciplineEvent = {
+      id: createConfigId('discipline-event'),
+      studentId: pupilId,
+      classId,
+      schoolYearId,
+      evaluationId,
+      date: `${eventDate.getFullYear()}-${String(eventDate.getMonth() + 1).padStart(2, '0')}-${String(eventDate.getDate()).padStart(2, '0')}`,
+      type: 'MINUS',
+      penalty: normalizeScore(penalty),
+      comment: comment?.trim() || undefined,
+      createdAt: now,
+    };
+    setState((prev) => {
+      const existing = prev.continuousEvaluations.find((evaluation) =>
+        evaluation.pupilId === pupilId &&
+        evaluation.classId === classId &&
+        evaluation.schoolYearId === schoolYearId &&
+        (evaluation.evaluationPeriodId ?? '') === (evaluationPeriodId ?? ''),
+      );
+      const evaluation: ContinuousEvaluationRecord = existing ?? {
+        id: evaluationId,
+        pupilId,
+        classId,
+        schoolYearId,
+        evaluationPeriodId,
+        cahierScore: undefined,
+        participationScore: undefined,
+        createdAt: now,
+        updatedAt: now,
+      };
+      return {
+        ...prev,
+        continuousEvaluations: existing
+          ? prev.continuousEvaluations.map((item) =>
+              item.id === existing.id ? { ...item, updatedAt: now } : item,
+            )
+          : [...prev.continuousEvaluations, evaluation],
+        disciplineEvents: [
+          ...prev.disciplineEvents,
+          { ...event, evaluationId: evaluation.id },
+        ],
+      };
+    });
+    return event.id;
+  };
+
+  const deleteDisciplineEvent = (eventId: string) => {
+    if (!state.disciplineEvents.some((event) => event.id === eventId)) return false;
+    setState((prev) => ({
+      ...prev,
+      disciplineEvents: prev.disciplineEvents.filter((event) => event.id !== eventId),
+    }));
+    return true;
+  };
+
+  const updateContinuousEvaluationSettings = (
+    settings: Partial<ContinuousEvaluationSettings>,
+  ) => {
+    const next = {
+      ...state.continuousEvaluationSettings,
+      ...settings,
+    };
+    if (
+      !Number.isFinite(next.absencePenaltyPerAbsence) ||
+      next.absencePenaltyPerAbsence < 0 ||
+      next.absencePenaltyPerAbsence > 5 ||
+      !Number.isFinite(next.disciplinePenalty) ||
+      next.disciplinePenalty <= 0 ||
+      next.disciplinePenalty > 5
+    ) {
+      return false;
+    }
+    setState((prev) => ({
+      ...prev,
+      continuousEvaluationSettings: next,
     }));
     return true;
   };
@@ -1567,6 +1918,12 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     setState((prev) => ({
       ...prev,
       pupils: prev.pupils.filter((p) => p.id !== pupilId),
+      continuousEvaluations: prev.continuousEvaluations.filter(
+        (evaluation) => evaluation.pupilId !== pupilId,
+      ),
+      disciplineEvents: prev.disciplineEvents.filter(
+        (event) => event.studentId !== pupilId,
+      ),
     }));
   };
 
@@ -1604,6 +1961,13 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     return state.assessments.filter((a) => a.classId === classId);
   };
 
+  const getLevelTestForClassYear = (classId: string, schoolYearId: string) =>
+    state.levelTests.find(
+      (test) =>
+        test.classId === classId &&
+        test.schoolYearId === schoolYearId,
+    );
+
   const createAssessment = (input: {
     classId: string;
     competency: string;
@@ -1617,7 +1981,8 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     objectives?: string[];
   }) => {
     const targetClass =
-      state.classes.find((c) => c.id === input.classId) ?? activeClass;
+      state.classes.find((c) => c.id === input.classId);
+    if (!targetClass) return undefined;
     const configuration = getSchoolYearConfiguration(targetClass.academicYear);
     const levelId = getLevelIdForYear(
       targetClass.academicYear,
@@ -1642,10 +2007,16 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     if (duplicateExists) return undefined;
 
     const newAssessmentId = createConfigId('assessment');
+    const existingLevelTest = getLevelTestForClassYear(
+      targetClass.id,
+      targetClass.academicYear,
+    );
+    const levelTestId = existingLevelTest?.id ?? createConfigId('level-test');
 
     const newAssessment: Assessment = {
       id: newAssessmentId,
       classId: input.classId,
+      levelTestId,
       title: input.title.trim(),
       date: input.date ?? new Date().toLocaleDateString('fr-FR'),
       subject: input.subject ?? 'Français',
@@ -1685,6 +2056,17 @@ export function AppDataProvider({ children }: PropsWithChildren) {
 
     setState((prev) => ({
       ...prev,
+      levelTests: existingLevelTest
+        ? prev.levelTests
+        : [
+            ...prev.levelTests,
+            {
+              id: levelTestId,
+              classId: targetClass.id,
+              schoolYearId: targetClass.academicYear,
+              createdAt: new Date().toISOString(),
+            },
+          ],
       assessments: [...prev.assessments, newAssessment],
       activeAssessmentId: newAssessmentId,
       objectives: {
@@ -2081,11 +2463,18 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       getAttendanceRecord,
       getAttendanceRecordsForClass,
       saveAttendanceRecord,
+      getContinuousEvaluation,
+      setContinuousEvaluationScore,
+      getDisciplineEventsForEvaluation,
+      addDisciplinePenalty,
+      deleteDisciplineEvent,
+      updateContinuousEvaluationSettings,
       createAssessment,
       setActiveAssessment,
       deleteAssessment,
       getAssessment,
       getAssessmentsForClass,
+      getLevelTestForClassYear,
       addObjective,
       removeObjective,
       updateObjective,

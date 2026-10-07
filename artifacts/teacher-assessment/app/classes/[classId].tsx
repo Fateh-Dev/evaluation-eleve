@@ -1,7 +1,7 @@
 import { Alert } from '@/components/AppDialog';
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -16,12 +16,28 @@ import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollV
 import { useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
 import { useListSelection } from '@/hooks/useListSelection';
-import { exportClassAttendancePdf } from '@/services/exportService';
+import {
+  downloadFile,
+  exportClassAttendancePdf,
+  exportContinuousEvaluationPdf,
+  generateContinuousEvaluationWorkbook,
+} from '@/services/exportService';
+import {
+  calculateAbsenceScore,
+  calculateContinuousTotal,
+  calculateDisciplineScore,
+  isValidManualScore,
+} from '@/services/continuousEvaluation';
 
 export default function ClassDetailScreen() {
   const colors = useColors();
   const data = useAppData();
-  const params = useLocalSearchParams<{ classId: string; sessionId?: string; attendanceDate?: string }>();
+  const params = useLocalSearchParams<{
+    classId: string;
+    sessionId?: string;
+    attendanceDate?: string;
+    evaluationFilter?: 'all' | 'incomplete' | 'complete';
+  }>();
 
   const currentClassId = params.classId || data.activeClassId;
   const currentClass = useMemo(() => {
@@ -32,9 +48,6 @@ export default function ClassDetailScreen() {
     return data.getPupilsForClass(currentClass.id);
   }, [data.pupils, currentClass.id]);
 
-  const classAssessments = useMemo(() => {
-    return data.getAssessmentsForClass(currentClass.id);
-  }, [data.assessments, currentClass.id]);
   const attendanceRecords = useMemo(
     () => data.getAttendanceRecordsForClass(currentClass.id),
     [data.attendanceRecords, currentClass.id],
@@ -52,6 +65,55 @@ export default function ClassDetailScreen() {
       return [pupil.id, stats] as const;
     })),
     [attendanceRecords, classPupils],
+  );
+  const continuousEvaluationRows = useMemo(
+    () => classPupils.map((pupil) => {
+      const evaluation = data.getContinuousEvaluation(
+        pupil.id,
+        currentClass.id,
+        currentClass.academicYear,
+      );
+      const events = evaluation
+        ? data.getDisciplineEventsForEvaluation(evaluation.id)
+        : [];
+      const attendance = pupilAttendanceStats.get(pupil.id) ?? { present: 0, total: 0 };
+      const absenceScore = calculateAbsenceScore({
+        totalSessions: attendance.total,
+        presentCount: attendance.present,
+        absentCount: attendance.total - attendance.present,
+      }, {
+        maximumScore: 5,
+        penaltyPerAbsence: data.continuousEvaluationSettings.absencePenaltyPerAbsence,
+      });
+      const disciplineScore = calculateDisciplineScore(
+        events.map((event) => event.penalty),
+      );
+      return {
+        pupil,
+        cahierScore: evaluation?.cahierScore,
+        participationScore: evaluation?.participationScore,
+        absenceScore,
+        disciplineScore,
+        presentSessions: attendance.present,
+        absentSessions: attendance.total - attendance.present,
+        attendanceSessions: attendance.total,
+        totalScore: calculateContinuousTotal({
+          cahierScore: evaluation?.cahierScore ?? 0,
+          participationScore: evaluation?.participationScore ?? 0,
+          absenceScore,
+          disciplineScore,
+        }),
+      };
+    }),
+    [
+      classPupils,
+      currentClass.id,
+      currentClass.academicYear,
+      pupilAttendanceStats,
+      data.continuousEvaluations,
+      data.disciplineEvents,
+      data.continuousEvaluationSettings,
+    ],
   );
   const attendanceCounts = [...pupilAttendanceStats.values()].reduce(
     (counts, pupilStats) => ({
@@ -107,11 +169,30 @@ export default function ClassDetailScreen() {
     }
   };
 
-  const [activeTab, setActiveTab] = useState<'competencies' | 'pupils'>('competencies');
-  const assessmentSelection = useListSelection();
+  const [activeTab, setActiveTab] = useState<'pupils' | 'continuous'>('continuous');
+  const [scoreDrafts, setScoreDrafts] = useState<Record<string, string>>({});
+  const [studentSearch, setStudentSearch] = useState('');
+  const [evaluationFilter, setEvaluationFilter] = useState<'all' | 'incomplete' | 'complete'>(
+    params.evaluationFilter === 'incomplete' ? 'incomplete' : 'all',
+  );
+  const [evaluationToolsExpanded, setEvaluationToolsExpanded] = useState(false);
+  const [feedback, setFeedback] = useState<{ message: string; eventId?: string } | null>(null);
+  const feedbackTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const participationInputRefs = useRef<Record<string, TextInput | null>>({});
+  useEffect(() => {
+    setActiveTab('continuous');
+    setScoreDrafts({});
+    setEvaluationFilter(
+      params.evaluationFilter === 'incomplete' ? 'incomplete' : 'all',
+    );
+  }, [currentClass.id, params.evaluationFilter]);
+  useEffect(() => () => {
+    if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
+  }, []);
   const pupilSelection = useListSelection();
   const [classDeleteArmed, setClassDeleteArmed] = useState(false);
   const [isExportingAttendance, setIsExportingAttendance] = useState(false);
+  const [exportingContinuousFormat, setExportingContinuousFormat] = useState<'pdf' | 'excel' | null>(null);
 
   const [classNameModalVisible, setClassNameModalVisible] = useState(false);
   const [classNameInput, setClassNameInput] = useState('');
@@ -121,6 +202,150 @@ export default function ClassDetailScreen() {
   const [newPupilFirstName, setNewPupilFirstName] = useState('');
   const [newPupilRegNo, setNewPupilRegNo] = useState('');
   const [newPupilDob, setNewPupilDob] = useState('');
+
+  const exportContinuousEvaluation = async (format: 'pdf' | 'excel') => {
+    setExportingContinuousFormat(format);
+    try {
+      const exportData = {
+        schoolName: data.school.name,
+        teacherName: data.teacherName,
+        className: currentClass.name,
+        level: currentClass.level,
+        academicYear: currentClass.academicYear,
+        pupils: continuousEvaluationRows.map((row) => ({
+          registrationNumber: row.pupil.registrationNumber,
+          firstName: row.pupil.firstName,
+          lastName: row.pupil.lastName,
+          cahierScore: row.cahierScore,
+          participationScore: row.participationScore,
+          absenceScore: row.absenceScore,
+          disciplineScore: row.disciplineScore,
+          totalScore: row.totalScore,
+          evaluationComplete:
+            row.cahierScore !== undefined && row.participationScore !== undefined,
+          presentSessions: row.presentSessions,
+          absentSessions: row.absentSessions,
+          attendanceSessions: row.attendanceSessions,
+        })),
+      };
+      const safeClassName = currentClass.name.replace(/[^\p{L}\p{N}-]+/gu, '_');
+      const safeAcademicYear = currentClass.academicYear.replace(/[^\p{L}\p{N}-]+/gu, '_');
+      if (format === 'pdf') {
+        await exportContinuousEvaluationPdf(exportData);
+      } else {
+        const workbook = await generateContinuousEvaluationWorkbook(exportData);
+        await downloadFile(
+          workbook,
+          `Evaluation_continue_${safeClassName}_${safeAcademicYear}.xlsx`,
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        );
+      }
+    } catch (error) {
+      console.error(`Erreur export évaluation continue (${format}):`, error);
+      Alert.alert(
+        'Export impossible',
+        error instanceof Error
+          ? error.message
+          : `Impossible de générer le fichier ${format === 'pdf' ? 'PDF' : 'Excel'}.`,
+      );
+    } finally {
+      setExportingContinuousFormat(null);
+    }
+  };
+
+  const saveContinuousScore = (
+    pupilId: string,
+    field: 'cahierScore' | 'participationScore',
+    value: string,
+  ) => {
+    const key = `${pupilId}:${field}`;
+    const score = Number(value.replace(',', '.'));
+    if (!value.trim()) {
+      setScoreDrafts((previous) => {
+        const next = { ...previous };
+        delete next[key];
+        return next;
+      });
+      return;
+    }
+    if (!isValidManualScore(score)) {
+      Alert.alert('Note invalide', 'La note doit être comprise entre 0 et 5.');
+      setScoreDrafts((previous) => {
+        const next = { ...previous };
+        delete next[key];
+        return next;
+      });
+      return;
+    }
+    if (!data.setContinuousEvaluationScore(
+      pupilId,
+      currentClass.id,
+      currentClass.academicYear,
+      field,
+      score,
+    )) {
+      Alert.alert('Enregistrement impossible', 'La note n’a pas pu être sauvegardée.');
+      setScoreDrafts((previous) => {
+        const next = { ...previous };
+        delete next[key];
+        return next;
+      });
+      return;
+    }
+    setFeedback({ message: 'Note enregistrée.' });
+    if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
+    feedbackTimer.current = setTimeout(() => setFeedback(null), 3000);
+    setScoreDrafts((previous) => {
+      const next = { ...previous };
+      delete next[key];
+      return next;
+    });
+  };
+
+  const addQuickDisciplinePenalty = (pupilId: string) => {
+    const eventId = data.addDisciplinePenalty(
+      pupilId,
+      currentClass.id,
+      currentClass.academicYear,
+    );
+    if (!eventId) {
+      Alert.alert('Enregistrement impossible', 'La pénalité disciplinaire n’a pas pu être enregistrée.');
+      return;
+    }
+    setFeedback({ message: 'Pénalité ajoutée.', eventId });
+    if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
+    feedbackTimer.current = setTimeout(() => setFeedback(null), 5000);
+  };
+
+  const undoQuickDisciplinePenalty = () => {
+    if (!feedback?.eventId) return;
+    if (!data.deleteDisciplineEvent(feedback.eventId)) {
+      Alert.alert('Annulation impossible', 'La pénalité n’a pas pu être annulée.');
+      return;
+    }
+    setFeedback({ message: 'Pénalité annulée.' });
+    if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
+    feedbackTimer.current = setTimeout(() => setFeedback(null), 2500);
+  };
+
+  const completedEvaluationCount = continuousEvaluationRows.filter(
+    (row) => row.cahierScore !== undefined && row.participationScore !== undefined,
+  ).length;
+  const normalizedStudentSearch = studentSearch.trim().toLocaleLowerCase();
+  const visibleEvaluationRows = continuousEvaluationRows.filter((row) => {
+    const isComplete =
+      row.cahierScore !== undefined && row.participationScore !== undefined;
+    const matchesStatus =
+      evaluationFilter === 'all' ||
+      (evaluationFilter === 'complete' && isComplete) ||
+      (evaluationFilter === 'incomplete' && !isComplete);
+    const matchesSearch =
+      !normalizedStudentSearch ||
+      `${row.pupil.firstName} ${row.pupil.lastName} ${row.pupil.registrationNumber}`
+        .toLocaleLowerCase()
+        .includes(normalizedStudentSearch);
+    return matchesStatus && matchesSearch;
+  });
 
   const openAddPupilModal = () => {
     const nextNum = String(classPupils.length + 1).padStart(2, '0');
@@ -200,15 +425,6 @@ export default function ClassDetailScreen() {
     );
   };
 
-  const deleteSelectedAssessments = () => {
-    const selected = classAssessments.filter((item) => assessmentSelection.selectedIds.includes(item.id));
-    if (selected.length === 0) return;
-    Alert.alert('Supprimer les compétences sélectionnées ?', `Supprimer ${selected.length} compétence${selected.length > 1 ? 's' : ''} de cette classe ?`, [
-      { text: 'Annuler', style: 'cancel' },
-      { text: 'Supprimer', style: 'destructive', onPress: () => { selected.forEach((item) => data.deleteAssessment(item.id)); assessmentSelection.cancelSelection(); } },
-    ]);
-  };
-
   if (!currentClass || !currentClass.id) {
     return (
       <Screen>
@@ -247,8 +463,8 @@ export default function ClassDetailScreen() {
           <Text style={[styles.infoValue, { color: colors.foreground }]}>{classPupils.length}</Text>
         </View>
         <View style={styles.infoCol}>
-          <Text style={[styles.infoLabel, { color: colors.mutedForeground }]}>COMPÉTENCES</Text>
-          <Text style={[styles.infoValue, { color: colors.primary }]}>{classAssessments.length}</Text>
+          <Text style={[styles.infoLabel, { color: colors.mutedForeground }]}>ANNÉE</Text>
+          <Text style={[styles.infoValue, { color: colors.primary }]}>{currentClass.academicYear}</Text>
         </View>
         <Pressable
           accessibilityRole="button"
@@ -259,6 +475,7 @@ export default function ClassDetailScreen() {
           <Feather name="edit-2" size={16} color={colors.primary} />
         </Pressable>
       </Surface>
+      {activeTab !== 'continuous' && (
       <Surface style={[styles.attendanceSummary, { borderColor: colors.border }]}>
         <View style={styles.attendanceSummaryCopy}>
           <Text style={[styles.attendanceSummaryTitle, { color: colors.foreground }]}>Présence de la classe</Text>
@@ -280,34 +497,34 @@ export default function ClassDetailScreen() {
           />
         </View>
       </Surface>
+      )}
 
-      {/* Tabs Switcher: Compétences vs Élèves */}
+      {/* Continuous evaluation is the default class workflow. */}
       <View style={styles.tabBar}>
         <Pressable
-          onPress={() => setActiveTab('competencies')}
+          onPress={() => setActiveTab('continuous')}
           style={[
             styles.tabItem,
             {
-              backgroundColor: activeTab === 'competencies' ? colors.primary : colors.card,
-              borderColor: activeTab === 'competencies' ? colors.primary : colors.border,
+              backgroundColor: activeTab === 'continuous' ? colors.primary : colors.card,
+              borderColor: activeTab === 'continuous' ? colors.primary : colors.border,
             },
           ]}
         >
           <Feather
-            name="award"
+            name="clipboard"
             size={16}
-            color={activeTab === 'competencies' ? colors.primaryForeground : colors.foreground}
+            color={activeTab === 'continuous' ? colors.primaryForeground : colors.foreground}
           />
           <Text
             style={[
               styles.tabText,
-              { color: activeTab === 'competencies' ? colors.primaryForeground : colors.foreground },
+              { color: activeTab === 'continuous' ? colors.primaryForeground : colors.foreground },
             ]}
           >
-            Compétences ({classAssessments.length})
+            Évaluation continue
           </Text>
         </Pressable>
-
         <Pressable
           onPress={() => setActiveTab('pupils')}
           style={[
@@ -329,154 +546,240 @@ export default function ClassDetailScreen() {
               { color: activeTab === 'pupils' ? colors.primaryForeground : colors.foreground },
             ]}
           >
-            Élèves ({classPupils.length})
+            Élèves
           </Text>
         </Pressable>
       </View>
 
-      {/* TAB 1: COMPETENCIES / ASSESSMENTS */}
-      {activeTab === 'competencies' && (
+      {activeTab === 'continuous' && (
         <View style={styles.tabContent}>
           <SectionTitle
-            title="Compétences de la classe"
-            action="+ Ajouter"
+            title={`Évaluation continue · ${currentClass.academicYear}`}
+            action="+ Ajouter un élève"
             compact
-            onAction={() => router.push(`/assessments/new?classId=${currentClass.id}`)}
+            onAction={openAddPupilModal}
           />
-          <ListSelectionToolbar
-            style={{ marginBottom: 0 }}
-            active={assessmentSelection.isSelecting}
-            selectedCount={assessmentSelection.selectedIds.length}
-            onStart={() => assessmentSelection.startSelecting()}
-            onCancel={assessmentSelection.cancelSelection}
-            onDelete={deleteSelectedAssessments}
-          />
-
-          {classAssessments.length === 0 ? (
-            <Surface style={styles.emptyCard}>
-              <Feather name="award" size={28} color={colors.mutedForeground} />
-              <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
-                Aucune compétence pour cette classe
-              </Text>
-              <Text style={[styles.emptySubtitle, { color: colors.mutedForeground }]}>
-                Ajoutez une première compétence pour commencer l’évaluation des élèves de {currentClass.name}.
-              </Text>
-              <Button
-                label="Ajouter une compétence"
-                icon="plus"
-                onPress={() => router.push(`/assessments/new?classId=${currentClass.id}`)}
+          <Text style={[styles.progressSummary, { color: colors.mutedForeground }]}>
+            {completedEvaluationCount}/{classPupils.length} complets · notes sur 5 sauvegardées automatiquement
+          </Text>
+          <Text style={[styles.evaluationHint, { color: colors.mutedForeground }]}>
+            Validez une note puis passez directement au champ suivant. Touchez le nom pour l’historique.
+          </Text>
+          <Surface style={styles.toolsCard}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={evaluationToolsExpanded ? 'Réduire les outils de la classe' : 'Afficher les outils de la classe'}
+              accessibilityState={{ expanded: evaluationToolsExpanded }}
+              onPress={() => setEvaluationToolsExpanded((expanded) => !expanded)}
+              style={styles.toolsHeader}
+            >
+              <View style={[styles.toolsIcon, { backgroundColor: colors.accent }]}>
+                <Feather name="sliders" size={16} color={colors.primary} />
+              </View>
+              <View style={styles.toolsHeaderCopy}>
+                <Text style={[styles.toolsTitle, { color: colors.foreground }]}>Outils de la classe</Text>
+                {!evaluationToolsExpanded ? (
+                  <Text style={[styles.toolsSubtitle, { color: colors.mutedForeground }]} numberOfLines={1}>
+                    {evaluationFilter === 'incomplete'
+                      ? 'Filtre : à compléter · appel · exports · recherche'
+                      : evaluationFilter === 'complete'
+                        ? 'Filtre : terminés · appel · exports · recherche'
+                        : 'Appel · exports PDF/Excel · recherche et filtres'}
+                  </Text>
+                ) : null}
+              </View>
+              <Feather
+                name={evaluationToolsExpanded ? 'chevron-up' : 'chevron-down'}
+                size={18}
+                color={colors.mutedForeground}
               />
-            </Surface>
-          ) : (
-            <View style={styles.assessmentList}>
-              {classAssessments.map((item) => {
-                const objList = data.getObjectivesForAssessment(item.id);
-                const stats = data.getStatisticsForAssessment(item.id);
-                const evaluatedTotal = stats.reduce((sum, s) => sum + s.evaluated, 0);
-                const totalPossible = Math.max(classPupils.length * objList.length, 1);
-                const progressPercent = Math.round((evaluatedTotal / totalPossible) * 100);
-
-                return (
-                  <Pressable
-                    key={item.id}
-                    disabled={!assessmentSelection.isSelecting}
-                    onTouchStart={(event) => {
-                      if (assessmentSelection.isSelecting) event.stopPropagation();
-                    }}
-                    onPress={() => {
-                      if (assessmentSelection.isSelecting) assessmentSelection.toggleSelection(item.id);
-                    }}
-                  >
-                  <Surface
-                    style={[
-                      styles.assessmentCard,
-                      assessmentSelection.selectedIds.includes(item.id) && {
-                        backgroundColor: colors.card,
-                        borderColor: colors.destructive,
-                        borderWidth: 2,
-                      },
-                    ]}
-                  >
-                    <View style={{ gap: 10 }}>
-                    <View style={styles.assessmentCardHeader}>
-                      <View style={styles.headerLeft}>
-                        <View style={[styles.competencyBadge, { backgroundColor: colors.accent }]}>
-                          <Text style={[styles.competencyBadgeText, { color: colors.accentForeground }]}>
-                            {item.competency}
-                          </Text>
-                        </View>
-                        <Text style={[styles.assessmentTitle, { color: colors.foreground }]}>{item.title}</Text>
-                      </View>
-                      <Text style={[styles.progressNumber, { color: colors.primary }]}>
-                        {progressPercent}%
+            </Pressable>
+            {evaluationToolsExpanded ? (
+              <View style={[styles.toolsContent, { borderTopColor: colors.border }]}>
+                <View style={styles.continuousExportActions}>
+                  <Button
+                    label={exportingContinuousFormat === 'pdf' ? 'Préparation PDF…' : 'PDF'}
+                    icon="file-text"
+                    secondary
+                    compact
+                    disabled={exportingContinuousFormat !== null}
+                    onPress={() => { void exportContinuousEvaluation('pdf'); }}
+                  />
+                  <Button
+                    label={exportingContinuousFormat === 'excel' ? 'Préparation Excel…' : 'Excel'}
+                    icon="download"
+                    secondary
+                    compact
+                    disabled={exportingContinuousFormat !== null}
+                    onPress={() => { void exportContinuousEvaluation('excel'); }}
+                  />
+                  <Button label="Faire l’appel" icon="check-square" secondary compact onPress={openAttendance} />
+                </View>
+                <View style={[styles.studentSearch, { borderColor: colors.border, backgroundColor: colors.background }]}>
+                  <Feather name="search" size={16} color={colors.mutedForeground} />
+                  <TextInput
+                    accessibilityLabel="Rechercher un élève"
+                    value={studentSearch}
+                    onChangeText={setStudentSearch}
+                    placeholder="Rechercher un élève"
+                    placeholderTextColor={colors.mutedForeground}
+                    style={[styles.studentSearchInput, { color: colors.foreground }]}
+                  />
+                  {studentSearch ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Effacer la recherche"
+                      onPress={() => setStudentSearch('')}
+                    >
+                      <Feather name="x" size={16} color={colors.mutedForeground} />
+                    </Pressable>
+                  ) : null}
+                </View>
+                <View style={styles.filterChips}>
+                  {([
+                    ['all', 'Tous'],
+                    ['incomplete', 'À compléter'],
+                    ['complete', 'Terminés'],
+                  ] as const).map(([filter, label]) => (
+                    <Pressable
+                      key={filter}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: evaluationFilter === filter }}
+                      onPress={() => setEvaluationFilter(filter)}
+                      style={[
+                        styles.filterChip,
+                        {
+                          backgroundColor: evaluationFilter === filter ? colors.primary : colors.card,
+                          borderColor: evaluationFilter === filter ? colors.primary : colors.border,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.filterChipText, {
+                        color: evaluationFilter === filter ? colors.primaryForeground : colors.foreground,
+                      }]}>
+                        {label}{filter === 'incomplete' ? ` (${classPupils.length - completedEvaluationCount})` : filter === 'complete' ? ` (${completedEvaluationCount})` : ''}
                       </Text>
-                    </View>
-
-                    <View style={styles.metaRow}>
-                      <Text style={[styles.metaText, { color: colors.mutedForeground }]}>
-                        {objList.length} objectifs
-                      </Text>
-                      <Text style={[styles.metaDot, { color: colors.mutedForeground }]}>•</Text>
-                      <Text style={[styles.metaText, { color: colors.mutedForeground }]}>
-                        {item.support || 'Support standard'}
-                      </Text>
-                      <Text style={[styles.metaDot, { color: colors.mutedForeground }]}>•</Text>
-                      <Text style={[styles.metaText, { color: colors.mutedForeground }]}>
-                        {item.date}
-                      </Text>
-                    </View>
-                    </View>
-
-                    <View style={styles.cardActions}>
-                      {assessmentSelection.isSelecting ? (
-                        <SelectionCheckbox checked={assessmentSelection.selectedIds.includes(item.id)} />
-                      ) : (
-                        <>
-                      <View style={styles.cardActionButton}>
-                        <Button
-                          label="Évaluer"
-                          icon="check-square"
-                          compact
-                          onPress={() => {
-                            data.setActiveAssessment(item.id);
-                            router.push(`/assessments/${item.id}`);
-                          }}
-                        />
-                      </View>
-                      <View style={styles.cardActionButton}>
-                        <Button
-                          label="Exporter"
-                          icon="file-text"
-                          compact
-                          secondary
-                          onPress={() => {
-                            data.setActiveAssessment(item.id);
-                            router.push(`/assessments/${item.id}/document`);
-                          }}
-                        />
-                      </View>
-                        </>
-                      )}
-                    </View>
-                  </Surface>
-                  </Pressable>
-                );
-              })}
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            ) : null}
+          </Surface>
+          {feedback ? (
+            <View style={[styles.feedbackBanner, { backgroundColor: colors.successSurface }]}>
+              <Text style={[styles.feedbackText, { color: colors.successForeground }]}>
+                {feedback.message}
+              </Text>
+              {feedback.eventId ? (
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={undoQuickDisciplinePenalty}
+                  style={[styles.undoButton, { backgroundColor: colors.card }]}
+                >
+                  <Text style={[styles.undoButtonText, { color: colors.foreground }]}>Annuler</Text>
+                </Pressable>
+              ) : null}
             </View>
-          )}
-
-          {classAssessments.length > 0 && (
-            <Button
-              label="Ajouter une compétence pour cette classe"
-              icon="plus"
-              secondary
-              onPress={() => router.push(`/assessments/new?classId=${currentClass.id}`)}
-            />
+          ) : null}
+          {visibleEvaluationRows.length ? visibleEvaluationRows.map((row) => (
+            <Surface
+              key={row.pupil.id}
+              style={[styles.evaluationPupilRow, { borderColor: colors.border }]}
+            >
+              <View style={styles.evaluationPupilHeading}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Ouvrir l'historique de ${row.pupil.firstName} ${row.pupil.lastName}`}
+                  onPress={() => router.push(`/pupils/${row.pupil.id}`)}
+                  style={styles.evaluationPupilIdentity}
+                >
+                  <Text style={[styles.evaluationPupilName, { color: colors.foreground }]}>
+                    {row.pupil.lastName} {row.pupil.firstName}
+                  </Text>
+                  <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+                </Pressable>
+                <View style={styles.evaluationTotalGroup}>
+                  <Text style={[styles.scoreFieldLabel, { color: colors.mutedForeground }]}>TOTAL</Text>
+                  <Text style={[styles.evaluationTotal, { color: colors.primary }]}>
+                    {row.cahierScore !== undefined && row.participationScore !== undefined
+                      ? `${row.totalScore}/20`
+                      : '—/20'}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.manualScoreRow}>
+                <View style={styles.manualScoreField}>
+                  <Text style={[styles.scoreFieldLabel, { color: colors.mutedForeground }]}>CAHIER /5</Text>
+                  <TextInput
+                    accessibilityLabel={`Note du cahier de ${row.pupil.firstName} sur 5`}
+                    value={scoreDrafts[`${row.pupil.id}:cahierScore`] ?? (row.cahierScore === undefined ? '' : String(row.cahierScore))}
+                    onTouchStart={(event) => event.stopPropagation()}
+                    onChangeText={(value) => setScoreDrafts((previous) => ({
+                      ...previous,
+                      [`${row.pupil.id}:cahierScore`]: value,
+                    }))}
+                    onEndEditing={(event) => saveContinuousScore(row.pupil.id, 'cahierScore', event.nativeEvent.text)}
+                    onSubmitEditing={() => participationInputRefs.current[row.pupil.id]?.focus()}
+                    keyboardType="decimal-pad"
+                    returnKeyType="next"
+                    blurOnSubmit={false}
+                    selectTextOnFocus
+                    style={[styles.inlineScoreInput, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]}
+                  />
+                </View>
+                <View style={styles.manualScoreField}>
+                  <Text style={[styles.scoreFieldLabel, { color: colors.mutedForeground }]}>PARTICIPATION /5</Text>
+                  <TextInput
+                    accessibilityLabel={`Note de participation de ${row.pupil.firstName} sur 5`}
+                    value={scoreDrafts[`${row.pupil.id}:participationScore`] ?? (row.participationScore === undefined ? '' : String(row.participationScore))}
+                    ref={(ref) => { participationInputRefs.current[row.pupil.id] = ref; }}
+                    onTouchStart={(event) => event.stopPropagation()}
+                    onChangeText={(value) => setScoreDrafts((previous) => ({
+                      ...previous,
+                      [`${row.pupil.id}:participationScore`]: value,
+                    }))}
+                    onEndEditing={(event) => saveContinuousScore(row.pupil.id, 'participationScore', event.nativeEvent.text)}
+                    keyboardType="decimal-pad"
+                    returnKeyType="done"
+                    selectTextOnFocus
+                    style={[styles.inlineScoreInput, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]}
+                  />
+                </View>
+              </View>
+              <View style={[styles.calculatedScoreRow, { borderTopColor: colors.border }]}>
+                <View style={styles.calculatedScoreGroup}>
+                  <Text style={[styles.scoreFieldLabel, { color: colors.mutedForeground }]}>ABSENCES</Text>
+                  <Text style={[styles.calculatedScoreValue, { color: colors.foreground }]}>{row.absenceScore}/5</Text>
+                </View>
+                <View style={styles.calculatedScoreGroup}>
+                  <Text style={[styles.scoreFieldLabel, { color: colors.mutedForeground }]}>DISCIPLINE</Text>
+                  <Text style={[styles.calculatedScoreValue, { color: colors.foreground }]}>{row.disciplineScore}/5</Text>
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Ajouter une pénalité de discipline à ${row.pupil.firstName} ${row.pupil.lastName}`}
+                  onPress={() => addQuickDisciplinePenalty(row.pupil.id)}
+                  style={[styles.quickPenaltyButton, { backgroundColor: colors.accent }]}
+                >
+                  <Text style={[styles.quickPenaltyText, { color: colors.primary }]}>
+                    − {data.continuousEvaluationSettings.disciplinePenalty}
+                  </Text>
+                </Pressable>
+              </View>
+            </Surface>
+          )) : (
+            <Surface style={styles.emptyCard}>
+              <Text style={[styles.emptySubtitle, { color: colors.mutedForeground }]}>
+                {continuousEvaluationRows.length === 0
+                  ? 'Aucun élève n’est encore inscrit dans cette classe.'
+                  : 'Aucun élève ne correspond à cette recherche ou à ce filtre.'}
+              </Text>
+            </Surface>
           )}
         </View>
       )}
 
-      {/* TAB 2: PUPILS */}
+      {/* Roster management remains separate from continuous evaluation. */}
       {activeTab === 'pupils' && (
         <View style={styles.tabContent}>
           <SectionTitle
@@ -779,7 +1082,7 @@ const styles = StyleSheet.create({
   },
   tabBar: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 6,
     marginBottom: 18,
   },
   tabItem: {
@@ -790,13 +1093,47 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 7,
-    paddingHorizontal: 12,
+    gap: 4,
+    paddingHorizontal: 4,
   },
   tabText: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
   },
+  evaluationPupilRow: { borderWidth: 1, borderRadius: 12, padding: 10, gap: 8 },
+  evaluationPupilHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  evaluationPupilIdentity: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  evaluationPupilName: { fontSize: 14, fontWeight: '700' },
+  evaluationTotal: { fontSize: 15, fontWeight: '800' },
+  evaluationTotalGroup: { alignItems: 'flex-end', gap: 2 },
+  evaluationHint: { fontSize: 12, lineHeight: 18, marginTop: -7 },
+  progressSummary: { fontSize: 11, lineHeight: 15, marginTop: -8 },
+  toolsCard: { padding: 9, gap: 8 },
+  toolsHeader: { minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: 9 },
+  toolsIcon: { width: 30, height: 30, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  toolsHeaderCopy: { flex: 1, gap: 2 },
+  toolsTitle: { fontSize: 12, fontWeight: '800' },
+  toolsSubtitle: { fontSize: 10.5, lineHeight: 14 },
+  toolsContent: { gap: 9, paddingTop: 7, borderTopWidth: StyleSheet.hairlineWidth },
+  continuousExportActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  studentSearch: { minHeight: 42, borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  studentSearchInput: { flex: 1, minHeight: 40, fontSize: 13 },
+  filterChips: { flexDirection: 'row', gap: 6 },
+  filterChip: { flex: 1, minHeight: 35, borderWidth: 1, borderRadius: 9, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },
+  filterChipText: { fontSize: 10, fontWeight: '700' },
+  feedbackBanner: { minHeight: 40, borderRadius: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingHorizontal: 11, paddingVertical: 5 },
+  feedbackText: { flex: 1, fontSize: 12, fontWeight: '700' },
+  undoButton: { minHeight: 30, borderRadius: 8, justifyContent: 'center', paddingHorizontal: 11 },
+  undoButtonText: { fontSize: 11, fontWeight: '800' },
+  manualScoreRow: { flexDirection: 'row', gap: 10 },
+  manualScoreField: { flex: 1, gap: 4 },
+  scoreFieldLabel: { fontSize: 9, fontWeight: '800', letterSpacing: 0.6 },
+  inlineScoreInput: { height: 38, borderWidth: 1, borderRadius: 9, paddingHorizontal: 9, fontSize: 14 },
+  calculatedScoreRow: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 8, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  calculatedScoreGroup: { flex: 1, gap: 3 },
+  calculatedScoreValue: { fontSize: 13, fontWeight: '700' },
+  quickPenaltyButton: { minHeight: 38, minWidth: 70, borderRadius: 9, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
+  quickPenaltyText: { fontSize: 12, fontWeight: '800' },
   tabContent: {
     gap: 12,
     paddingBottom: 30,

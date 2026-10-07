@@ -7,7 +7,7 @@ import { useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
 
 const MENU_ITEMS = [
-  { label: 'Test de niveau', detail: 'Créer et suivre les évaluations par compétence', icon: 'check-square' as const, route: '/assessments' as const },
+  { label: 'Test de niveau', detail: 'Évaluation ponctuelle au début de l’année, par compétence', icon: 'check-square' as const, route: '/assessments' as const },
   { label: 'Élèves', detail: 'Parcourir les élèves des classes', icon: 'user' as const, route: '/pupils-list' as const },
   { label: 'Emploi du temps', detail: 'Séances de la semaine et rappels', icon: 'calendar' as const, route: '/schedule' as const },
   { label: 'Stockage', detail: 'Documents pédagogiques enregistrés', icon: 'folder' as const, route: '/pdf-library' as const },

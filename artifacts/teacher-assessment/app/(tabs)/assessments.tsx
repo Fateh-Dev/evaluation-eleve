@@ -14,9 +14,15 @@ export default function AssessmentsScreen() {
   const selection = useListSelection();
   const [selectedClassId, setSelectedClassId] = useState<string>('all');
 
-  const filteredAssessments = selectedClassId === 'all'
-    ? data.assessments
-    : data.assessments.filter((a) => a.classId === selectedClassId);
+  const filteredAssessments = (
+    selectedClassId === 'all'
+      ? data.assessments
+      : data.assessments.filter((a) => a.classId === selectedClassId)
+  ).slice().sort((a, b) => {
+    const classOrder = data.classes.findIndex((item) => item.id === a.classId) -
+      data.classes.findIndex((item) => item.id === b.classId);
+    return classOrder || data.assessments.indexOf(a) - data.assessments.indexOf(b);
+  });
 
   const handleDeleteSelectedAssessments = () => {
     const selected = data.assessments.filter((item) => selection.selectedIds.includes(item.id));
@@ -40,7 +46,7 @@ export default function AssessmentsScreen() {
 
   return (
     <Screen>
-      <AppHeader eyebrow="Plus · Suivi pédagogique" title="Test de niveau" />
+      <AppHeader eyebrow="Plus · Évaluation ponctuelle" title="Test de niveau initial" />
 
       {/* Class Filter Bar */}
       {data.classes.length > 0 && (
@@ -99,15 +105,15 @@ export default function AssessmentsScreen() {
 
       {data.classes.length > 0 && (
         <Button
-          label="Nouveau test de niveau"
+          label="Ajouter une compétence au test initial"
           icon="plus"
           onPress={() => router.push('/assessments/new')}
         />
       )}
 
       <SectionTitle
-        title={`Tests de niveau (${filteredAssessments.length})`}
-        action={data.classes.length > 0 ? '+ Ajouter' : undefined}
+        title={`Compétences évaluées (${filteredAssessments.length})`}
+        action={data.classes.length > 0 ? '+ Ajouter une compétence' : undefined}
         onAction={() => router.push('/assessments/new')}
       />
       <ListSelectionToolbar
@@ -138,22 +144,22 @@ export default function AssessmentsScreen() {
         <Surface style={styles.emptyContainer}>
           <Feather name="award" size={32} color={colors.mutedForeground} />
           <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
-            Aucune compétence enregistrée
+            Aucun test initial enregistré
           </Text>
           <Text style={[styles.emptySubtitle, { color: colors.mutedForeground }]}>
             {selectedClassId === 'all'
-              ? 'Créez votre premier test de niveau pour commencer à noter vos élèves.'
-              : 'Aucune compétence pour cette classe. Cliquez sur "+ Ajouter" pour en créer une.'}
+              ? 'Créez le test initial d’une classe en y ajoutant sa première compétence.'
+              : 'Le test initial de cette classe n’a pas encore de compétence. Ajoutez-en une pour le commencer.'}
           </Text>
           <Button
-            label="Créer un test de niveau"
+            label="Créer le test initial"
             icon="plus"
             onPress={() => router.push(`/assessments/new${selectedClassId !== 'all' ? `?classId=${selectedClassId}` : ''}`)}
           />
         </Surface>
       ) : (
         <View style={styles.assessmentsList}>
-          {filteredAssessments.map((item) => {
+          {filteredAssessments.map((item, index) => {
             const itemClass = data.classes.find((c) => c.id === item.classId);
             const objList = data.getObjectivesForAssessment(item.id);
             const classPupils = data.getPupilsForClass(item.classId);
@@ -161,19 +167,46 @@ export default function AssessmentsScreen() {
             const evaluatedTotal = stats.reduce((sum, s) => sum + s.evaluated, 0);
             const totalPossible = Math.max(classPupils.length * objList.length, 1);
             const progressPercent = Math.round((evaluatedTotal / totalPossible) * 100);
+            const groupId =
+              item.levelTestId ??
+              `${item.classId}::${itemClass?.academicYear ?? ''}`;
+            const previousItem = filteredAssessments[index - 1];
+            const previousClass = previousItem
+              ? data.classes.find((c) => c.id === previousItem.classId)
+              : undefined;
+            const previousGroupId = previousItem
+              ? previousItem.levelTestId ??
+                `${previousItem.classId}::${previousClass?.academicYear ?? ''}`
+              : undefined;
+            const startsLevelTest = groupId !== previousGroupId;
+            const groupCompetencyCount = filteredAssessments.filter(
+              (assessment) =>
+                (assessment.levelTestId ??
+                  `${assessment.classId}::${data.classes.find((c) => c.id === assessment.classId)?.academicYear ?? ''}`) === groupId,
+            ).length;
 
             return (
-              <Surface
-                key={item.id}
-                style={[
-                  styles.assessmentCard,
-                  selection.selectedIds.includes(item.id) && {
-                    backgroundColor: colors.card,
-                    borderColor: colors.destructive,
-                    borderWidth: 2,
-                  },
-                ]}
-              >
+              <React.Fragment key={item.id}>
+                {startsLevelTest && (
+                  <View style={styles.levelTestGroup}>
+                    <Text style={[styles.levelTestGroupTitle, { color: colors.foreground }]}>
+                      Test initial · {itemClass?.academicYear ?? ''}
+                    </Text>
+                    <Text style={[styles.levelTestGroupSubtitle, { color: colors.mutedForeground }]}>
+                      {itemClass?.name ?? item.level} · {groupCompetencyCount} compétence{groupCompetencyCount > 1 ? 's' : ''}
+                    </Text>
+                  </View>
+                )}
+                <Surface
+                  style={[
+                    styles.assessmentCard,
+                    selection.selectedIds.includes(item.id) && {
+                      backgroundColor: colors.card,
+                      borderColor: colors.destructive,
+                      borderWidth: 2,
+                    },
+                  ]}
+                >
                 <View style={styles.cardTop}>
                   <View style={styles.badgeRow}>
                     <View style={[styles.classPill, { backgroundColor: colors.secondary }]}>
@@ -243,7 +276,8 @@ export default function AssessmentsScreen() {
                     </>
                   )}
                 </View>
-              </Surface>
+                </Surface>
+              </React.Fragment>
             );
           })}
         </View>
@@ -280,6 +314,19 @@ const styles = StyleSheet.create({
   assessmentsList: {
     gap: 12,
     paddingBottom: 24,
+  },
+  levelTestGroup: {
+    gap: 3,
+    paddingTop: 4,
+    paddingBottom: 1,
+  },
+  levelTestGroupTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  levelTestGroupSubtitle: {
+    fontSize: 11,
+    fontWeight: '600',
   },
   assessmentCard: {
     borderRadius: 14,
