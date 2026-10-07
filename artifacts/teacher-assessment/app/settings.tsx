@@ -589,6 +589,32 @@ export default function SettingsScreen() {
         )}
       </Surface>
 
+      <SectionTitle title="Interface" />
+      <Surface style={styles.card}>
+        <View style={styles.reminderRow}>
+          <View style={[styles.settingIcon, { backgroundColor: colors.accent }]}>
+            <Feather name={data.interfaceMode === 'daily' ? 'sun' : 'grid'} size={18} color={colors.primary} />
+          </View>
+          <View style={styles.settingCopy}>
+            <Text style={[styles.value, { color: colors.foreground }]}>
+              {data.interfaceMode === 'daily' ? 'Mode quotidien' : 'Mode complet'}
+            </Text>
+            <Text style={[styles.help, { color: colors.mutedForeground }]}>
+              {data.interfaceMode === 'daily'
+                ? 'Programme du jour, appel et suivi pour la bonne classe, puis impression des absences datées, résultats continus et emploi du temps.'
+                : 'Affiche les indicateurs, les raccourcis et les détails complets du tableau de bord.'}
+            </Text>
+          </View>
+          <Switch
+            value={data.interfaceMode === 'daily'}
+            onValueChange={(enabled) => data.setInterfaceMode(enabled ? 'daily' : 'full')}
+            trackColor={{ false: colors.border, true: colors.accent }}
+            thumbColor={data.interfaceMode === 'daily' ? colors.primary : colors.card}
+            accessibilityLabel="Activer le mode quotidien"
+          />
+        </View>
+      </Surface>
+
       <SectionTitle title="Palette de couleurs" />
       <Pressable
         accessibilityRole="button"

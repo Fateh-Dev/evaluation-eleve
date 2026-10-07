@@ -190,6 +190,10 @@ export default function ClassDetailScreen() {
             present: stats.present,
             absent: stats.total - stats.present,
             total: stats.total,
+            absentDates: allAttendanceRecords
+              .filter((record) => record.statuses[pupil.id] === 'absent')
+              .sort((left, right) => left.date.localeCompare(right.date))
+              .map((record) => new Date(`${record.date}T00:00:00`).toLocaleDateString('fr-FR')),
           };
         }),
       });

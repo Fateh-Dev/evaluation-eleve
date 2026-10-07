@@ -43,6 +43,10 @@ Dans **Plus**, utilisez la recherche pour retrouver rapidement une classe par so
 
 Pour obtenir les étapes d’une action directement dans l’application, ouvrez **Plus → Guide d’utilisation**. Recherchez une tâche (par exemple « faire l’appel » ou « sauvegarde »), dépliez son guide, puis appuyez sur le bouton pour ouvrir l’écran correspondant.
 
+## Mode quotidien
+
+Pour alléger l’accueil, ouvrez **Plus → Paramètres de l’application → Interface** et activez **Mode quotidien**. La section **Programme** affiche les séances du jour dans l’ordre, avec la classe en cours et la suivante ; utilisez **Consulter** pour ouvrir l’emploi du temps complet ou touchez une séance pour ouvrir sa classe. La **classe choisie** reste indépendante du programme : pendant une séance, l’appel et l’évaluation continue ciblent la classe en cours ; hors séance, ils utilisent la classe choisie. Si aucun cours n’est prévu aujourd’hui pour cette classe, le raccourci d’appel propose d’ouvrir l’emploi du temps. La section **États de sortie** imprime en PDF les présences et absences avec leurs dates pour la période active, les résultats continus de cette période, ou l’emploi du temps hebdomadaire de l’année active. Appuyez sur **Mode complet** sur l’accueil, ou désactivez le commutateur dans les paramètres, pour revenir au tableau de bord détaillé. Le choix est mémorisé sur l’appareil.
+
 ## Créer une classe et ajouter des élèves
 
 1. Ouvrir **Classes**.

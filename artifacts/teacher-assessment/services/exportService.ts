@@ -1463,6 +1463,9 @@ export type ClassAttendanceExportData = {
   className: string;
   level: string;
   academicYear: string;
+  periodName?: string;
+  periodStartDate?: string;
+  periodEndDate?: string;
   pupils: Array<{
     registrationNumber: string;
     firstName: string;
@@ -1470,6 +1473,7 @@ export type ClassAttendanceExportData = {
     present: number;
     absent: number;
     total: number;
+    absentDates?: string[];
   }>;
 };
 
@@ -1477,19 +1481,26 @@ export function generateClassAttendancePdfHtml(data: ClassAttendanceExportData):
   const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   })[character] ?? character);
+  const includeAbsenceDates = data.pupils.some((pupil) => pupil.absentDates !== undefined);
   const rows = data.pupils.map((pupil, index) => {
     const rate = pupil.total ? `${Math.round((pupil.present / pupil.total) * 100)} %` : '—';
-    return `<tr><td>${index + 1}</td><td>${escapeHtml(pupil.registrationNumber)}</td><td>${escapeHtml(pupil.lastName)} ${escapeHtml(pupil.firstName)}</td><td>${pupil.present}</td><td>${pupil.absent}</td><td>${pupil.total}</td><td>${rate}</td></tr>`;
+    const absentDates = pupil.absentDates?.length
+      ? pupil.absentDates.map(escapeHtml).join('<br>')
+      : '—';
+    return `<tr><td>${index + 1}</td><td>${escapeHtml(pupil.registrationNumber)}</td><td>${escapeHtml(pupil.lastName)} ${escapeHtml(pupil.firstName)}</td><td>${pupil.present}</td><td>${pupil.absent}</td><td>${pupil.total}</td><td>${rate}</td>${includeAbsenceDates ? `<td class="absence-dates">${absentDates}</td>` : ''}</tr>`;
   }).join('');
   const schoolLine = [
     data.schoolName ? `Établissement : ${data.schoolName}` : '',
     data.teacherName ? `Enseignant(e) : ${data.teacherName}` : '',
     `Année scolaire : ${data.academicYear}`,
+    data.periodName
+      ? `Période : ${data.periodName}${data.periodStartDate && data.periodEndDate ? ` (${data.periodStartDate} – ${data.periodEndDate})` : ''}`
+      : '',
   ].filter(Boolean).map(escapeHtml).join(' · ');
 
   return `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>Présences — ${escapeHtml(data.className)}</title>
     <style>
-      @page { size: A4 portrait; margin: 14mm; }
+      @page { size: A4 landscape; margin: 12mm; }
       * { box-sizing: border-box; }
       body { font-family: Arial, "DejaVu Sans", sans-serif; color: #1f2933; font-size: 10pt; margin: 0; }
       header { text-align: center; margin-bottom: 18px; }
@@ -1500,14 +1511,15 @@ export function generateClassAttendancePdfHtml(data: ClassAttendanceExportData):
       th, td { border: 1px solid #9aa4aa; padding: 7px 6px; text-align: center; }
       th { background: #eef2f4; font-size: 9pt; }
       td.name { text-align: left; }
+      td.absence-dates { text-align: left; font-size: 8pt; }
       tbody tr:nth-child(even) { background: #f8fafb; }
       footer { margin-top: 12px; text-align: right; color: #52616b; font-size: 8pt; }
       .empty { text-align: center; color: #52616b; padding: 18px; }
       @media print { body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
     </style></head><body>
     <header><h1>Liste de présence</h1><p class="class">${escapeHtml(data.className)} · ${escapeHtml(data.level)}</p><p class="meta">${schoolLine}</p></header>
-    <table><thead><tr><th>N°</th><th>Matricule</th><th>Nom et prénom</th><th>Présences</th><th>Absences</th><th>Appels</th><th>Taux</th></tr></thead>
-    <tbody>${rows || '<tr><td class="empty" colspan="7">Aucun élève dans cette classe.</td></tr>'}</tbody></table>
+    <table><thead><tr><th>N°</th><th>Matricule</th><th>Nom et prénom</th><th>Présences</th><th>Absences</th><th>Appels</th><th>Taux</th>${includeAbsenceDates ? '<th>Dates d’absence</th>' : ''}</tr></thead>
+    <tbody>${rows || `<tr><td class="empty" colspan="${includeAbsenceDates ? 8 : 7}">Aucun élève dans cette classe.</td></tr>`}</tbody></table>
     <footer>${data.pupils.length} élève${data.pupils.length === 1 ? '' : 's'} · Document généré le ${new Date().toLocaleDateString('fr-FR')}</footer>
     </body></html>`;
 }

@@ -2,17 +2,31 @@ import { Feather } from '@expo/vector-icons';
 import { Redirect, router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { AppState, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert } from '@/components/AppDialog';
 import { AppHeader, Button, ProgressBar, Screen, SectionTitle, Surface } from '@/components/AppShell';
 import { useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
-import { getContinuousEvaluationProgress } from '@/services/continuousEvaluation';
-import { getScheduleTimeline, WEEKDAYS } from '@/services/schedule';
+import {
+  calculateAbsenceScore,
+  calculateContinuousTotal,
+  calculateDisciplineScore,
+  getContinuousEvaluationProgress,
+} from '@/services/continuousEvaluation';
+import {
+  exportClassAttendancePdf,
+  exportContinuousEvaluationPdf,
+  exportSchedulePdf,
+} from '@/services/exportService';
+import { getScheduleOccurrencesForDate, getScheduleTimeline, WEEKDAYS } from '@/services/schedule';
 
 export default function DashboardScreen() {
   const colors = useColors();
   const data = useAppData();
   const [now, setNow] = useState(() => new Date());
   const [classPickerVisible, setClassPickerVisible] = useState(false);
+  const [exportingDailyOutput, setExportingDailyOutput] = useState<
+    'absences' | 'continuous' | 'schedule' | null
+  >(null);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 30_000);
@@ -50,10 +64,12 @@ export default function DashboardScreen() {
   const nextSessionClass = nextSession
     ? data.classes.find((item) => item.id === nextSession.classId)
     : undefined;
-
-  useEffect(() => {
-    if (data.hydrated && currentSessionClass) data.setActiveClass(currentSessionClass.id);
-  }, [currentSession?.id, currentSessionClass?.id, data.hydrated, data.academicYear]);
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const todayOccurrences = getScheduleOccurrencesForDate(
+    activeYearSessions,
+    activeYearOverrides,
+    today,
+  );
 
   const hasClasses = data.classes.length > 0;
   const activeClass = hasClasses ? data.activeClass : undefined;
@@ -62,6 +78,20 @@ export default function DashboardScreen() {
     : [];
   const className = activeClass?.name ?? 'Aucune classe';
   const pupilCount = activeClassPupils.length;
+  const dailyClass = currentSessionClass ?? activeClass;
+  const dailyClassPupils = dailyClass ? data.getPupilsForClass(dailyClass.id) : [];
+  const dailyPeriod = dailyClass
+    ? data.getActiveContinuousEvaluationPeriod(dailyClass.academicYear)
+    : undefined;
+  const dailyEvaluationProgress = dailyClass
+    ? getContinuousEvaluationProgress(
+        dailyClassPupils.map((pupil) => pupil.id),
+        dailyClass.id,
+        dailyClass.academicYear,
+        data.continuousEvaluations,
+        dailyPeriod?.id,
+      )
+    : getContinuousEvaluationProgress([], '', '', []);
   const activeEvaluationPeriod = activeClass
     ? data.getActiveContinuousEvaluationPeriod(activeClass.academicYear)
     : undefined;
@@ -111,7 +141,6 @@ export default function DashboardScreen() {
   const attendanceRate = attendanceTotals.marked
     ? Math.round((attendanceTotals.present / attendanceTotals.marked) * 100)
     : null;
-  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   const currentAttendance = currentSession && currentSessionClass
     ? data.getAttendanceRecord(currentSessionClass.id, currentSession.id, today)
     : undefined;
@@ -120,6 +149,21 @@ export default function DashboardScreen() {
     : [];
   const needsAttendance = Boolean(
     currentSessionClass && currentSessionPupils.length > 0 && !currentAttendance,
+  );
+  const attendanceSession = dailyClass
+    ? currentSessionClass?.id === dailyClass.id
+      ? currentSession
+      : (() => {
+          const sessions = todayOccurrences.filter((session) => session.classId === dailyClass.id);
+          const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+          return sessions.find((session) => session.startTime > currentTime) ?? sessions[sessions.length - 1];
+        })()
+    : undefined;
+  const dailyAttendance = dailyClass && attendanceSession
+    ? data.getAttendanceRecord(dailyClass.id, attendanceSession.id, attendanceSession.occurrenceDate)
+    : undefined;
+  const needsDailyAttendance = Boolean(
+    dailyClass && attendanceSession && dailyClassPupils.length > 0 && !dailyAttendance,
   );
   const openClass = (classId: string, filter?: 'incomplete') => {
     data.setActiveClass(classId);
@@ -132,16 +176,167 @@ export default function DashboardScreen() {
     });
   };
   const openAttendance = () => {
-    if (!currentSession || !currentSessionClass) return;
-    data.setActiveClass(currentSessionClass.id);
+    const attendanceClass = dailyClass;
+    if (!attendanceClass) return;
+    if (!attendanceSession) {
+      Alert.alert(
+        'Aucune séance prévue',
+        `Aucune séance n’est programmée aujourd’hui pour ${attendanceClass.name}. Consultez l’emploi du temps pour choisir ou ajouter une séance.`,
+        [
+          { text: 'Annuler', style: 'cancel' },
+          { text: 'Emploi du temps', onPress: () => router.push('/schedule') },
+        ],
+      );
+      return;
+    }
     router.push({
       pathname: '/classes/[classId]/attendance',
       params: {
-        classId: currentSessionClass.id,
-        sessionId: currentSession.id,
-        date: currentSession.occurrenceDate,
+        classId: attendanceClass.id,
+        sessionId: attendanceSession.id,
+        date: attendanceSession.occurrenceDate,
       },
     });
+  };
+  const exportDailyOutput = async (kind: 'absences' | 'continuous' | 'schedule') => {
+    if ((!dailyClass && kind !== 'schedule') || exportingDailyOutput) return;
+    setExportingDailyOutput(kind);
+    try {
+      if (kind === 'absences') {
+        const reportClass = dailyClass!;
+        const records = data.getAttendanceRecordsForClass(reportClass.id).filter((record) =>
+          !dailyPeriod || (
+            record.date >= dailyPeriod.startDate &&
+            record.date <= dailyPeriod.endDate
+          ),
+        );
+        await exportClassAttendancePdf({
+          schoolName: data.school.name,
+          teacherName: data.teacherName,
+          className: reportClass.name,
+          level: reportClass.level,
+          academicYear: reportClass.academicYear,
+          periodName: dailyPeriod?.name,
+          periodStartDate: dailyPeriod?.startDate,
+          periodEndDate: dailyPeriod?.endDate,
+          pupils: dailyClassPupils.map((pupil) => {
+            const counts = records.reduce(
+              (totals, record) => {
+                if (record.statuses[pupil.id] === 'present') totals.present += 1;
+                if (record.statuses[pupil.id] === 'present' || record.statuses[pupil.id] === 'absent') {
+                  totals.total += 1;
+                }
+                return totals;
+              },
+              { present: 0, total: 0 },
+            );
+            return {
+              registrationNumber: pupil.registrationNumber,
+              firstName: pupil.firstName,
+              lastName: pupil.lastName,
+              present: counts.present,
+              absent: counts.total - counts.present,
+              total: counts.total,
+              absentDates: records
+                .filter((record) => record.statuses[pupil.id] === 'absent')
+                .sort((left, right) => left.date.localeCompare(right.date))
+                .map((record) => new Date(`${record.date}T00:00:00`).toLocaleDateString('fr-FR')),
+            };
+          }),
+        });
+      } else if (kind === 'continuous') {
+        const reportClass = dailyClass!;
+        const periodRecords = data.getAttendanceRecordsForClass(reportClass.id).filter((record) =>
+          !dailyPeriod ||
+          (record.date >= dailyPeriod.startDate && record.date <= dailyPeriod.endDate),
+        );
+        await exportContinuousEvaluationPdf({
+          schoolName: data.school.name,
+          teacherName: data.teacherName,
+          className: reportClass.name,
+          level: reportClass.level,
+          academicYear: reportClass.academicYear,
+          evaluationPeriodName: dailyPeriod?.name,
+          evaluationPeriodStartDate: dailyPeriod?.startDate,
+          evaluationPeriodEndDate: dailyPeriod?.endDate,
+          pupils: dailyClassPupils.map((pupil) => {
+            const evaluation = data.getContinuousEvaluation(
+              pupil.id,
+              reportClass.id,
+              reportClass.academicYear,
+              dailyPeriod?.id,
+            );
+            const attendance = periodRecords.reduce(
+              (totals, record) => {
+                if (record.statuses[pupil.id] === 'present') totals.present += 1;
+                if (record.statuses[pupil.id] === 'present' || record.statuses[pupil.id] === 'absent') {
+                  totals.total += 1;
+                }
+                return totals;
+              },
+              { present: 0, total: 0 },
+            );
+            const events = evaluation
+              ? data.getDisciplineEventsForEvaluation(evaluation.id)
+              : [];
+            const absenceScore = calculateAbsenceScore({
+              totalSessions: attendance.total,
+              presentCount: attendance.present,
+              absentCount: attendance.total - attendance.present,
+            }, {
+              maximumScore: 5,
+              penaltyPerAbsence: data.continuousEvaluationSettings.absencePenaltyPerAbsence,
+            });
+            const disciplineScore = calculateDisciplineScore(events.map((event) => event.penalty));
+            const evaluationComplete =
+              evaluation?.cahierScore !== undefined &&
+              evaluation.participationScore !== undefined;
+            return {
+              registrationNumber: pupil.registrationNumber,
+              firstName: pupil.firstName,
+              lastName: pupil.lastName,
+              cahierScore: evaluation?.cahierScore,
+              participationScore: evaluation?.participationScore,
+              absenceScore,
+              disciplineScore,
+              totalScore: calculateContinuousTotal({
+                cahierScore: evaluation?.cahierScore ?? 0,
+                participationScore: evaluation?.participationScore ?? 0,
+                absenceScore,
+                disciplineScore,
+              }),
+              evaluationComplete,
+              presentSessions: attendance.present,
+              absentSessions: attendance.total - attendance.present,
+              attendanceSessions: attendance.total,
+            };
+          }),
+        });
+      } else {
+        await exportSchedulePdf({
+          teacherName: data.teacherName,
+          schoolName: data.school.name,
+          city: data.school.wilaya,
+          academicYear: data.academicYear,
+          sessions: activeYearSessions.map((session) => ({
+            dayOfWeek: session.dayOfWeek,
+            startTime: session.startTime,
+            endTime: session.endTime,
+            className: data.classes.find((item) => item.id === session.classId)?.name ?? 'Classe supprimée',
+            subject: session.subject,
+            room: session.room,
+            notes: session.notes,
+          })),
+        });
+      }
+    } catch (error) {
+      Alert.alert(
+        'Impression impossible',
+        error instanceof Error ? error.message : 'Le document PDF n’a pas pu être préparé.',
+      );
+    } finally {
+      setExportingDailyOutput(null);
+    }
   };
 
   const teacherGreeting = data.teacherName ? `Bonjour, ${data.teacherName}` : 'Bonjour, Enseignant';
@@ -149,6 +344,218 @@ export default function DashboardScreen() {
   if (!data.hydrated) return null;
   if (!data.teacherName && !data.school.name && !hasClasses) {
     return <Redirect href="/onboarding" />;
+  }
+
+  if (data.interfaceMode === 'daily') {
+    return (
+      <Screen>
+        <AppHeader eyebrow="Mode quotidien" title={teacherGreeting} />
+        {activeClass ? (
+          <>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Classe active : ${className}. Ouvrir les classes pour en choisir une autre.`}
+              onPress={() => router.push('/classes')}
+              style={[styles.activeContext, { backgroundColor: colors.card, borderColor: colors.border }]}
+            >
+              <View style={[styles.contextIcon, { backgroundColor: colors.accent }]}>
+                <Feather name="users" size={18} color={colors.primary} />
+              </View>
+              <View style={styles.contextCopy}>
+                <Text style={[styles.contextEyebrow, { color: colors.mutedForeground }]}>CLASSE CHOISIE · TOUCHER POUR MODIFIER</Text>
+                <Text style={[styles.contextTitle, { color: colors.foreground }]}>{className}</Text>
+                <Text style={[styles.contextMeta, { color: colors.mutedForeground }]}>
+                  {activeClass.level} · {activeClass.academicYear} · {pupilCount} élèves
+                </Text>
+              </View>
+              <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
+            </Pressable>
+            {currentSessionClass && activeClass && currentSessionClass.id !== activeClass.id ? (
+              <Text style={[styles.rowSubtitle, { color: colors.mutedForeground, marginTop: 8 }]}>
+                Séance en cours : {currentSessionClass.name}. Les actions rapides ciblent cette classe ; votre classe choisie reste {activeClass.name}.
+              </Text>
+            ) : null}
+            <View style={styles.dailyPeriod}>
+              <Text style={[styles.contextEyebrow, { color: colors.mutedForeground }]}>
+                PÉRIODE DE {dailyClass?.name ?? className}
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.periodChoices}>
+                {dailyClass && data.getContinuousEvaluationPeriods(dailyClass.academicYear).map((period) => {
+                  const selected = period.id === dailyPeriod?.id;
+                  return (
+                    <Pressable
+                      key={period.id}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected }}
+                      onPress={() => data.setActiveContinuousEvaluationPeriod(dailyClass.academicYear, period.id)}
+                      style={[styles.periodChip, {
+                        backgroundColor: selected ? colors.primary : colors.card,
+                        borderColor: selected ? colors.primary : colors.border,
+                      }]}
+                    >
+                      <Text style={[styles.periodChipText, { color: selected ? colors.primaryForeground : colors.foreground }]}>
+                        {period.name}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => router.push('/continuous')}
+                  style={[styles.managePeriodsChip, { borderColor: colors.border }]}
+                >
+                  <Feather name="settings" size={14} color={colors.mutedForeground} />
+                </Pressable>
+              </ScrollView>
+            </View>
+            <SectionTitle title="Actions rapides" />
+            <Surface style={styles.dailyCard}>
+              <Pressable accessibilityRole="button" onPress={openAttendance} style={styles.dailyTask}>
+                <View style={[styles.dailyTaskIcon, { backgroundColor: needsDailyAttendance ? colors.warningSurface : colors.accent }]}>
+                  <Feather name="check-circle" size={19} color={needsDailyAttendance ? colors.warningForeground : colors.primary} />
+                </View>
+                <View style={styles.rowCopy}>
+                  <Text style={[styles.rowTitle, { color: colors.foreground }]}>Faire l’appel</Text>
+                  <Text style={[styles.rowSubtitle, { color: colors.mutedForeground }]}>
+                    {dailyClass ? `${dailyClass.name}${attendanceSession ? ` · ${attendanceSession.startTime}–${attendanceSession.endTime}` : ''}` : 'Choisissez une classe'}
+                    {dailyAttendance ? ' · déjà saisi, modifier' : ''}
+                  </Text>
+                </View>
+                <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                disabled={!dailyClass}
+                onPress={() => dailyClass && openClass(dailyClass.id)}
+                style={[styles.dailyTask, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }]}
+              >
+                <View style={[styles.dailyTaskIcon, { backgroundColor: colors.accent }]}>
+                  <Feather name="edit-3" size={18} color={colors.primary} />
+                </View>
+                <View style={styles.rowCopy}>
+                  <Text style={[styles.rowTitle, { color: colors.foreground }]}>Évaluation continue</Text>
+                  <Text style={[styles.rowSubtitle, { color: colors.mutedForeground }]}>
+                    {dailyClass
+                      ? dailyEvaluationProgress.incompleteCount > 0
+                        ? `${dailyClass.name} · ${dailyEvaluationProgress.incompleteCount} à compléter`
+                        : `${dailyClass.name} · ${dailyPeriod?.name ?? 'période active'}`
+                      : 'Choisissez une classe pour accéder au suivi'}
+                  </Text>
+                </View>
+                <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
+              </Pressable>
+            </Surface>
+            <SectionTitle title="États de sortie" />
+            <Surface style={styles.dailyCard}>
+              <Button
+                label={exportingDailyOutput === 'absences' ? 'Préparation…' : `Imprimer les absences · ${dailyPeriod?.name ?? 'année'}`}
+                icon="printer"
+                secondary
+                compact
+                disabled={Boolean(exportingDailyOutput) || !dailyClass}
+                onPress={() => { void exportDailyOutput('absences'); }}
+              />
+              <Button
+                label={exportingDailyOutput === 'continuous' ? 'Préparation…' : 'Imprimer les résultats d’évaluation continue'}
+                icon="printer"
+                secondary
+                compact
+                disabled={Boolean(exportingDailyOutput) || !dailyClass}
+                onPress={() => { void exportDailyOutput('continuous'); }}
+              />
+              <Button
+                label={exportingDailyOutput === 'schedule' ? 'Préparation…' : 'Imprimer l’emploi du temps'}
+                icon="printer"
+                secondary
+                compact
+                disabled={Boolean(exportingDailyOutput)}
+                onPress={() => { void exportDailyOutput('schedule'); }}
+              />
+            </Surface>
+            <SectionTitle title="Programme" action="Consulter" onAction={() => router.push('/schedule')} />
+            <Surface style={styles.dailyCard}>
+              <Text style={[styles.rowSubtitle, { color: colors.mutedForeground }]}>
+                {now.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
+              </Text>
+              {todayOccurrences.length ? todayOccurrences.map((session, index) => {
+                const sessionClass = data.classes.find((item) => item.id === session.classId);
+                if (!sessionClass) return null;
+                const isCurrent = session.id === currentSession?.id && session.occurrenceDate === currentSession.occurrenceDate;
+                const isNext = session.id === nextSession?.id && session.occurrenceDate === nextSession.occurrenceDate;
+                const status = isCurrent ? 'EN COURS' : isNext ? 'SUIVANTE' : session.endTime <= `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}` ? 'TERMINÉE' : '';
+                return (
+                  <Pressable
+                    key={`${session.id}-${session.occurrenceDate}`}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Ouvrir ${sessionClass.name}, ${session.startTime} à ${session.endTime}`}
+                    onPress={() => {
+                      data.setActiveClass(sessionClass.id);
+                      router.push({
+                        pathname: '/classes/[classId]',
+                        params: {
+                          classId: sessionClass.id,
+                          sessionId: session.id,
+                          attendanceDate: session.occurrenceDate,
+                        },
+                      });
+                    }}
+                    style={[
+                      styles.dailyTask,
+                      index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+                    ]}
+                  >
+                    <View style={[styles.dailyTaskIcon, { backgroundColor: isCurrent ? colors.successSurface : colors.accent }]}>
+                      <Feather name={isCurrent ? 'clock' : 'calendar'} size={18} color={colors.primary} />
+                    </View>
+                    <View style={styles.rowCopy}>
+                      <Text style={[styles.rowTitle, { color: colors.foreground }]}>
+                        {status ? `${status} · ` : ''}{sessionClass.name}
+                      </Text>
+                      <Text style={[styles.rowSubtitle, { color: colors.mutedForeground }]}>
+                        {session.startTime}–{session.endTime}
+                        {session.subject ? ` · ${session.subject}` : ''}
+                        {session.room ? ` · ${session.room}` : ''}
+                      </Text>
+                    </View>
+                    <Feather name="arrow-right" size={18} color={colors.primary} />
+                  </Pressable>
+                );
+              }) : (
+                <Text style={[styles.rowSubtitle, { color: colors.mutedForeground }]}>Aucune séance programmée aujourd’hui.</Text>
+              )}
+              {nextSession && nextSessionClass && nextSession.occurrenceDate !== today ? (
+                <View style={[styles.dailyTask, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }]}>
+                  <View style={[styles.dailyTaskIcon, { backgroundColor: colors.accent }]}>
+                    <Feather name="calendar" size={18} color={colors.primary} />
+                  </View>
+                  <View style={styles.rowCopy}>
+                    <Text style={[styles.rowTitle, { color: colors.foreground }]}>Prochaine séance · {nextSessionClass.name}</Text>
+                    <Text style={[styles.rowSubtitle, { color: colors.mutedForeground }]}>
+                      {new Date(`${nextSession.occurrenceDate}T00:00:00`).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })} · {nextSession.startTime}–{nextSession.endTime}
+                    </Text>
+                  </View>
+                </View>
+              ) : null}
+            </Surface>
+          </>
+        ) : (
+          <Surface style={styles.dailyCard}>
+            <Text style={[styles.rowTitle, { color: colors.foreground }]}>Commencez par créer une classe</Text>
+            <Text style={[styles.rowSubtitle, { color: colors.mutedForeground }]}>Ajoutez une classe et ses élèves pour accéder à l’appel et au suivi.</Text>
+            <Button label="Créer une classe" icon="plus" onPress={() => router.push('/classes')} />
+          </Surface>
+        )}
+        <View style={styles.dailyFooter}>
+          <Button
+            label="Mode complet"
+            secondary
+            compact
+            icon="maximize-2"
+            onPress={() => data.setInterfaceMode('full')}
+          />
+        </View>
+      </Screen>
+    );
   }
 
   return (
@@ -601,6 +1008,11 @@ const styles = StyleSheet.create({
   contextTitle: { fontSize: 15, fontWeight: '800' },
   contextMeta: { fontSize: 11, lineHeight: 15 },
   dashboardPeriods: { gap: 6, marginTop: 10, marginBottom: 2 },
+  dailyPeriod: { gap: 6, marginTop: 14 },
+  dailyCard: { gap: 10, padding: 14 },
+  dailyTask: { minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 7 },
+  dailyTaskIcon: { width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  dailyFooter: { marginTop: 18, marginBottom: 12 },
   periodChoices: { alignItems: 'center', gap: 7, paddingRight: 4 },
   periodChip: { minHeight: 34, borderWidth: 1, borderRadius: 999, justifyContent: 'center', paddingHorizontal: 13 },
   periodChipText: { fontSize: 11, fontWeight: '700' },

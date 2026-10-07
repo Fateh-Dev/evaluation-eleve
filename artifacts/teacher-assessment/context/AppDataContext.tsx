@@ -189,6 +189,7 @@ export type School = {
 export type AppState = {
   school: School;
   teacherName: string;
+  interfaceMode: 'daily' | 'full';
   academicYear: string;
   archivedAcademicYears: string[];
   schoolYearConfigurations: SchoolYearConfiguration[];
@@ -228,6 +229,7 @@ type DeleteLevelResult = {
 export type AppDataContextValue = {
   school: School;
   teacherName: string;
+  interfaceMode: 'daily' | 'full';
   academicYear: string;
   archivedAcademicYears: string[];
   schoolYearConfigurations: SchoolYearConfiguration[];
@@ -270,6 +272,7 @@ export type AppDataContextValue = {
 
   // Profile / Settings Actions
   updateTeacherName: (name: string) => void;
+  setInterfaceMode: (mode: 'daily' | 'full') => void;
   updateSchool: (school: Partial<School> & { academicYear?: string }) => void;
   setActiveAcademicYear: (year: string) => void;
   createAcademicYear: (year: string, copyFromYear?: string) => boolean;
@@ -723,6 +726,7 @@ export function createEmptyState(): AppState {
       wilaya: '',
     },
     teacherName: '',
+    interfaceMode: 'full',
     academicYear: '2026-2027',
     archivedAcademicYears: [],
     schoolYearConfigurations: [
@@ -835,6 +839,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
               ...parsed,
               school: parsed.school ?? prev.school,
               teacherName: parsed.teacherName ?? prev.teacherName,
+              interfaceMode: parsed.interfaceMode === 'daily' ? 'daily' : 'full',
               academicYear,
               archivedAcademicYears: Array.isArray(parsed.archivedAcademicYears)
                 ? parsed.archivedAcademicYears.filter((year): year is string => typeof year === 'string')
@@ -1343,6 +1348,10 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       ...prev,
       teacherName: name.trim(),
     }));
+  };
+
+  const setInterfaceMode = (mode: 'daily' | 'full') => {
+    setState((prev) => ({ ...prev, interfaceMode: mode }));
   };
 
   const updateSchool = (
@@ -2122,6 +2131,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       ...candidate,
       school: { ...createEmptyState().school, ...candidate.school },
       teacherName: typeof candidate.teacherName === 'string' ? candidate.teacherName : '',
+      interfaceMode: candidate.interfaceMode === 'daily' ? 'daily' : 'full',
       academicYear: restoredAcademicYear,
       schoolYearConfigurations: Array.isArray(candidate.schoolYearConfigurations)
         ? candidate.schoolYearConfigurations
@@ -2273,6 +2283,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       ...base,
       school: state.school,
       teacherName: state.teacherName,
+      interfaceMode: state.interfaceMode,
       academicYear,
       archivedAcademicYears: state.archivedAcademicYears,
       schoolYearConfigurations: currentConfiguration
@@ -3310,6 +3321,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
 
       // Profile / Settings
       updateTeacherName,
+      setInterfaceMode,
       updateSchool,
       setActiveAcademicYear,
       createAcademicYear,
