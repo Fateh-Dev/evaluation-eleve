@@ -10,6 +10,7 @@ import { setNotificationChannelAsync } from 'expo-notifications/build/setNotific
 import React, { PropsWithChildren, createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
 import { useAppData } from '@/context/AppDataContext';
+import { getScheduleOccurrencesForDate } from '@/services/schedule';
 
 const SETTINGS_KEY = '@teacher-assessment/reminders-v1';
 const NOTIFICATION_IDS_KEY = '@teacher-assessment/reminder-notification-ids-v1';
@@ -66,6 +67,7 @@ function getUpcomingReminders(
   sessions: ReturnType<typeof useAppData>['scheduleSessions'],
   assessments: ReturnType<typeof useAppData>['assessments'],
   classes: ReturnType<typeof useAppData>['classes'],
+  overrides: ReturnType<typeof useAppData>['scheduleOccurrenceOverrides'],
   minutesBefore: number,
   now: Date,
 ): UpcomingReminder[] {
@@ -76,8 +78,8 @@ function getUpcomingReminders(
   for (let offset = 0; offset <= REMINDER_WINDOW_DAYS; offset++) {
     const date = new Date(now);
     date.setDate(date.getDate() + offset);
-    const dayOfWeek = (date.getDay() + 6) % 7;
-    sessions.filter((session) => session.dayOfWeek === dayOfWeek).forEach((session) => {
+    const dateValue = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    getScheduleOccurrencesForDate(sessions, overrides, dateValue).forEach((session) => {
       const [hours, minutes] = session.startTime.split(':').map(Number);
       const startsAt = new Date(date);
       startsAt.setHours(hours, minutes, 0, 0);
@@ -88,7 +90,7 @@ function getUpcomingReminders(
         triggerAt,
         title: 'Cours à venir',
         body: `${className} · ${session.startTime}–${session.endTime}${session.room ? ` · ${session.room}` : ''}`,
-        data: { kind: 'class', classId: session.classId },
+        data: { kind: 'class', classId: session.classId, sessionId: session.id, date: dateValue },
       });
     });
   }
@@ -170,8 +172,15 @@ export function ReminderProvider({ children }: PropsWithChildren) {
 
   const nextReminder = useMemo(() => {
     if (!enabled || permissionStatus !== 'granted') return null;
-    return getUpcomingReminders(data.scheduleSessions, data.assessments, data.classes, minutesBefore, previewNow)[0] ?? null;
-  }, [data.assessments, data.classes, data.scheduleSessions, enabled, minutesBefore, permissionStatus, previewNow]);
+    return getUpcomingReminders(
+      data.scheduleSessions,
+      data.assessments,
+      data.classes,
+      data.scheduleOccurrenceOverrides,
+      minutesBefore,
+      previewNow,
+    )[0] ?? null;
+  }, [data.assessments, data.classes, data.scheduleOccurrenceOverrides, data.scheduleSessions, enabled, minutesBefore, permissionStatus, previewNow]);
 
   useEffect(() => {
     if (!ready) return;
@@ -197,6 +206,7 @@ export function ReminderProvider({ children }: PropsWithChildren) {
         data.scheduleSessions,
         data.assessments,
         data.classes,
+        data.scheduleOccurrenceOverrides,
         minutesBefore,
         new Date(),
       );
@@ -228,7 +238,7 @@ export function ReminderProvider({ children }: PropsWithChildren) {
     };
     void reschedule().catch(() => undefined);
     return () => { scheduleGeneration.current += 1; };
-  }, [available, data.assessments, data.classes, data.scheduleSessions, enabled, minutesBefore, ready, refreshVersion]);
+  }, [available, data.assessments, data.classes, data.scheduleOccurrenceOverrides, data.scheduleSessions, enabled, minutesBefore, ready, refreshVersion]);
 
   const setEnabled = async (next: boolean) => {
     if (next) {

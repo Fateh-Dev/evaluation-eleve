@@ -27,7 +27,7 @@ function NativeTabLayout() {
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="continuous">
         <NativeTabs.Trigger.Icon sf={{ default: 'checklist', selected: 'checklist' }} />
-        <NativeTabs.Trigger.Label>Évaluation</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Label>Suivi</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="more">
         <NativeTabs.Trigger.Icon sf={{ default: 'ellipsis', selected: 'ellipsis' }} />
@@ -97,7 +97,7 @@ function ClassicTabLayout() {
       />
       <Tabs.Screen
         name="continuous"
-        options={{ title: 'Évaluation', tabBarIcon: ({ color }) => <Feather name="check-square" size={22} color={color} /> }}
+        options={{ title: 'Suivi', tabBarIcon: ({ color }) => <Feather name="check-square" size={22} color={color} /> }}
       />
       <Tabs.Screen
         name="more"

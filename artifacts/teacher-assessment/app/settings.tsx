@@ -52,6 +52,7 @@ export default function SettingsScreen() {
   const [resetConfirmation, setResetConfirmation] = useState('');
   const [resetError, setResetError] = useState('');
   const [resetting, setResetting] = useState(false);
+  const [generatingTestData, setGeneratingTestData] = useState(false);
 
   // Teacher Name Edit State
   const [editingTeacher, setEditingTeacher] = useState(false);
@@ -288,6 +289,38 @@ export default function SettingsScreen() {
       setResetError('La réinitialisation a échoué. Vos données n’ont pas été effacées.');
     } finally {
       setResetting(false);
+    }
+  };
+  const confirmGenerateTestData = () => {
+    if (generatingTestData) return;
+    Alert.alert(
+      'Générer des données de test ?',
+      `Cette action remplacera les ${data.classes.length} classes, ${data.pupils.length} élèves, évaluations, présences et créneaux existants. Une sauvegarde automatique sera créée. Votre profil et les informations de l’établissement seront conservés.`,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Remplacer et générer',
+          style: 'destructive',
+          onPress: () => { void handleGenerateTestData(); },
+        },
+      ],
+    );
+  };
+  const handleGenerateTestData = async () => {
+    setGeneratingTestData(true);
+    try {
+      const result = await data.generateTestData();
+      Alert.alert(
+        'Données de test générées',
+        `${result.classCount} classes, ${result.pupilCount} élèves et ${result.weeklyHours} heures de cours par semaine.`,
+      );
+    } catch {
+      Alert.alert(
+        'Génération impossible',
+        'Les données de test n’ont pas pu être enregistrées. Vos données existantes sont conservées.',
+      );
+    } finally {
+      setGeneratingTestData(false);
     }
   };
 
@@ -697,6 +730,26 @@ export default function SettingsScreen() {
       </Modal>
       {/* DANGER ZONE / RESET */}
       <SectionTitle title="Gestion des données" />
+      <Surface style={[styles.card, { marginBottom: 16 }]}>
+        <View style={styles.settingRowInner}>
+          <View style={[styles.settingIcon, { backgroundColor: colors.accent }]}>
+            <Feather name="database" size={18} color={colors.primary} />
+          </View>
+          <View style={styles.settingCopy}>
+            <Text style={[styles.value, { color: colors.foreground }]}>Données de démonstration</Text>
+            <Text style={[styles.help, { color: colors.mutedForeground }]}>
+              Remplacez les données pédagogiques par 5 classes de 32 à 40 élèves et un emploi du temps de 14 heures par semaine.
+            </Text>
+          </View>
+        </View>
+        <Button
+          label={generatingTestData ? 'Génération en cours…' : 'Générer les données de test'}
+          compact
+          icon="database"
+          disabled={generatingTestData}
+          onPress={confirmGenerateTestData}
+        />
+      </Surface>
       <Surface style={[styles.card, { borderColor: colors.errorSurface }]}>
         <View style={styles.dangerHeader}>
           <Feather

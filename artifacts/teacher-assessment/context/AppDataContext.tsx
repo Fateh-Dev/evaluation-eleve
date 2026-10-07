@@ -27,6 +27,10 @@ import {
   isValidManualScore,
   normalizeScore,
 } from '@/services/continuousEvaluation';
+import {
+  findScheduleOccurrenceConflict,
+  getScheduleOccurrencesForDate,
+} from '@/services/schedule';
 
 export type EvaluationValue =
   'NotEvaluated' | 'Acquired' | 'PartiallyAcquired' | 'NotAcquired';
@@ -50,6 +54,30 @@ export type ScheduleSession = {
   room?: string;
   notes?: string;
 };
+
+export type ScheduleOccurrenceOverride = {
+  id: string;
+  sourceSessionId?: string;
+  originalDate: string;
+  status: 'cancelled' | 'rescheduled' | 'extra';
+  date?: string;
+  classId: string;
+  startTime: string;
+  endTime: string;
+  subject?: string;
+  room?: string;
+  notes?: string;
+  cancellationReason?: string;
+};
+
+export type ScheduleOccurrenceSaveResult =
+  | { success: true }
+  | {
+      success: false;
+      reason: 'session-not-found' | 'invalid-original-date' | 'invalid-target-date' |
+        'invalid-class' | 'invalid-time' | 'invalid-time-range' | 'overlap';
+      conflictingOccurrence?: Pick<ScheduleSession, 'classId' | 'startTime' | 'endTime'>;
+    };
 
 export type AttendanceStatus = 'present' | 'absent';
 
@@ -162,9 +190,11 @@ export type AppState = {
   school: School;
   teacherName: string;
   academicYear: string;
+  archivedAcademicYears: string[];
   schoolYearConfigurations: SchoolYearConfiguration[];
   classes: ClassItem[];
   scheduleSessions: ScheduleSession[];
+  scheduleOccurrenceOverrides: ScheduleOccurrenceOverride[];
   attendanceRecords: AttendanceRecord[];
   continuousEvaluations: ContinuousEvaluationRecord[];
   continuousEvaluationPeriods: ContinuousEvaluationPeriod[];
@@ -199,9 +229,11 @@ export type AppDataContextValue = {
   school: School;
   teacherName: string;
   academicYear: string;
+  archivedAcademicYears: string[];
   schoolYearConfigurations: SchoolYearConfiguration[];
   classes: ClassItem[];
   scheduleSessions: ScheduleSession[];
+  scheduleOccurrenceOverrides: ScheduleOccurrenceOverride[];
   attendanceRecords: AttendanceRecord[];
   continuousEvaluations: ContinuousEvaluationRecord[];
   continuousEvaluationPeriods: ContinuousEvaluationPeriod[];
@@ -243,6 +275,19 @@ export type AppDataContextValue = {
   createAcademicYear: (year: string, copyFromYear?: string) => boolean;
   renameAcademicYear: (year: string, newName: string) => boolean;
   deleteAcademicYear: (year: string) => DeleteYearResult;
+  setAcademicYearArchived: (year: string, archived: boolean) => boolean;
+  archiveAndCreateAcademicYear: (
+    sourceYear: string,
+    targetYear: string,
+    options: {
+      copyPedagogicalConfiguration: boolean;
+      carryClassesAndPupils: boolean;
+      copySchedule: boolean;
+    },
+  ) => Promise<
+    | { ok: true; classCount: number; pupilCount: number; sessionCount: number }
+    | { ok: false; reason: 'source-not-found' | 'already-archived' | 'target-invalid' | 'target-exists' }
+  >;
   addSchoolLevel: (year: string, name: string) => string | undefined;
   renameSchoolLevel: (
     year: string,
@@ -286,6 +331,7 @@ export type AppDataContextValue = {
     competencyId: string,
   ) => ConfiguredObjective[];
   resetAllData: () => Promise<void>;
+  generateTestData: () => Promise<{ classCount: number; pupilCount: number; weeklyHours: number }>;
   getBackupState: () => AppState;
   restoreBackupState: (backup: unknown) => Promise<void>;
 
@@ -300,6 +346,13 @@ export type AppDataContextValue = {
   addScheduleSession: (input: Omit<ScheduleSession, 'id'>) => string | undefined;
   updateScheduleSession: (sessionId: string, input: Omit<ScheduleSession, 'id'>) => boolean;
   deleteScheduleSession: (sessionId: string) => void;
+  saveScheduleOccurrenceOverride: (
+    input: Omit<ScheduleOccurrenceOverride, 'id' | 'status'> & { status: 'cancelled' | 'rescheduled' },
+  ) => ScheduleOccurrenceSaveResult;
+  addExtraScheduleSession: (
+    input: Omit<ScheduleOccurrenceOverride, 'id' | 'sourceSessionId' | 'status'>,
+  ) => string | undefined;
+  deleteScheduleOccurrenceOverride: (overrideId: string) => void;
   renameClass: (classId: string, name: string) => boolean;
   deleteClass: (classId: string) => void;
 
@@ -451,6 +504,38 @@ function isScheduleSession(value: unknown): value is ScheduleSession {
     typeof session.startTime === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(session.startTime) &&
     typeof session.endTime === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(session.endTime) &&
     session.startTime < session.endTime;
+}
+
+function isScheduleOccurrenceOverride(value: unknown): value is ScheduleOccurrenceOverride {
+  if (!value || typeof value !== 'object') return false;
+  const occurrence = value as Partial<ScheduleOccurrenceOverride>;
+  const isValidDate = (date: unknown) =>
+    typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date) &&
+    (() => {
+      const [year, month, day] = date.split('-').map(Number);
+      const parsedDate = new Date(year, month - 1, day);
+      return parsedDate.getFullYear() === year &&
+        parsedDate.getMonth() === month - 1 &&
+        parsedDate.getDate() === day;
+    })();
+  const isValidTime = (time: unknown) =>
+    typeof time === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(time);
+  const startTime = typeof occurrence.startTime === 'string' ? occurrence.startTime : '';
+  const endTime = typeof occurrence.endTime === 'string' ? occurrence.endTime : '';
+  return typeof occurrence.id === 'string' &&
+    (occurrence.cancellationReason === undefined || typeof occurrence.cancellationReason === 'string') &&
+    (occurrence.sourceSessionId === undefined || typeof occurrence.sourceSessionId === 'string') &&
+    isValidDate(occurrence.originalDate) &&
+    (occurrence.status === 'cancelled' || occurrence.status === 'rescheduled' || occurrence.status === 'extra') &&
+    (occurrence.date === undefined || isValidDate(occurrence.date)) &&
+    typeof occurrence.classId === 'string' &&
+    isValidTime(startTime) &&
+    isValidTime(endTime) &&
+    startTime < endTime &&
+    (occurrence.status === 'extra'
+      ? occurrence.sourceSessionId === undefined && occurrence.date === occurrence.originalDate
+      : typeof occurrence.sourceSessionId === 'string' &&
+        (occurrence.status === 'cancelled' || isValidDate(occurrence.date)));
 }
 
 function isAttendanceRecord(value: unknown): value is AttendanceRecord {
@@ -639,11 +724,13 @@ export function createEmptyState(): AppState {
     },
     teacherName: '',
     academicYear: '2026-2027',
+    archivedAcademicYears: [],
     schoolYearConfigurations: [
       createDefaultSchoolYearConfiguration('2026-2027'),
     ],
     classes: [],
     scheduleSessions: [],
+    scheduleOccurrenceOverrides: [],
     attendanceRecords: [],
     continuousEvaluations: [],
     continuousEvaluationPeriods: createDefaultContinuousEvaluationPeriods('2026-2027'),
@@ -749,6 +836,9 @@ export function AppDataProvider({ children }: PropsWithChildren) {
               school: parsed.school ?? prev.school,
               teacherName: parsed.teacherName ?? prev.teacherName,
               academicYear,
+              archivedAcademicYears: Array.isArray(parsed.archivedAcademicYears)
+                ? parsed.archivedAcademicYears.filter((year): year is string => typeof year === 'string')
+                : [],
               schoolYearConfigurations: migrateSchoolYearConfigurations(
                 parsed.schoolYearConfigurations,
                 academicYear,
@@ -759,6 +849,20 @@ export function AppDataProvider({ children }: PropsWithChildren) {
               classes,
               scheduleSessions: Array.isArray(parsed.scheduleSessions)
                 ? parsed.scheduleSessions.filter(isScheduleSession).filter((session) => classes.some((classItem) => classItem.id === session.classId))
+                : [],
+              scheduleOccurrenceOverrides: Array.isArray(parsed.scheduleOccurrenceOverrides)
+                ? parsed.scheduleOccurrenceOverrides
+                    .filter(isScheduleOccurrenceOverride)
+                    .filter((occurrence) =>
+                      classes.some((classItem) => classItem.id === occurrence.classId) &&
+                      (occurrence.status === 'extra' ||
+                        (Array.isArray(parsed.scheduleSessions) &&
+                          parsed.scheduleSessions.some(
+                            (session) =>
+                              isScheduleSession(session) &&
+                              session.id === occurrence.sourceSessionId,
+                          ))),
+                    )
                 : [],
               attendanceRecords: Array.isArray(parsed.attendanceRecords)
                 ? parsed.attendanceRecords.filter(isAttendanceRecord).filter((record) => classes.some((classItem) => classItem.id === record.classId))
@@ -842,6 +946,9 @@ export function AppDataProvider({ children }: PropsWithChildren) {
   const activeClass = useMemo(() => {
     return (
       state.classes.find((c) => c.id === state.activeClassId) ??
+      state.classes.find(
+        (c) => normalizeLabel(c.academicYear) === normalizeLabel(state.academicYear),
+      ) ??
       state.classes[0] ?? {
         id: '',
         name: 'Aucune classe',
@@ -1057,6 +1164,138 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     return id;
   };
 
+  const saveScheduleOccurrenceOverride = (
+    input: Omit<ScheduleOccurrenceOverride, 'id' | 'status'> & {
+      status: 'cancelled' | 'rescheduled';
+    },
+  ) => {
+    const source = state.scheduleSessions.find(
+      (session) => session.id === input.sourceSessionId,
+    );
+    if (!source) return { success: false, reason: 'session-not-found' } as const;
+    if (!isValidDateString(input.originalDate)) {
+      return { success: false, reason: 'invalid-original-date' } as const;
+    }
+    const [originalYear, originalMonth, originalDay] = input.originalDate.split('-').map(Number);
+    const originalDate = new Date(originalYear, originalMonth - 1, originalDay);
+    if ((originalDate.getDay() + 6) % 7 !== source.dayOfWeek) {
+      return { success: false, reason: 'invalid-original-date' } as const;
+    }
+    const targetDate = input.date ?? input.originalDate;
+    if (!isValidDateString(targetDate)) {
+      return { success: false, reason: 'invalid-target-date' } as const;
+    }
+    if (!state.classes.some((item) => item.id === input.classId)) {
+      return { success: false, reason: 'invalid-class' } as const;
+    }
+    if (
+      !/^([01]\d|2[0-3]):[0-5]\d$/.test(input.startTime) ||
+      !/^([01]\d|2[0-3]):[0-5]\d$/.test(input.endTime)
+    ) {
+      return { success: false, reason: 'invalid-time' } as const;
+    }
+    const start = input.startTime.split(':').reduce((hours, part) => hours * 60 + Number(part), 0);
+    const end = input.endTime.split(':').reduce((hours, part) => hours * 60 + Number(part), 0);
+    if (start >= end) return { success: false, reason: 'invalid-time-range' } as const;
+
+    if (input.status === 'rescheduled') {
+      const occurrences = getScheduleOccurrencesForDate(
+        state.scheduleSessions,
+        state.scheduleOccurrenceOverrides,
+        targetDate,
+      );
+      const conflict = findScheduleOccurrenceConflict(occurrences, {
+        classId: input.classId,
+        startTime: input.startTime,
+        endTime: input.endTime,
+        sourceSessionId: source.id,
+      });
+      if (conflict) {
+        return {
+          success: false,
+          reason: 'overlap',
+          conflictingOccurrence: {
+            classId: conflict.classId,
+            startTime: conflict.startTime,
+            endTime: conflict.endTime,
+          },
+        } as const;
+      }
+    }
+
+    const existing = state.scheduleOccurrenceOverrides.find(
+      (occurrence) =>
+        occurrence.status !== 'extra' &&
+        occurrence.sourceSessionId === source.id &&
+        occurrence.originalDate === input.originalDate,
+    );
+    const override: ScheduleOccurrenceOverride = {
+      ...input,
+      id: existing?.id ?? createConfigId('schedule-occurrence'),
+      sourceSessionId: source.id,
+      date: input.status === 'cancelled' ? undefined : targetDate,
+      status: input.status,
+      originalDate: input.originalDate,
+      startTime: input.startTime,
+      endTime: input.endTime,
+      classId: input.classId,
+    };
+    setState((prev) => ({
+      ...prev,
+      scheduleOccurrenceOverrides: existing
+        ? prev.scheduleOccurrenceOverrides.map((item) =>
+            item.id === existing.id ? override : item,
+          )
+        : [...prev.scheduleOccurrenceOverrides, override],
+    }));
+    return { success: true } as const;
+  };
+
+  const addExtraScheduleSession = (
+    input: Omit<ScheduleOccurrenceOverride, 'id' | 'sourceSessionId' | 'status'>,
+  ) => {
+    const start = input.startTime.split(':').reduce((hours, part) => hours * 60 + Number(part), 0);
+    const end = input.endTime.split(':').reduce((hours, part) => hours * 60 + Number(part), 0);
+    if (
+      !isValidDateString(input.originalDate) ||
+      input.date !== input.originalDate ||
+      !state.classes.some((item) => item.id === input.classId) ||
+      !/^([01]\d|2[0-3]):[0-5]\d$/.test(input.startTime) ||
+      !/^([01]\d|2[0-3]):[0-5]\d$/.test(input.endTime) ||
+      start >= end
+    ) return undefined;
+    const overlaps = getScheduleOccurrencesForDate(
+      state.scheduleSessions,
+      state.scheduleOccurrenceOverrides,
+      input.originalDate,
+    ).some((occurrence) =>
+      start < occurrence.endTime.split(':').reduce((hours, part) => hours * 60 + Number(part), 0) &&
+      occurrence.startTime.split(':').reduce((hours, part) => hours * 60 + Number(part), 0) < end,
+    );
+    if (overlaps) return undefined;
+    const id = createConfigId('extra-session');
+    const extra: ScheduleOccurrenceOverride = {
+      ...input,
+      id,
+      status: 'extra',
+      date: input.originalDate,
+    };
+    setState((prev) => ({
+      ...prev,
+      scheduleOccurrenceOverrides: [...prev.scheduleOccurrenceOverrides, extra],
+    }));
+    return id;
+  };
+
+  const deleteScheduleOccurrenceOverride = (overrideId: string) => {
+    setState((prev) => ({
+      ...prev,
+      scheduleOccurrenceOverrides: prev.scheduleOccurrenceOverrides.filter(
+        (occurrence) => occurrence.id !== overrideId,
+      ),
+    }));
+  };
+
   const updateScheduleSession = (sessionId: string, input: Omit<ScheduleSession, 'id'>) => {
     const start = input.startTime.split(':').reduce((hours, part) => hours * 60 + Number(part), 0);
     const end = input.endTime.split(':').reduce((hours, part) => hours * 60 + Number(part), 0);
@@ -1076,7 +1315,13 @@ export function AppDataProvider({ children }: PropsWithChildren) {
   };
 
   const deleteScheduleSession = (sessionId: string) => {
-    setState((prev) => ({ ...prev, scheduleSessions: prev.scheduleSessions.filter((session) => session.id !== sessionId) }));
+    setState((prev) => ({
+      ...prev,
+      scheduleSessions: prev.scheduleSessions.filter((session) => session.id !== sessionId),
+      scheduleOccurrenceOverrides: prev.scheduleOccurrenceOverrides.filter(
+        (occurrence) => occurrence.sourceSessionId !== sessionId,
+      ),
+    }));
   };
 
   const renameClass = (classId: string, name: string) => {
@@ -1147,9 +1392,23 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       const existing = prev.schoolYearConfigurations.find(
         (item) => normalizeLabel(item.year) === normalizeLabel(requestedYear),
       );
+      const academicYear = existing?.year ?? requestedYear;
+      const activeYearClass = prev.classes.find(
+        (item) => normalizeLabel(item.academicYear) === normalizeLabel(academicYear),
+      );
+      const archivedAcademicYears = prev.archivedAcademicYears.filter(
+        (item) =>
+          normalizeLabel(item) !== normalizeLabel(academicYear) &&
+          normalizeLabel(item) !== normalizeLabel(prev.academicYear),
+      );
       return {
         ...prev,
-        academicYear: existing?.year ?? requestedYear,
+        academicYear,
+        activeClassId: activeYearClass?.id ?? prev.activeClassId,
+        archivedAcademicYears:
+          normalizeLabel(prev.academicYear) === normalizeLabel(academicYear)
+            ? archivedAcademicYears
+            : [...archivedAcademicYears, prev.academicYear],
         schoolYearConfigurations: existing
           ? prev.schoolYearConfigurations
           : [
@@ -1244,6 +1503,9 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         normalizeLabel(prev.academicYear) === normalizeLabel(configuration.year)
           ? cleanName
           : prev.academicYear,
+      archivedAcademicYears: prev.archivedAcademicYears.map((yearId) =>
+        normalizeLabel(yearId) === normalizeLabel(configuration.year) ? cleanName : yearId,
+      ),
     }));
     return true;
   };
@@ -1301,6 +1563,9 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         ...prev,
         schoolYearConfigurations,
         academicYear: defaultYear,
+        archivedAcademicYears: prev.archivedAcademicYears.filter(
+          (yearId) => normalizeLabel(yearId) !== yearKey,
+        ),
         classes,
         continuousEvaluationPeriods: prev.continuousEvaluationPeriods.filter(
           (period) => normalizeLabel(period.schoolYearId) !== yearKey,
@@ -1339,6 +1604,147 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       };
     });
     return { ok: true, classCount, defaultYear };
+  };
+
+  const setAcademicYearArchived = (year: string, archived: boolean) => {
+    const configuration = getSchoolYearConfiguration(year);
+    if (!configuration) return false;
+    if (archived && normalizeLabel(state.academicYear) === normalizeLabel(configuration.year)) {
+      return false;
+    }
+    setState((prev) => {
+      const archivedYears = prev.archivedAcademicYears.filter(
+        (item) => normalizeLabel(item) !== normalizeLabel(configuration.year),
+      );
+      const previousActiveYear = normalizeLabel(prev.academicYear);
+      const nextActiveYear = archived ? prev.academicYear : configuration.year;
+      const nextArchivedYears = archived
+        ? [...archivedYears, configuration.year]
+        : [
+            ...archivedYears.filter(
+              (item) => normalizeLabel(item) !== normalizeLabel(prev.academicYear),
+            ),
+            ...(previousActiveYear !== normalizeLabel(configuration.year)
+              ? [prev.academicYear]
+              : []),
+          ];
+      const activeYearClass = archived
+        ? undefined
+        : prev.classes.find(
+            (item) => normalizeLabel(item.academicYear) === normalizeLabel(configuration.year),
+          );
+      return {
+        ...prev,
+        academicYear: nextActiveYear,
+        archivedAcademicYears: nextArchivedYears,
+        ...(activeYearClass ? { activeClassId: activeYearClass.id } : {}),
+      };
+    });
+    return true;
+  };
+
+  const archiveAndCreateAcademicYear = async (
+    sourceYear: string,
+    targetYear: string,
+    options: {
+      copyPedagogicalConfiguration: boolean;
+      carryClassesAndPupils: boolean;
+      copySchedule: boolean;
+    },
+  ) => {
+    const sourceConfiguration = getSchoolYearConfiguration(sourceYear);
+    if (!sourceConfiguration) return { ok: false as const, reason: 'source-not-found' as const };
+    if (state.archivedAcademicYears.some(
+      (item) => normalizeLabel(item) === normalizeLabel(sourceConfiguration.year),
+    )) {
+      return { ok: false as const, reason: 'already-archived' as const };
+    }
+    const cleanTargetYear = targetYear.trim();
+    if (!cleanTargetYear || normalizeLabel(cleanTargetYear) === normalizeLabel(sourceConfiguration.year)) {
+      return { ok: false as const, reason: 'target-invalid' as const };
+    }
+    if (state.schoolYearConfigurations.some(
+      (item) => normalizeLabel(item.year) === normalizeLabel(cleanTargetYear),
+    )) {
+      return { ok: false as const, reason: 'target-exists' as const };
+    }
+
+    const targetConfiguration = options.copyPedagogicalConfiguration
+      ? cloneSchoolYearConfiguration(sourceConfiguration, cleanTargetYear)
+      : createDefaultSchoolYearConfiguration(cleanTargetYear);
+    const sourceClasses = options.carryClassesAndPupils
+      ? state.classes.filter(
+          (item) => normalizeLabel(item.academicYear) === normalizeLabel(sourceConfiguration.year),
+        )
+      : [];
+    const classIdMap = new Map<string, string>();
+    const copiedClasses: ClassItem[] = sourceClasses.map((item) => {
+      const id = createConfigId('class');
+      classIdMap.set(item.id, id);
+      const targetLevel = targetConfiguration.levels.find(
+        (level) => normalizeLabel(level.name) === normalizeLabel(item.level),
+      );
+      return {
+        ...item,
+        id,
+        academicYear: cleanTargetYear,
+        active: true,
+        levelId: targetLevel?.id,
+      };
+    });
+    const copiedPupils: Pupil[] = options.carryClassesAndPupils
+      ? state.pupils
+          .filter((item) => classIdMap.has(item.classId))
+          .map((item) => {
+            const id = createConfigId('pupil');
+            return { ...item, id, classId: classIdMap.get(item.classId)! };
+          })
+      : [];
+    const copiedSessions: ScheduleSession[] = options.copySchedule
+      ? state.scheduleSessions.flatMap((session) => {
+          const classId = classIdMap.get(session.classId);
+          return classId ? [{ ...session, id: createConfigId('schedule'), classId }] : [];
+        })
+      : [];
+    const targetPeriods = createDefaultContinuousEvaluationPeriods(cleanTargetYear);
+    const targetPeriodId = targetPeriods[0]?.id;
+
+    await writeAutomaticBackup(state);
+    setState((prev) => ({
+      ...prev,
+      academicYear: cleanTargetYear,
+      archivedAcademicYears: Array.from(
+        new Map(
+          [
+            ...prev.archivedAcademicYears,
+            prev.academicYear,
+            sourceConfiguration.year,
+          ]
+            .filter((item) => normalizeLabel(item) !== normalizeLabel(cleanTargetYear))
+            .map((item) => [normalizeLabel(item), item]),
+        ).values(),
+      ),
+      schoolYearConfigurations: [...prev.schoolYearConfigurations, targetConfiguration],
+      continuousEvaluationPeriods: [...prev.continuousEvaluationPeriods, ...targetPeriods],
+      activeContinuousEvaluationPeriodByYear: targetPeriodId
+        ? { ...prev.activeContinuousEvaluationPeriodByYear, [cleanTargetYear]: targetPeriodId }
+        : prev.activeContinuousEvaluationPeriodByYear,
+      classes: [...prev.classes, ...copiedClasses],
+      pupils: [...prev.pupils, ...copiedPupils],
+      scheduleSessions: [...prev.scheduleSessions, ...copiedSessions],
+      activeClassId: copiedClasses[0]?.id ??
+        (sourceClasses.some((item) => item.id === prev.activeClassId) ? '' : prev.activeClassId),
+      activeAssessmentId: sourceClasses.some((item) => item.id ===
+        prev.assessments.find((assessment) => assessment.id === prev.activeAssessmentId)?.classId)
+        ? ''
+        : prev.activeAssessmentId,
+    }));
+    return {
+      ok: true as const,
+      classCount: copiedClasses.length,
+      pupilCount: copiedPupils.length,
+      sessionCount: copiedSessions.length,
+    };
   };
 
   const addSchoolLevel = (year: string, name: string) => {
@@ -1733,6 +2139,19 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       scheduleSessions: Array.isArray(candidate.scheduleSessions)
         ? candidate.scheduleSessions.filter(isScheduleSession).filter((session) => restoredClasses.some((classItem) => classItem.id === session.classId))
         : [],
+      scheduleOccurrenceOverrides: Array.isArray(candidate.scheduleOccurrenceOverrides)
+        ? candidate.scheduleOccurrenceOverrides
+            .filter(isScheduleOccurrenceOverride)
+            .filter((occurrence) =>
+              restoredClasses.some((classItem) => classItem.id === occurrence.classId) &&
+              (occurrence.status === 'extra' ||
+                candidate.scheduleSessions?.some(
+                  (session) =>
+                    isScheduleSession(session) &&
+                    session.id === occurrence.sourceSessionId,
+                )),
+            )
+        : [],
       attendanceRecords: Array.isArray(candidate.attendanceRecords)
         ? candidate.attendanceRecords.filter(isAttendanceRecord).filter((record) => restoredClasses.some((classItem) => classItem.id === record.classId))
         : [],
@@ -1773,6 +2192,118 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     const empty = createEmptyState();
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(empty));
     setState(empty);
+  };
+  const generateTestData = async () => {
+    void writeAutomaticBackup(state);
+    const academicYear = state.academicYear.trim() || '2026-2027';
+    const currentConfiguration = state.schoolYearConfigurations.find(
+      (item) => normalizeLabel(item.year) === normalizeLabel(academicYear),
+    );
+    const defaultConfiguration = createDefaultSchoolYearConfiguration(academicYear);
+    const configuration = currentConfiguration ?? defaultConfiguration;
+    const levels = configuration.levels.length
+      ? configuration.levels
+      : defaultConfiguration.levels;
+    const savedConfiguration = configuration.levels.length
+      ? configuration
+      : { ...configuration, levels };
+    const classLevels = [
+      levels[0],
+      levels[0],
+      levels[Math.min(1, levels.length - 1)],
+      levels[Math.min(1, levels.length - 1)],
+      levels[Math.min(2, levels.length - 1)],
+    ];
+    const classDefinitions = [
+      ...classLevels.map((level, index) => ({
+        name: `Test ${level.name}-${String.fromCharCode(65 + index)}`,
+        level,
+      })),
+    ];
+    const classes: ClassItem[] = classDefinitions.map((definition) => ({
+      id: createConfigId('demo-class'),
+      name: definition.name,
+      level: definition.level.name,
+      levelId: definition.level.id,
+      academicYear,
+      active: true,
+    }));
+    const firstNames = [
+      'Amine', 'Yasmine', 'Mohamed', 'Lina', 'Yacine', 'Ines', 'Rayan', 'Meriem',
+      'Sofiane', 'Nour', 'Ilyes', 'Aya', 'Anis', 'Sarah', 'Mehdi', 'Lyna',
+      'Khalil', 'Maya', 'Ismail', 'Nesrine',
+    ];
+    const lastNames = [
+      'Bensaid', 'Mansouri', 'Bouzid', 'Khelifi', 'Saidi', 'Cherif', 'Hamidi',
+      'Belkacem', 'Amrani', 'Brahimi', 'Mokrani', 'Zerrouki', 'Haddad', 'Ferhat',
+      'Benali', 'Ait Ali', 'Kaci', 'Rahmani', 'Dahmani', 'Toumi',
+    ];
+    const pupilCounts = [32, 34, 36, 38, 40];
+    const pupils: Pupil[] = classes.flatMap((classItem, classIndex) =>
+      Array.from({ length: pupilCounts[classIndex] }, (_, index) => ({
+        id: createConfigId('demo-pupil'),
+        registrationNumber: String(index + 1).padStart(2, '0'),
+        firstName: firstNames[(index + classIndex * 3) % firstNames.length],
+        lastName: lastNames[(index * 7 + classIndex * 5) % lastNames.length],
+        classId: classItem.id,
+      })),
+    );
+    const lessons: Array<{ dayOfWeek: number; classIndex: number; startTime: string; endTime: string }> = [
+      { dayOfWeek: 0, classIndex: 0, startTime: '08:00', endTime: '10:00' },
+      { dayOfWeek: 0, classIndex: 1, startTime: '13:00', endTime: '14:00' },
+      { dayOfWeek: 1, classIndex: 1, startTime: '09:00', endTime: '11:00' },
+      { dayOfWeek: 1, classIndex: 2, startTime: '14:00', endTime: '15:00' },
+      { dayOfWeek: 2, classIndex: 2, startTime: '08:00', endTime: '10:00' },
+      { dayOfWeek: 2, classIndex: 3, startTime: '13:00', endTime: '14:00' },
+      { dayOfWeek: 3, classIndex: 3, startTime: '09:00', endTime: '11:00' },
+      { dayOfWeek: 3, classIndex: 4, startTime: '14:00', endTime: '15:00' },
+      { dayOfWeek: 4, classIndex: 4, startTime: '09:00', endTime: '11:00' },
+    ];
+    const scheduleSessions: ScheduleSession[] = lessons.map((lesson) => ({
+      id: createConfigId('demo-schedule'),
+      dayOfWeek: lesson.dayOfWeek,
+      startTime: lesson.startTime,
+      endTime: lesson.endTime,
+      classId: classes[lesson.classIndex].id,
+      subject: 'Français',
+      room: 'Salle de classe',
+    }));
+    const base = createEmptyState();
+    const nextState: AppState = {
+      ...base,
+      school: state.school,
+      teacherName: state.teacherName,
+      academicYear,
+      archivedAcademicYears: state.archivedAcademicYears,
+      schoolYearConfigurations: currentConfiguration
+        ? state.schoolYearConfigurations.map((item) =>
+            normalizeLabel(item.year) === normalizeLabel(academicYear)
+              ? savedConfiguration
+              : item,
+          )
+        : [...state.schoolYearConfigurations, configuration],
+      continuousEvaluationPeriods: [
+        ...state.continuousEvaluationPeriods.filter(
+          (period) => period.schoolYearId !== academicYear,
+        ),
+        ...(state.continuousEvaluationPeriods.some(
+          (period) => period.schoolYearId === academicYear,
+        )
+          ? state.continuousEvaluationPeriods.filter(
+              (period) => period.schoolYearId === academicYear,
+            )
+          : createDefaultContinuousEvaluationPeriods(academicYear)),
+      ],
+      activeContinuousEvaluationPeriodByYear: state.activeContinuousEvaluationPeriodByYear,
+      continuousEvaluationSettings: state.continuousEvaluationSettings,
+      classes,
+      pupils,
+      scheduleSessions,
+      activeClassId: classes[0]?.id ?? '',
+    };
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
+    setState(nextState);
+    return { classCount: classes.length, pupilCount: pupils.length, weeklyHours: 14 };
   };
 
   const deleteClass = (classId: string) => {
@@ -1821,6 +2352,16 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         ...prev,
         classes: remainingClasses,
         scheduleSessions: prev.scheduleSessions.filter((session) => session.classId !== classId),
+        scheduleOccurrenceOverrides: prev.scheduleOccurrenceOverrides.filter(
+          (occurrence) =>
+            (!occurrence.sourceSessionId ||
+              prev.scheduleSessions.some(
+                (session) =>
+                  session.id === occurrence.sourceSessionId &&
+                  session.classId !== classId,
+              )) &&
+            occurrence.classId !== classId,
+        ),
         activeClassId: nextActiveClassId,
         pupils: remainingPupils,
         assessments: remainingAssessments,
@@ -1860,7 +2401,15 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     const [year, month, day] = record.date.split('-').map(Number);
     const parsedDate = new Date(year, month - 1, day);
     const scheduledSession = record.sessionId
-      ? state.scheduleSessions.find((session) => session.id === record.sessionId)
+      ? getScheduleOccurrencesForDate(
+          state.scheduleSessions,
+          state.scheduleOccurrenceOverrides,
+          record.date,
+        ).find(
+          (session) =>
+            session.id === record.sessionId &&
+            session.classId === record.classId,
+        )
       : undefined;
     const hasValidDate = /^\d{4}-\d{2}-\d{2}$/.test(record.date) &&
       parsedDate.getFullYear() === year &&
@@ -1870,8 +2419,6 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       !state.classes.some((classItem) => classItem.id === record.classId) ||
       !hasValidDate ||
       !scheduledSession ||
-      scheduledSession.classId !== record.classId ||
-      scheduledSession.dayOfWeek !== (parsedDate.getDay() + 6) % 7 ||
       classPupils.length === 0 ||
       classPupils.some((pupil) => record.statuses[pupil.id] !== 'present' && record.statuses[pupil.id] !== 'absent')
     ) {
@@ -2768,6 +3315,8 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       createAcademicYear,
       renameAcademicYear,
       deleteAcademicYear,
+      setAcademicYearArchived,
+      archiveAndCreateAcademicYear,
       addSchoolLevel,
       renameSchoolLevel,
       deleteSchoolLevel,
@@ -2779,6 +3328,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       getCompetenciesForLevel,
       getObjectivesForLevelCompetency,
       resetAllData,
+      generateTestData,
       getBackupState,
       restoreBackupState,
 
@@ -2788,6 +3338,9 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       addScheduleSession,
       updateScheduleSession,
       deleteScheduleSession,
+      saveScheduleOccurrenceOverride,
+      addExtraScheduleSession,
+      deleteScheduleOccurrenceOverride,
       renameClass,
       deleteClass,
       addPupils,

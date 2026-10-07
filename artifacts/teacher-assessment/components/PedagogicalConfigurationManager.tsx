@@ -593,7 +593,7 @@ export default function PedagogicalConfigurationManager() {
           )}
           {selectedYear !== data.academicYear && (
             <Button
-              label={`Définir ${selectedYear} comme année par défaut`}
+              label={`Activer ${selectedYear}`}
               icon="check"
               compact
               secondary
@@ -675,9 +675,9 @@ export default function PedagogicalConfigurationManager() {
             />
           </View>
           <Text style={[styles.help, { color: colors.mutedForeground }]}>
-            Créer une année ne change pas l’année par défaut. Sélectionnez-la
-            puis choisissez « Définir comme année par défaut » pour l’utiliser
-            lors de la création des prochaines classes.
+            Créer une année ne l’active pas automatiquement. Sélectionnez-la
+            puis appuyez sur « Activer » pour en faire l’année active. L’année
+            active précédente sera alors archivée.
           </Text>
         </View>}
 

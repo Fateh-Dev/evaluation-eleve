@@ -5,6 +5,7 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
 import JSZip from 'jszip';
+import type { StudentProgressReport } from '@/services/studentProgressReport';
 
 export type AssessmentExportData = {
   school: {
@@ -796,6 +797,96 @@ export async function exportContinuousEvaluationPdf(
   await Sharing.shareAsync(targetUri, {
     mimeType: 'application/pdf',
     dialogTitle: `Enregistrer ou partager l’évaluation continue — ${data.className}`,
+    UTI: 'com.adobe.pdf',
+  });
+}
+
+export function generateStudentProgressReportPdfHtml(
+  data: StudentProgressReport,
+): string {
+  const schoolLine = [
+    data.school.name ? `Établissement : ${data.school.name}` : '',
+    data.teacherName ? `Enseignant(e) : ${data.teacherName}` : '',
+    `Année scolaire : ${data.classItem.academicYear}`,
+    `${data.period.name} · ${data.period.startDate} – ${data.period.endDate}`,
+  ].filter(Boolean).map(escapeExportHtml).join(' · ');
+  const pupilPages = data.pupils.map((pupil) => {
+    const assessmentRows = pupil.assessments.map((assessment) =>
+      `<tr><td>${escapeExportHtml(assessment.date)}</td><td>${escapeExportHtml(assessment.title)}</td><td>${escapeExportHtml(assessment.competency)}</td><td>${assessment.absent ? 'Absent' : `${assessment.acquired} / ${assessment.partial} / ${assessment.notAcquired}`}</td><td>${assessment.percent === null ? '—' : `${assessment.percent} %`}</td></tr>`,
+    ).join('');
+    const attendanceTotal = pupil.presentSessions + pupil.absentSessions;
+    const attendanceRate = attendanceTotal
+      ? `${Math.round((pupil.presentSessions / attendanceTotal) * 100)} %`
+      : '—';
+    return `<section class="pupil-page">
+      <header><h1>Bilan de progression trimestriel</h1><p class="class">${escapeExportHtml(data.classItem.name)} · ${escapeExportHtml(data.classItem.level)}</p><p class="meta">${schoolLine}</p></header>
+      <h2>${escapeExportHtml(pupil.lastName)} ${escapeExportHtml(pupil.firstName)} <small>Matricule : ${escapeExportHtml(pupil.registrationNumber)}</small></h2>
+      <h3>Évaluations et compétences</h3>
+      <table><thead><tr><th>Date</th><th>Évaluation</th><th>Compétence</th><th>Acquis / Partiels / Non acquis</th><th>Résultat</th></tr></thead>
+      <tbody>${assessmentRows || '<tr><td colspan="5" class="empty">Aucune évaluation pendant cette période.</td></tr>'}</tbody></table>
+      <h3>Évaluation continue</h3>
+      <table class="scores"><tbody>
+        <tr><th>Cahier /5</th><th>Participation /5</th><th>Absences /5</th><th>Discipline /5</th><th>Total /20</th></tr>
+        <tr><td>${pupil.cahierScore ?? '—'}</td><td>${pupil.participationScore ?? '—'}</td><td>${pupil.absenceScore}</td><td>${pupil.disciplineScore}</td><td>${pupil.continuousTotal === null ? 'À compléter' : pupil.continuousTotal}</td></tr>
+      </tbody></table>
+      <p class="summary">Moyenne des résultats d’évaluation : ${pupil.averageAssessmentPercent === null ? '—' : `${pupil.averageAssessmentPercent} %`} · Présences : ${pupil.presentSessions} · Absences : ${pupil.absentSessions} · Taux de présence : ${attendanceRate}</p>
+      <footer>Document généré le ${new Date().toLocaleDateString('fr-FR')}</footer>
+    </section>`;
+  }).join('');
+  return `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>Bilans trimestriels — ${escapeExportHtml(data.classItem.name)}</title>
+    <style>
+      @page { size: A4 portrait; margin: 14mm; }
+      * { box-sizing: border-box; }
+      body { font-family: Arial, "DejaVu Sans", sans-serif; color: #1f2933; font-size: 9pt; margin: 0; }
+      .pupil-page { page-break-after: always; break-after: page; }
+      .pupil-page:last-child { page-break-after: auto; break-after: auto; }
+      header { text-align: center; margin-bottom: 22px; }
+      h1 { margin: 0 0 5px; font-size: 18pt; color: #183143; }
+      .class { font-size: 12pt; font-weight: 700; margin: 0 0 5px; }
+      .meta { color: #52616b; font-size: 8.5pt; margin: 0; }
+      h2 { border-bottom: 2px solid #1f4e78; padding-bottom: 8px; font-size: 15pt; }
+      h2 small { font-size: 9pt; font-weight: 400; margin-left: 12px; }
+      h3 { margin: 20px 0 8px; color: #183143; font-size: 11pt; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { border: 1px solid #9aa4aa; padding: 7px 5px; text-align: center; }
+      th { background: #eef2f4; font-size: 8pt; }
+      td:nth-child(2), td:nth-child(3) { text-align: left; }
+      tbody tr:nth-child(even) { background: #f8fafb; }
+      .scores td, .scores th { width: 20%; }
+      .scores td:nth-child(2), .scores td:nth-child(3) { text-align: center; }
+      .summary { margin-top: 16px; line-height: 1.6; }
+      footer { margin-top: 30px; text-align: right; color: #52616b; font-size: 8pt; }
+      .empty { color: #52616b; padding: 18px; }
+      @media print { body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
+    </style></head><body>${pupilPages || '<p>Aucun élève dans cette classe.</p>'}</body></html>`;
+}
+
+export async function exportStudentProgressReportPdf(
+  data: StudentProgressReport,
+): Promise<void> {
+  const html = generateStudentProgressReportPdfHtml(data);
+  if (Platform.OS === 'web') {
+    await Print.printAsync({ html });
+    return;
+  }
+  const { base64 } = await Print.printToFileAsync({ html, base64: true });
+  if (!base64) throw new Error('Expo Print n’a pas fourni le contenu du bulletin.');
+  const safe = (value: string) => value.replace(/[^\p{L}\p{N}-]+/gu, '_');
+  const filename = `Bilans_${safe(data.classItem.name)}_${safe(data.classItem.academicYear)}_${safe(data.period.name)}.pdf`;
+  const cacheDirectory = LegacyFS.cacheDirectory ?? Paths.cache.uri;
+  const targetUri = `${cacheDirectory.endsWith('/') ? cacheDirectory : `${cacheDirectory}/`}${Date.now()}-${filename}`;
+  await LegacyFS.writeAsStringAsync(targetUri, base64, { encoding: LegacyFS.EncodingType.Base64 });
+  const fileInfo = await LegacyFS.getInfoAsync(targetUri);
+  if (!fileInfo.exists || fileInfo.size === 0) {
+    throw new Error('Le bulletin n’a pas été enregistré correctement.');
+  }
+  if (!(await Sharing.isAvailableAsync())) {
+    Alert.alert('PDF généré', `Le fichier a été créé dans le cache de l’application : ${filename}`);
+    return;
+  }
+  await Sharing.shareAsync(targetUri, {
+    mimeType: 'application/pdf',
+    dialogTitle: `Enregistrer ou partager les bilans — ${data.classItem.name}`,
     UTI: 'com.adobe.pdf',
   });
 }

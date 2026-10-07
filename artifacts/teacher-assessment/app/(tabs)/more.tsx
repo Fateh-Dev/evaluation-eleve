@@ -7,12 +7,15 @@ import { useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
 
 const MENU_ITEMS = [
-  { label: 'Test de niveau', detail: 'Évaluation ponctuelle au début de l’année, par compétence', icon: 'check-square' as const, route: '/assessments' as const },
-  { label: 'Élèves', detail: 'Parcourir les élèves des classes', icon: 'user' as const, route: '/pupils-list' as const },
-  { label: 'Emploi du temps', detail: 'Séances de la semaine et rappels', icon: 'calendar' as const, route: '/schedule' as const },
-  { label: 'Stockage', detail: 'Documents pédagogiques enregistrés', icon: 'folder' as const, route: '/pdf-library' as const },
-  { label: 'Configuration pédagogique', detail: 'Configurer les niveaux, compétences et objectifs', icon: 'sliders' as const, route: '/settings/pedagogical' as const },
-  { label: 'Configuration', detail: 'Profil, établissement et paramètres', icon: 'settings' as const, route: '/settings' as const },
+  { group: 'Aide', label: 'Guide d’utilisation', detail: 'Trouver rapidement comment réaliser une action', icon: 'help-circle' as const, route: '/user-guide' as const },
+  { group: 'Organisation', label: 'Emploi du temps', detail: 'Séances de la semaine et rappels', icon: 'calendar' as const, route: '/schedule' as const },
+  { group: 'Organisation', label: 'Fin d’année scolaire', detail: 'Archiver une année et préparer la suivante', icon: 'archive' as const, route: '/year-end' as const },
+  { group: 'Organisation', label: 'Tous les élèves', detail: 'Rechercher parmi les élèves des classes', icon: 'user' as const, route: '/pupils-list' as const },
+  { group: 'Analyse', label: 'Statistiques multicritères', detail: 'Croiser les résultats et le suivi continu', icon: 'bar-chart-2' as const, route: '/statistics' as const },
+  { group: 'Analyse', label: 'Bilans trimestriels', detail: 'Imprimer le bilan d’un élève ou d’une classe', icon: 'file-text' as const, route: '/student-reports' as const },
+  { group: 'Documents', label: 'Documents pédagogiques', detail: 'Consulter les documents enregistrés', icon: 'folder' as const, route: '/pdf-library' as const },
+  { group: 'Paramètres', label: 'Configuration pédagogique', detail: 'Niveaux, compétences et objectifs', icon: 'sliders' as const, route: '/settings/pedagogical' as const },
+  { group: 'Paramètres', label: 'Paramètres de l’application', detail: 'Profil, établissement, apparence et sauvegardes', icon: 'settings' as const, route: '/settings' as const },
 ];
 
 export default function MoreScreen() {
@@ -103,23 +106,30 @@ export default function MoreScreen() {
           ) : null}
         </View>
       ) : (
-        <View style={[styles.list, { borderTopColor: colors.border }]}>
-          {MENU_ITEMS.map((item) => (
-            <Pressable
-              key={item.route}
-              accessibilityRole="button"
-              onPress={() => router.push(item.route)}
-              style={({ pressed }) => [styles.row, { borderBottomColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
-            >
-              <View style={[styles.icon, { backgroundColor: colors.accent }]}>
-                <Feather name={item.icon} size={19} color={colors.primary} />
+        <View style={styles.menuGroups}>
+          {['Aide', 'Organisation', 'Analyse', 'Documents', 'Paramètres'].map((group) => (
+            <View key={group} style={styles.menuGroup}>
+              <Text style={[styles.groupTitle, { color: colors.mutedForeground }]}>{group}</Text>
+              <View style={[styles.list, { borderTopColor: colors.border }]}>
+                {MENU_ITEMS.filter((item) => item.group === group).map((item) => (
+                  <Pressable
+                    key={item.route}
+                    accessibilityRole="button"
+                    onPress={() => router.push(item.route)}
+                    style={({ pressed }) => [styles.row, { borderBottomColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
+                  >
+                    <View style={[styles.icon, { backgroundColor: colors.accent }]}>
+                      <Feather name={item.icon} size={19} color={colors.primary} />
+                    </View>
+                    <View style={styles.copy}>
+                      <Text style={[styles.label, { color: colors.foreground }]}>{item.label}</Text>
+                      <Text style={[styles.detail, { color: colors.mutedForeground }]}>{item.detail}</Text>
+                    </View>
+                    <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
+                  </Pressable>
+                ))}
               </View>
-              <View style={styles.copy}>
-                <Text style={[styles.label, { color: colors.foreground }]}>{item.label}</Text>
-                <Text style={[styles.detail, { color: colors.mutedForeground }]}>{item.detail}</Text>
-              </View>
-              <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
-            </Pressable>
+            </View>
           ))}
         </View>
       )}
@@ -131,6 +141,8 @@ const styles = StyleSheet.create({
   search: { minHeight: 48, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
   searchInput: { flex: 1, minHeight: 42, fontSize: 14 },
   searchResults: { gap: 16 },
+  menuGroups: { gap: 18, paddingBottom: 18 },
+  menuGroup: { gap: 5 },
   group: { gap: 6 },
   groupTitle: { fontSize: 11, fontWeight: '700', letterSpacing: 1.1, textTransform: 'uppercase', marginLeft: 4 },
   list: { borderTopWidth: 1 },

@@ -2,7 +2,9 @@ import { Alert } from '@/components/AppDialog';
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import {
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -71,7 +73,11 @@ export default function NewAssessmentScreen() {
   const [subject, setSubject] = useState('Français');
   const [support, setSupport] = useState('');
   const [sessionObjectives, setSessionObjectives] = useState('');
-  const [date, setDate] = useState(new Date().toLocaleDateString('fr-FR'));
+  const [date, setDate] = useState(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  });
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   // Objectives list
   const [objectives, setObjectives] = useState<string[]>([]);
@@ -179,7 +185,7 @@ export default function NewAssessmentScreen() {
       level: selectedClass.level,
       support: support.trim(),
       sessionObjectives: sessionObjectives.trim(),
-      date: date.trim(),
+      date: new Date(`${date}T00:00:00`).toLocaleDateString('fr-FR'),
       objectives,
     });
 
@@ -410,16 +416,48 @@ export default function NewAssessmentScreen() {
           <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>
             DATE
           </Text>
-          <TextInput
-            value={date}
-            onChangeText={setDate}
-            placeholder="JJ/MM/AAAA"
-            placeholderTextColor={colors.mutedForeground}
-            style={[
-              styles.input,
-              { color: colors.foreground, borderColor: colors.border },
-            ]}
-          />
+          {Platform.OS === 'web' ? (
+            React.createElement('input', {
+              type: 'date',
+              'aria-label': 'Date de l’évaluation',
+              value: date,
+              onChange: (event: { currentTarget: { value: string } }) => setDate(event.currentTarget.value),
+              style: { height: 44, padding: '0 12px', borderWidth: 1, borderStyle: 'solid', borderColor: colors.border, borderRadius: 10, backgroundColor: colors.card, color: colors.foreground, fontSize: 14 },
+            })
+          ) : (
+            <>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Date de l’évaluation : ${new Date(`${date}T00:00:00`).toLocaleDateString('fr-FR')}`}
+                onPress={() => setShowDatePicker((visible) => !visible)}
+                style={[styles.datePickerButton, { borderColor: colors.border, backgroundColor: colors.card }]}
+              >
+                <Feather name="calendar" size={16} color={colors.primary} />
+                <Text style={[styles.datePickerText, { color: colors.foreground }]}>
+                  {new Date(`${date}T00:00:00`).toLocaleDateString('fr-FR')}
+                </Text>
+              </Pressable>
+              {showDatePicker ? (
+                <View style={[styles.datePickerContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <DateTimePicker
+                    value={new Date(`${date}T00:00:00`)}
+                    mode="date"
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    onValueChange={(_, selectedDate) => {
+                      setDate(`${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`);
+                      if (Platform.OS !== 'ios') setShowDatePicker(false);
+                    }}
+                    onDismiss={() => setShowDatePicker(false)}
+                  />
+                  {Platform.OS === 'ios' ? (
+                    <Pressable accessibilityRole="button" onPress={() => setShowDatePicker(false)} style={styles.datePickerDone}>
+                      <Text style={[styles.datePickerDoneText, { color: colors.primary }]}>Terminé</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              ) : null}
+            </>
+          )}
         </View>
       </Surface>
 
@@ -574,6 +612,11 @@ const styles = StyleSheet.create({
   field: {
     gap: 4,
   },
+  datePickerButton: { minHeight: 42, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 9 },
+  datePickerText: { fontSize: 14, fontWeight: '600' },
+  datePickerContainer: { alignItems: 'center', borderWidth: 1, borderRadius: 10, padding: 8 },
+  datePickerDone: { alignSelf: 'flex-end', paddingHorizontal: 12, paddingVertical: 7 },
+  datePickerDoneText: { fontSize: 14, fontWeight: '700' },
   inputLabel: {
     fontSize: 9.5,
     fontWeight: '700',

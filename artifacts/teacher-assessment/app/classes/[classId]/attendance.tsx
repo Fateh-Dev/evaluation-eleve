@@ -3,6 +3,7 @@ import { AppHeader, Button, Screen, Surface } from '@/components/AppShell';
 import { useAppData, type AttendanceStatus } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
 import { exportDailyAttendancePdf } from '@/services/exportService';
+import { getScheduleOccurrencesForDate } from '@/services/schedule';
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -45,14 +46,17 @@ export default function ClassAttendanceScreen() {
     params.date && isValidDate(params.date) ? params.date : getLocalDate(),
   );
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const weekday = isValidDate(date)
-    ? (new Date(`${date}T00:00:00`).getDay() + 6) % 7
-    : -1;
   const sessionsForDate = useMemo(
-    () => data.scheduleSessions
-      .filter((item) => item.classId === params.classId && item.dayOfWeek === weekday)
-      .sort((left, right) => left.startTime.localeCompare(right.startTime)),
-    [data.scheduleSessions, params.classId, weekday],
+    () => isValidDate(date)
+      ? getScheduleOccurrencesForDate(
+          data.scheduleSessions,
+          data.scheduleOccurrenceOverrides,
+          date,
+        )
+          .filter((item) => item.classId === params.classId)
+          .sort((left, right) => left.startTime.localeCompare(right.startTime))
+      : [],
+    [data.scheduleSessions, data.scheduleOccurrenceOverrides, params.classId, date],
   );
   const session = sessionsForDate.find((item) => item.id === selectedSessionId) ?? sessionsForDate[0];
   const sessionId = session?.id;
@@ -197,14 +201,14 @@ export default function ClassAttendanceScreen() {
         <View style={styles.dateInputGroup}>
           <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>DATE DE L’APPEL</Text>
           {Platform.OS === 'web' ? (
-            <TextInput
-              value={date}
-              onChangeText={setDate}
-              placeholder="AAAA-MM-JJ"
-              keyboardType="numbers-and-punctuation"
-              accessibilityLabel="Date de l’appel"
-              style={[styles.dateInput, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.card }]}
-            />
+            React.createElement('input', {
+              type: 'date',
+              'aria-label': 'Date de l’appel',
+              value: date,
+              max: getLocalDate(),
+              onChange: (event: { currentTarget: { value: string } }) => setDate(event.currentTarget.value),
+              style: { height: 42, padding: '0 10px', borderWidth: 1, borderStyle: 'solid', borderColor: colors.border, borderRadius: 9, backgroundColor: colors.card, color: colors.foreground, fontSize: 14 },
+            })
           ) : (
             <Pressable
               accessibilityRole="button"

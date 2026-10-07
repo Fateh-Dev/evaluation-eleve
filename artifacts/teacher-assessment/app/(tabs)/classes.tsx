@@ -25,6 +25,7 @@ import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollV
 import { useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
 import { useListSelection } from '@/hooks/useListSelection';
+import { getContinuousEvaluationProgress } from '@/services/continuousEvaluation';
 
 export default function ClassesScreen() {
   const colors = useColors();
@@ -183,7 +184,7 @@ export default function ClassesScreen() {
                 >
                   {configuration.year}
                   {configuration.year === data.academicYear
-                    ? ' · Par défaut'
+                    ? ' · Active'
                     : ''}
                 </Text>
               </Pressable>
@@ -231,6 +232,14 @@ export default function ClassesScreen() {
           {visibleClasses.map((cls) => {
             const classPupils = data.getPupilsForClass(cls.id);
             const isActive = cls.id === data.activeClassId;
+            const activePeriod = data.getActiveContinuousEvaluationPeriod(cls.academicYear);
+            const progress = getContinuousEvaluationProgress(
+              classPupils.map((pupil) => pupil.id),
+              cls.id,
+              cls.academicYear,
+              data.continuousEvaluations,
+              activePeriod?.id,
+            );
 
             return (
               <Pressable
@@ -305,8 +314,9 @@ export default function ClassesScreen() {
                       { color: colors.mutedForeground },
                     ]}
                   >
-                    {classPupils.length} élève
-                    {classPupils.length > 1 ? 's' : ''}
+                    {classPupils.length} élève{classPupils.length > 1 ? 's' : ''}
+                    {' · '}{activePeriod?.name ?? 'Aucune période'}
+                    {' · '}{progress.completedCount}/{classPupils.length} évaluées
                   </Text>
                 </View>
 

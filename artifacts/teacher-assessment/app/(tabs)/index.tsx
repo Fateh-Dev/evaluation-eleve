@@ -1,7 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import { Redirect, router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppState, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AppHeader, Button, ProgressBar, Screen, SectionTitle, Surface } from '@/components/AppShell';
 import { useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
@@ -12,6 +12,7 @@ export default function DashboardScreen() {
   const colors = useColors();
   const data = useAppData();
   const [now, setNow] = useState(() => new Date());
+  const [classPickerVisible, setClassPickerVisible] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 30_000);
@@ -24,7 +25,25 @@ export default function DashboardScreen() {
     };
   }, []);
 
-  const { current: currentSession, next: nextSession } = getScheduleTimeline(data.scheduleSessions, now);
+  const activeYearClassIds = new Set(
+    data.classes
+      .filter((item) => item.academicYear === data.academicYear)
+      .map((item) => item.id),
+  );
+  const activeYearSessions = data.scheduleSessions.filter((session) =>
+    activeYearClassIds.has(session.classId),
+  );
+  const activeYearSessionIds = new Set(activeYearSessions.map((session) => session.id));
+  const activeYearOverrides = data.scheduleOccurrenceOverrides.filter((override) =>
+    override.status === 'extra'
+      ? activeYearClassIds.has(override.classId)
+      : Boolean(override.sourceSessionId && activeYearSessionIds.has(override.sourceSessionId)),
+  );
+  const { current: currentSession, next: nextSession } = getScheduleTimeline(
+    activeYearSessions,
+    now,
+    activeYearOverrides,
+  );
   const currentSessionClass = currentSession
     ? data.classes.find((item) => item.id === currentSession.classId)
     : undefined;
@@ -34,7 +53,7 @@ export default function DashboardScreen() {
 
   useEffect(() => {
     if (data.hydrated && currentSessionClass) data.setActiveClass(currentSessionClass.id);
-  }, [currentSession?.id, currentSessionClass?.id, data.hydrated]);
+  }, [currentSession?.id, currentSessionClass?.id, data.hydrated, data.academicYear]);
 
   const hasClasses = data.classes.length > 0;
   const activeClass = hasClasses ? data.activeClass : undefined;
@@ -70,7 +89,11 @@ export default function DashboardScreen() {
       })
     ;
   const activeClassAttendance = activeClass
-    ? data.getAttendanceRecordsForClass(activeClass.id)
+    ? data.getAttendanceRecordsForClass(activeClass.id).filter((record) =>
+        !activeEvaluationPeriod ||
+        (record.date >= activeEvaluationPeriod.startDate &&
+          record.date <= activeEvaluationPeriod.endDate),
+      )
     : [];
   const attendanceTotals = activeClassAttendance.reduce(
     (totals, record) => {
@@ -116,7 +139,7 @@ export default function DashboardScreen() {
       params: {
         classId: currentSessionClass.id,
         sessionId: currentSession.id,
-        date: today,
+        date: currentSession.occurrenceDate,
       },
     });
   };
@@ -131,6 +154,128 @@ export default function DashboardScreen() {
   return (
     <Screen>
       <AppHeader eyebrow="Espace enseignant" title={teacherGreeting} />
+      {hasClasses ? (
+        <>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Classe active : ${className}. Choisir une autre classe.`}
+            onPress={() => setClassPickerVisible(true)}
+            style={[styles.activeContext, { backgroundColor: colors.card, borderColor: colors.border }]}
+          >
+            <View style={[styles.contextIcon, { backgroundColor: colors.accent }]}>
+              <Feather name="users" size={18} color={colors.primary} />
+            </View>
+            <View style={styles.contextCopy}>
+              <Text style={[styles.contextEyebrow, { color: colors.mutedForeground }]}>CLASSE ACTIVE</Text>
+              <Text style={[styles.contextTitle, { color: colors.foreground }]}>{className}</Text>
+              <Text style={[styles.contextMeta, { color: colors.mutedForeground }]}>
+                {activeClass?.level} · {activeClass?.academicYear} · {pupilCount} élèves
+              </Text>
+            </View>
+            <Feather name="chevron-down" size={18} color={colors.mutedForeground} />
+          </Pressable>
+          <View style={styles.dashboardPeriods}>
+            <Text style={[styles.contextEyebrow, { color: colors.mutedForeground }]}>TRIMESTRE</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.periodChoices}>
+              {data.getContinuousEvaluationPeriods(activeClass!.academicYear).map((period) => {
+                const selected = period.id === activeEvaluationPeriod?.id;
+                return (
+                  <Pressable
+                    key={period.id}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    onPress={() => data.setActiveContinuousEvaluationPeriod(activeClass!.academicYear, period.id)}
+                    style={[
+                      styles.periodChip,
+                      {
+                        backgroundColor: selected ? colors.primary : colors.card,
+                        borderColor: selected ? colors.primary : colors.border,
+                      },
+                    ]}
+                  >
+                    <Text style={[
+                      styles.periodChipText,
+                      { color: selected ? colors.primaryForeground : colors.foreground },
+                    ]}>
+                      {period.name}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => router.push('/continuous')}
+                style={[styles.managePeriodsChip, { borderColor: colors.border }]}
+              >
+                <Feather name="settings" size={14} color={colors.mutedForeground} />
+              </Pressable>
+            </ScrollView>
+          </View>
+        </>
+      ) : null}
+      {hasClasses ? (
+        <>
+          <SectionTitle title="À faire aujourd’hui" />
+          <Surface style={styles.actionCard}>
+            {needsAttendance ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Faire l’appel pour ${currentSessionClass?.name}`}
+                onPress={openAttendance}
+                style={styles.actionRow}
+              >
+                <Feather name="check-circle" size={18} color={colors.warningForeground} />
+                <View style={styles.rowCopy}>
+                  <Text style={[styles.rowTitle, { color: colors.foreground }]}>Appel à faire</Text>
+                  <Text style={[styles.rowSubtitle, { color: colors.mutedForeground }]}>
+                    {currentSessionClass?.name} · séance en cours
+                  </Text>
+                </View>
+                <View style={[styles.actionButton, { backgroundColor: colors.accent }]}>
+                  <Feather name="arrow-right" size={17} color={colors.primary} />
+                </View>
+              </Pressable>
+            ) : null}
+            {incompleteEvaluationCount > 0 ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Compléter l’évaluation de ${incompleteEvaluationCount} élève${incompleteEvaluationCount === 1 ? '' : 's'} dans ${className}`}
+                onPress={() => openClass(activeClass!.id, 'incomplete')}
+                style={[
+                  styles.actionRow,
+                  needsAttendance && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingTop: 10 },
+                ]}
+              >
+                <Feather name="edit-3" size={18} color={colors.primary} />
+                <View style={styles.rowCopy}>
+                  <Text style={[styles.rowTitle, { color: colors.foreground }]}>
+                    {incompleteEvaluationCount} élève{incompleteEvaluationCount === 1 ? '' : 's'} à compléter
+                  </Text>
+                  <Text style={[styles.rowSubtitle, { color: colors.mutedForeground }]}>
+                    {className} · {activeEvaluationPeriod?.name ?? 'période active'} · cahier : {missingCahierCount} · participation : {missingParticipationCount}
+                  </Text>
+                </View>
+                <View style={[styles.actionButton, { backgroundColor: colors.accent }]}>
+                  <Feather name="arrow-right" size={17} color={colors.primary} />
+                </View>
+              </Pressable>
+            ) : null}
+            {!needsAttendance && incompleteEvaluationCount === 0 ? (
+              <View style={styles.actionRow}>
+                <Feather name="check-circle" size={18} color={colors.successForeground} />
+                <View style={styles.rowCopy}>
+                  <Text style={[styles.rowTitle, { color: colors.foreground }]}>Tout est à jour</Text>
+                  <Text style={[styles.rowSubtitle, { color: colors.mutedForeground }]}>
+                    {pupilCount
+                      ? `Les évaluations de ${className} sont complètes pour ${activeEvaluationPeriod?.name ?? 'la période active'}.`
+                      : `Ajoutez des élèves à ${className} pour commencer le suivi.`}
+                  </Text>
+                </View>
+              </View>
+            ) : null}
+          </Surface>
+        </>
+      ) : null}
       <SectionTitle title="Emploi du temps" action="Gérer" onAction={() => router.push('/schedule')} />
       <Surface style={styles.scheduleCard}>
         <View style={styles.scheduleHeading}>
@@ -165,7 +310,7 @@ export default function DashboardScreen() {
                 params: {
                   classId: currentSessionClass.id,
                   sessionId: currentSession.id,
-                  attendanceDate: today,
+                  attendanceDate: currentSession.occurrenceDate,
                 },
               });
             }}
@@ -292,72 +437,6 @@ export default function DashboardScreen() {
         </>
       ) : null}
 
-      {hasClasses ? (
-        <>
-          <SectionTitle title="À faire aujourd’hui" />
-          <Surface style={styles.actionCard}>
-            {needsAttendance ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Faire l’appel pour ${currentSessionClass?.name}`}
-                onPress={openAttendance}
-                style={styles.actionRow}
-              >
-                <Feather name="check-circle" size={18} color={colors.warningForeground} />
-                <View style={styles.rowCopy}>
-                  <Text style={[styles.rowTitle, { color: colors.foreground }]}>Appel à faire</Text>
-                  <Text style={[styles.rowSubtitle, { color: colors.mutedForeground }]}>
-                    {currentSessionClass?.name} · séance en cours
-                  </Text>
-                </View>
-                <View style={[styles.actionButton, { backgroundColor: colors.accent }]}>
-                  <Feather name="arrow-right" size={17} color={colors.primary} />
-                </View>
-              </Pressable>
-            ) : null}
-            {incompleteEvaluationCount > 0 ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Compléter l’évaluation de ${incompleteEvaluationCount} élève${incompleteEvaluationCount === 1 ? '' : 's'} dans ${className}`}
-                onPress={() => openClass(activeClass!.id, 'incomplete')}
-                style={[
-                  styles.actionRow,
-                  needsAttendance && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingTop: 10 },
-                ]}
-              >
-                <Feather name="edit-3" size={18} color={colors.primary} />
-                <View style={styles.rowCopy}>
-                  <Text style={[styles.rowTitle, { color: colors.foreground }]}>
-                    {incompleteEvaluationCount} élève{incompleteEvaluationCount === 1 ? '' : 's'} à compléter
-                  </Text>
-                  <Text style={[styles.rowSubtitle, { color: colors.mutedForeground }]}>
-                    {className} · cahier : {missingCahierCount} · participation : {missingParticipationCount}
-                  </Text>
-                </View>
-                <View style={[styles.actionButton, { backgroundColor: colors.accent }]}>
-                  <Feather name="arrow-right" size={17} color={colors.primary} />
-                </View>
-              </Pressable>
-            ) : null}
-            {!needsAttendance && incompleteEvaluationCount === 0 ? (
-              <View style={styles.actionRow}>
-                <Feather name="check-circle" size={18} color={colors.successForeground} />
-                <View style={styles.rowCopy}>
-                  <Text style={[styles.rowTitle, { color: colors.foreground }]}>
-                    Rien à compléter
-                  </Text>
-                  <Text style={[styles.rowSubtitle, { color: colors.mutedForeground }]}>
-                    {pupilCount
-                      ? `Les notes de suivi de ${className} sont complètes.`
-                      : `Ajoutez des élèves à ${className} pour commencer le suivi.`}
-                  </Text>
-                </View>
-              </View>
-            ) : null}
-          </Surface>
-        </>
-      ) : null}
-
       <SectionTitle
         title="Mes classes"
         action={hasClasses ? 'Voir tout' : '+ Nouvelle classe'}
@@ -442,11 +521,98 @@ export default function DashboardScreen() {
           <Text style={[styles.scheduleLinkText, { color: colors.foreground }]}>Planning</Text>
         </Pressable>
       </View>
+      <Modal
+        visible={classPickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setClassPickerVisible(false)}
+      >
+        <View style={styles.pickerBackdrop}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Fermer le choix de classe"
+            onPress={() => setClassPickerVisible(false)}
+            style={StyleSheet.absoluteFill}
+          />
+          <Surface style={[styles.classPicker, { backgroundColor: colors.card }]}>
+            <View style={styles.pickerHeading}>
+              <View>
+                <Text style={[styles.pickerTitle, { color: colors.foreground }]}>Choisir une classe</Text>
+                <Text style={[styles.pickerSubtitle, { color: colors.mutedForeground }]}>La classe active du tableau de bord</Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Fermer"
+                onPress={() => setClassPickerVisible(false)}
+                hitSlop={10}
+              >
+                <Feather name="x" size={20} color={colors.mutedForeground} />
+              </Pressable>
+            </View>
+            <ScrollView
+              style={styles.pickerList}
+              contentContainerStyle={styles.pickerRows}
+              showsVerticalScrollIndicator={false}
+            >
+              {data.classes.map((classItem) => {
+                const selected = classItem.id === data.activeClassId;
+                return (
+                  <Pressable
+                    key={classItem.id}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    onPress={() => {
+                      data.setActiveClass(classItem.id);
+                      setClassPickerVisible(false);
+                    }}
+                    style={[
+                      styles.pickerRow,
+                      { borderColor: colors.border, backgroundColor: selected ? colors.accent : colors.card },
+                    ]}
+                  >
+                    <Feather name="users" size={17} color={selected ? colors.primary : colors.mutedForeground} />
+                    <View style={styles.contextCopy}>
+                      <Text style={[styles.rowTitle, { color: colors.foreground }]}>{classItem.name}</Text>
+                      <Text style={[styles.rowSubtitle, { color: colors.mutedForeground }]}>
+                        {classItem.level} · {classItem.academicYear} · {data.getPupilsForClass(classItem.id).length} élèves
+                      </Text>
+                    </View>
+                    {selected ? <Feather name="check" size={18} color={colors.primary} /> : null}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+            <Button label="Gérer les classes" secondary compact onPress={() => {
+              setClassPickerVisible(false);
+              router.push('/classes');
+            }} />
+          </Surface>
+        </View>
+      </Modal>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  activeContext: { minHeight: 72, borderWidth: 1, borderRadius: 15, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 11 },
+  contextIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  contextCopy: { flex: 1, minWidth: 0, gap: 2 },
+  contextEyebrow: { fontSize: 9, lineHeight: 13, fontWeight: '800', letterSpacing: 1 },
+  contextTitle: { fontSize: 15, fontWeight: '800' },
+  contextMeta: { fontSize: 11, lineHeight: 15 },
+  dashboardPeriods: { gap: 6, marginTop: 10, marginBottom: 2 },
+  periodChoices: { alignItems: 'center', gap: 7, paddingRight: 4 },
+  periodChip: { minHeight: 34, borderWidth: 1, borderRadius: 999, justifyContent: 'center', paddingHorizontal: 13 },
+  periodChipText: { fontSize: 11, fontWeight: '700' },
+  managePeriodsChip: { width: 34, height: 34, borderWidth: 1, borderRadius: 999, alignItems: 'center', justifyContent: 'center' },
+  pickerBackdrop: { flex: 1, justifyContent: 'center', padding: 20, backgroundColor: '#00000066' },
+  classPicker: { width: '100%', maxWidth: 460, alignSelf: 'center', gap: 9, maxHeight: '80%', borderRadius: 18, padding: 16 },
+  pickerList: { flexShrink: 1 },
+  pickerRows: { gap: 8, paddingVertical: 2 },
+  pickerHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 4 },
+  pickerTitle: { fontSize: 18, fontWeight: '800' },
+  pickerSubtitle: { fontSize: 12, marginTop: 2 },
+  pickerRow: { minHeight: 58, borderWidth: 1, borderRadius: 12, paddingHorizontal: 11, flexDirection: 'row', alignItems: 'center', gap: 10 },
   hero: { marginTop: 12, borderRadius: 18, padding: 16, flexDirection: 'row', gap: 12, overflow: 'hidden' },
   scheduleCard: { gap: 9, padding: 12 },
   scheduleHeading: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 10 },

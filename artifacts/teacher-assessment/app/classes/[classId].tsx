@@ -2,8 +2,10 @@ import { Alert } from '@/components/AppDialog';
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import {
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -231,6 +233,7 @@ export default function ClassDetailScreen() {
   const [newPupilFirstName, setNewPupilFirstName] = useState('');
   const [newPupilRegNo, setNewPupilRegNo] = useState('');
   const [newPupilDob, setNewPupilDob] = useState('');
+  const [showPupilDobPicker, setShowPupilDobPicker] = useState(false);
 
   const exportContinuousEvaluation = async (format: 'pdf' | 'excel') => {
     setExportingContinuousFormat(format);
@@ -390,8 +393,19 @@ export default function ClassDetailScreen() {
     setNewPupilLastName('');
     setNewPupilFirstName('');
     setNewPupilDob('');
+    setShowPupilDobPicker(false);
     setPupilModalVisible(true);
   };
+
+  const getPupilDobValue = () => {
+    if (!newPupilDob) return new Date();
+    const [year, month, day] = newPupilDob.split('-').map(Number);
+    const value = new Date(year, month - 1, day);
+    return Number.isNaN(value.getTime()) ? new Date() : value;
+  };
+
+  const formatPupilDob = (value: Date) =>
+    `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
 
   const openClassNameModal = () => {
     setClassNameInput(currentClass.name);
@@ -1088,16 +1102,49 @@ export default function ClassDetailScreen() {
                 <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>
                   DATE DE NAISSANCE (FACULTATIF)
                 </Text>
-                <TextInput
-                  placeholder="Ex. 15/04/2009"
-                  placeholderTextColor={colors.mutedForeground}
-                  value={newPupilDob}
-                  onChangeText={setNewPupilDob}
-                  style={[
-                    styles.textInput,
-                    { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background },
-                  ]}
-                />
+                {Platform.OS === 'web' ? (
+                  React.createElement('input', {
+                    type: 'date',
+                    'aria-label': 'Date de naissance',
+                    value: newPupilDob,
+                    onChange: (event: { currentTarget: { value: string } }) => setNewPupilDob(event.currentTarget.value),
+                    style: { height: 44, padding: '0 12px', borderWidth: 1, borderStyle: 'solid', borderColor: colors.border, borderRadius: 10, backgroundColor: colors.background, color: colors.foreground, fontSize: 14 },
+                  })
+                ) : (
+                  <>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Date de naissance : ${newPupilDob || 'Choisir une date'}`}
+                      onPress={() => setShowPupilDobPicker((visible) => !visible)}
+                      style={[styles.textInput, styles.pupilDatePickerButton, { borderColor: colors.border, backgroundColor: colors.background }]}
+                    >
+                      <Feather name="calendar" size={16} color={colors.primary} />
+                      <Text style={[styles.pupilDatePickerText, { color: newPupilDob ? colors.foreground : colors.mutedForeground }]}>
+                        {newPupilDob || 'Choisir une date'}
+                      </Text>
+                    </Pressable>
+                    {showPupilDobPicker ? (
+                      <View style={[styles.pupilDatePicker, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                        <DateTimePicker
+                          value={getPupilDobValue()}
+                          mode="date"
+                          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                          maximumDate={new Date()}
+                          onValueChange={(_, selectedDate) => {
+                            setNewPupilDob(formatPupilDob(selectedDate));
+                            if (Platform.OS !== 'ios') setShowPupilDobPicker(false);
+                          }}
+                          onDismiss={() => setShowPupilDobPicker(false)}
+                        />
+                        {Platform.OS === 'ios' ? (
+                          <Pressable accessibilityRole="button" onPress={() => setShowPupilDobPicker(false)} style={styles.pupilDatePickerDone}>
+                            <Text style={[styles.pupilDatePickerDoneText, { color: colors.primary }]}>Terminé</Text>
+                          </Pressable>
+                        ) : null}
+                      </View>
+                    ) : null}
+                  </>
+                )}
               </View>
 
               <View style={styles.modalButtons}>
@@ -1399,6 +1446,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     fontSize: 14,
   },
+  pupilDatePickerButton: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  pupilDatePickerText: { fontSize: 14, fontWeight: '600' },
+  pupilDatePicker: { alignItems: 'center', borderWidth: 1, borderRadius: 10, padding: 8 },
+  pupilDatePickerDone: { alignSelf: 'flex-end', paddingHorizontal: 12, paddingVertical: 7 },
+  pupilDatePickerDoneText: { fontSize: 14, fontWeight: '700' },
   modalButtons: {
     flexDirection: 'row',
     gap: 12,
