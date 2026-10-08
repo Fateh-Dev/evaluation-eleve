@@ -359,7 +359,7 @@ export default function ScheduleScreen() {
           onDelete={deleteSelectedSessions}
         />
       </View>
-      <View style={[styles.weekNavigator, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <View style={[styles.weekNavigator, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Afficher la semaine précédente"
@@ -385,12 +385,11 @@ export default function ScheduleScreen() {
                 style={[
                   styles.weekTab,
                   {
-                    backgroundColor: selected ? colors.primary : 'transparent',
-                    borderColor: selected ? colors.primary : colors.border,
+                    borderBottomColor: selected ? colors.primary : 'transparent',
                   },
                 ]}
               >
-                <Text style={[styles.weekTabText, { color: selected ? colors.primaryForeground : colors.foreground }]}>
+                <Text style={[styles.weekTabText, { color: selected ? colors.primary : colors.foreground }]}>
                   {formatWeekTab(weekStart)}
                 </Text>
               </Pressable>
@@ -1070,11 +1069,11 @@ const styles = StyleSheet.create({
   scheduleActionsRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
   exportAction: { flex: 1, alignItems: 'flex-start' },
   scheduleSelectionToolbar: { flex: 1, marginTop: 0, marginBottom: 0 },
-  weekNavigator: { minHeight: 58, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 14, marginTop: 14, paddingHorizontal: 4 },
+  weekNavigator: { minHeight: 56, flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, marginTop: 14, marginHorizontal: -20 },
   weekArrow: { width: 34, height: 44, alignItems: 'center', justifyContent: 'center' },
-  weekTabs: { flexGrow: 1, alignItems: 'center', gap: 6, paddingHorizontal: 4 },
-  weekTab: { minHeight: 38, borderWidth: 1, borderRadius: 11, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center' },
-  weekTabText: { fontSize: 12, fontWeight: '700' },
+  weekTabs: { flexGrow: 1, alignItems: 'center', gap: 12 },
+  weekTab: { minHeight: 52, borderBottomWidth: 2, paddingHorizontal: 10, alignItems: 'center', justifyContent: 'center' },
+  weekTabText: { fontSize: 13, fontWeight: '700' },
   currentWeekAction: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end', gap: 5, paddingVertical: 8, paddingHorizontal: 4 },
   currentWeekText: { fontSize: 12, fontWeight: '700' },
   addButton: { minHeight: 40, borderRadius: 10, paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },

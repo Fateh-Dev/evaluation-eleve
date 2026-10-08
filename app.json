@@ -1,3 +1,12 @@
 {
-  "expo": {}
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "3e5e3895-09fe-4aa8-9c4b-9feeb739d68e"
+      }
+    },
+    "android": {
+      "package": "com.fateh123456.workspace"
+    }
+  }
 }

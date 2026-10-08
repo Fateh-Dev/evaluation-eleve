@@ -18,6 +18,7 @@ import { ReminderProvider } from '@/context/ReminderContext';
 import { AppLockGate, SecurityProvider } from '@/context/SecurityContext';
 import { StorageProvider } from '@/context/StorageContext';
 import { ThemeProvider } from '@/context/ThemeContext';
+import { LaunchSplash } from '@/components/LaunchSplash';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 void SplashScreen.preventAutoHideAsync().catch(() => undefined);
@@ -41,21 +42,32 @@ export default function RootLayout() {
     Inter_700Bold,
   });
   const [startupTimedOut, setStartupTimedOut] = useState(false);
+  const [minimumSplashElapsed, setMinimumSplashElapsed] = useState(false);
 
   useEffect(() => {
-    const timeout = setTimeout(() => {
-      setStartupTimedOut(true);
+    const nativeSplashTimer = setTimeout(() => {
       SplashScreen.hideAsync().catch(() => undefined);
-    }, 3000);
+    }, 100);
+    const minimumSplashTimer = setTimeout(() => setMinimumSplashElapsed(true), 1200);
+    const startupTimeout = setTimeout(() => setStartupTimedOut(true), 3000);
 
-    if (fontsLoaded || fontError) {
-      SplashScreen.hideAsync().catch(() => undefined);
-    }
+    return () => {
+      clearTimeout(nativeSplashTimer);
+      clearTimeout(minimumSplashTimer);
+      clearTimeout(startupTimeout);
+    };
+  }, []);
 
-    return () => clearTimeout(timeout);
-  }, [fontsLoaded, fontError]);
-
-  if (!fontsLoaded && !fontError && !startupTimedOut) return null;
+  if (
+    !minimumSplashElapsed ||
+    (!fontsLoaded && !fontError && !startupTimedOut)
+  ) {
+    return (
+      <SafeAreaProvider>
+        <LaunchSplash />
+      </SafeAreaProvider>
+    );
+  }
 
   return (
     <SafeAreaProvider>

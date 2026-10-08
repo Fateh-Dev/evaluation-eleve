@@ -6,10 +6,17 @@
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "splash": {
-      "image": "./assets/images/logo.png",
-      "imageWidth": 180,
+      "image": "./assets/images/launch-splash.png",
+      "imageWidth": 390,
       "resizeMode": "contain",
-      "backgroundColor": "#FFFFFF"
+      "backgroundColor": "#FBF6EC",
+      "ios": {
+        "enableFullScreenImage_legacy": true
+      },
+      "android": {
+        "image": "./assets/images/icon_2.png",
+        "imageWidth": 180
+      }
     },
     "scheme": "chaibeddra-evaluation",
     "userInterfaceStyle": "automatic",
