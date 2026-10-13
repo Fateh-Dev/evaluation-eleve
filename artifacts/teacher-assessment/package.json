@@ -10,6 +10,7 @@
     "serve": "node server/serve.js",
     "test:schedule": "node --experimental-strip-types services/schedule.test.ts",
     "test:student-report": "node --experimental-strip-types services/studentProgressReport.test.ts",
+    "test:pedagogical-config": "node --experimental-strip-types services/pedagogicalConfiguration.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {

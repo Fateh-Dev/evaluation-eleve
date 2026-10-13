@@ -29,6 +29,10 @@ export default function AssessmentEvaluationScreen() {
   const currentAssessment = useMemo(() => {
     return (assessmentId ? data.getAssessment(assessmentId) : null) ?? data.assessment;
   }, [assessmentId, data.assessments, data.assessment]);
+  const isPrerequisiteAssessment =
+    currentAssessment.evaluationType === 'prerequisites';
+  const criterionLabel = isPrerequisiteAssessment ? 'prérequis' : 'objectif';
+  const criterionLabelPlural = isPrerequisiteAssessment ? 'prérequis' : 'objectifs';
 
   const currentClass = useMemo(() => {
     return data.classes.find((c) => c.id === currentAssessment.classId) ?? data.activeClass;
@@ -108,7 +112,7 @@ export default function AssessmentEvaluationScreen() {
   const handleDeleteAssessment = () => {
     Alert.alert(
       'Supprimer l’évaluation',
-      `Êtes-vous sûr de vouloir supprimer cette évaluation ("${currentAssessment.title}") ?\n\nToutes les notes et objectifs seront définitivement effacés.`,
+      `Êtes-vous sûr de vouloir supprimer cette évaluation ("${currentAssessment.title}") ?\n\nToutes les notes et ${criterionLabelPlural} seront définitivement effacés.`,
       [
         { text: 'Annuler', style: 'cancel' },
         {
@@ -126,8 +130,8 @@ export default function AssessmentEvaluationScreen() {
 
   const handleDeleteObjective = (objectiveId: string, order: number, description: string) => {
     Alert.alert(
-      'Supprimer l’objectif',
-      `Voulez-vous supprimer l'objectif ${order} : "${description}" ?\n\nLes évaluations associées à cet objectif seront effacées.`,
+      `Supprimer le ${criterionLabel}`,
+      `Voulez-vous supprimer le ${criterionLabel} ${order} : "${description}" ?\n\nLes évaluations associées à ce critère seront effacées.`,
       [
         { text: 'Annuler', style: 'cancel' },
         {
@@ -198,7 +202,7 @@ export default function AssessmentEvaluationScreen() {
   return (
     <Screen scroll={false} bottomPadding={20} onTouchStart={() => setAssessmentDeleteArmed(false)}>
       <AppHeader
-        eyebrow="Évaluation"
+        eyebrow={isPrerequisiteAssessment ? 'Test des prérequis' : 'Évaluation'}
         title={currentAssessment.title}
         onBack={() => router.back()}
         onTitleLongPress={() => setAssessmentDeleteArmed(true)}
@@ -209,7 +213,7 @@ export default function AssessmentEvaluationScreen() {
       <GuideAnchor
         id="evaluation-actions"
         title="Actions de l’évaluation"
-        description="Enregistrez les résultats, gérez les objectifs, ouvrez l’analyse ou exportez la grille."
+        description={`Enregistrez les résultats, gérez les ${criterionLabelPlural}, ouvrez l’analyse ou exportez la grille.`}
         style={styles.topLine}
       >
         <View style={styles.topActions}>
@@ -226,7 +230,7 @@ export default function AssessmentEvaluationScreen() {
           </Pressable>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Objectifs"
+            accessibilityLabel={isPrerequisiteAssessment ? 'Prérequis' : 'Objectifs'}
             onPress={() => setObjectivesModalVisible(true)}
             style={[styles.topIconBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
           >
@@ -346,7 +350,7 @@ export default function AssessmentEvaluationScreen() {
                 <View style={[styles.metaObjectivesBadge, { backgroundColor: colors.secondary }]}>
                   <Feather name="list" size={13} color={colors.mutedForeground} />
                   <Text style={[styles.metaObjectivesText, { color: colors.foreground }]}>
-                    {currentObjectives.length} objectif{currentObjectives.length !== 1 ? 's' : ''}
+                    {currentObjectives.length} {currentObjectives.length !== 1 && !isPrerequisiteAssessment ? 'objectifs' : criterionLabel}
                   </Text>
                 </View>
               </View>
@@ -386,13 +390,13 @@ export default function AssessmentEvaluationScreen() {
         <Surface style={styles.emptyCard}>
           <Feather name="list" size={32} color={colors.mutedForeground} />
           <Text style={[styles.emptyCardTitle, { color: colors.foreground }]}>
-            Aucun objectif d'évaluation
+            Aucun {criterionLabel} d'évaluation
           </Text>
           <Text style={[styles.emptyCardText, { color: colors.mutedForeground }]}>
-            Ajoutez au moins un objectif pour pouvoir évaluer les compétences.
+            Ajoutez au moins un {criterionLabel} pour pouvoir évaluer les compétences.
           </Text>
           <Button
-            label="Ajouter un objectif"
+            label={`Ajouter ${isPrerequisiteAssessment ? 'un prérequis' : 'un objectif'}`}
             icon="plus"
             onPress={() => setObjectivesModalVisible(true)}
           />
@@ -647,10 +651,10 @@ export default function AssessmentEvaluationScreen() {
             <View style={styles.modalHeader}>
               <View>
                 <Text style={[styles.modalTitle, { color: colors.foreground }]}>
-                  Objectifs d'évaluation
+                  {isPrerequisiteAssessment ? 'Prérequis évalués' : 'Objectifs d’évaluation'}
                 </Text>
                 <Text style={[styles.modalSubtitle, { color: colors.mutedForeground }]}>
-                  {currentAssessment.competency} ({currentObjectives.length} objectifs)
+                  {currentAssessment.competency} ({currentObjectives.length} {criterionLabelPlural})
                 </Text>
               </View>
               <Pressable
@@ -664,7 +668,7 @@ export default function AssessmentEvaluationScreen() {
             {/* Add New Objective Input */}
             <View style={styles.addObjBox}>
               <TextInput
-                placeholder="Nouvel objectif d’évaluation…"
+                placeholder={isPrerequisiteAssessment ? 'Nouveau prérequis…' : 'Nouvel objectif d’évaluation…'}
                 placeholderTextColor={colors.mutedForeground}
                 value={newObjectiveText}
                 onChangeText={setNewObjectiveText}

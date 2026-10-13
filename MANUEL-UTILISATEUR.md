@@ -69,12 +69,12 @@ Vérifiez l’aperçu et le nombre de lignes valides avant d’appuyer sur **Imp
 
 1. Ouvrir **Suivi**.
 2. Appuyer sur **Test de niveau initial**.
-3. Choisir la classe, puis ajouter une compétence au test.
-4. Vérifier le titre, la date, le support et les objectifs proposés; les adapter si nécessaire.
-5. Ouvrir l’évaluation créée et renseigner les résultats des élèves pour chaque objectif.
+3. Choisir la classe et le type d’évaluation : évaluation habituelle ou test des prérequis d’une compétence.
+4. Choisir la compétence, puis vérifier le titre, la date, le support et les critères proposés; les adapter si nécessaire.
+5. Ouvrir l’évaluation créée et renseigner les résultats des élèves pour chaque critère.
 6. Consulter l’analyse ou exporter le document depuis les actions de l’évaluation.
 
-Le test initial sert à repérer les acquis de départ. Les compétences disponibles et leurs objectifs dépendent de la configuration pédagogique du niveau de la classe.
+Le test initial sert à repérer les acquis de départ. Les compétences disponibles, leurs objectifs et leurs prérequis dépendent de la configuration pédagogique du niveau de la classe. Pour préparer un test des prérequis, ouvrez **Plus → Configuration pédagogique**, choisissez l’année, le niveau et la compétence, puis **Configurer → Prérequis**. Enregistrez au moins un critère avant de créer ce test. La compréhension de l’écrit propose par défaut les sept critères du modèle fourni; ils restent modifiables. Chaque compétence peut avoir une évaluation habituelle et un test des prérequis distincts dans une classe.
 
 ## Suivre les évaluations par trimestre
 
@@ -142,7 +142,7 @@ Cette bibliothèque est actuellement personnelle et stockée sur l’appareil; e
 
 ## Configurer, sauvegarder et protéger les données
 
-Dans **Plus → Configuration pédagogique**, gérez les années, niveaux, compétences et objectifs utilisés lors de la création des évaluations.
+Dans **Plus → Configuration pédagogique**, gérez les années, niveaux, compétences, objectifs d’évaluation et prérequis utilisés lors de la création des évaluations.
 
 Dans **Plus → Paramètres de l’application**, vous pouvez notamment :
 

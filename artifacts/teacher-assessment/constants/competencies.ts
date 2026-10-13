@@ -5,6 +5,7 @@ export type CompetencyTemplate = {
   defaultSupport: string;
   defaultSessionObjectives: string;
   defaultObjectives: string[];
+  defaultPrerequisites?: string[];
 };
 
 export const COMPETENCY_TEMPLATES: CompetencyTemplate[] = [
@@ -26,6 +27,15 @@ export const COMPETENCY_TEMPLATES: CompetencyTemplate[] = [
       "Dégager la thèse défendue et les arguments avancés.",
       "Repérer les marques de présence de l’auteur.",
       "Dégager la visée communicative d’un discours argumentatif."
+    ],
+    defaultPrerequisites: [
+      "Identifier le thème du texte.",
+      "Repérer le champ lexical dominant.",
+      "Comprendre le sens général du texte.",
+      "Identifier les procédés explicatifs.",
+      "Repérer le présent de l’indicatif exprimant une vérité générale.",
+      "Évaluer l’objectivité de l’auteur.",
+      "Comprendre la visée communicative du texte.",
     ],
   },
   {

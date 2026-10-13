@@ -14,6 +14,7 @@ import {
   createConfigId,
   createDefaultSchoolYearConfiguration,
   getObjectivesForPair,
+  getPrerequisitesForPair,
   migrateSchoolYearConfigurations,
   normalizeLabel,
   type ConfiguredObjective,
@@ -165,6 +166,7 @@ export type Assessment = {
   level: string;
   competency: string;
   competencyId?: string;
+  evaluationType?: 'competency' | 'prerequisites';
   support: string;
   sessionObjectives: string;
   status: 'Draft' | 'InProgress' | 'Completed' | 'Archived';
@@ -333,6 +335,17 @@ export type AppDataContextValue = {
     levelId: string,
     competencyId: string,
   ) => ConfiguredObjective[];
+  getPrerequisitesForLevelCompetency: (
+    year: string,
+    levelId: string,
+    competencyId: string,
+  ) => ConfiguredObjective[];
+  setConfiguredPrerequisites: (
+    year: string,
+    levelId: string,
+    competencyId: string,
+    descriptions: string[],
+  ) => void;
   resetAllData: () => Promise<void>;
   generateTestData: () => Promise<{ classCount: number; pupilCount: number; weeklyHours: number }>;
   getBackupState: () => AppState;
@@ -431,6 +444,7 @@ export type AppDataContextValue = {
     classId: string;
     competency: string;
     competencyId?: string;
+    evaluationType?: 'competency' | 'prerequisites';
     title: string;
     subject?: string;
     level?: string;
@@ -1067,6 +1081,17 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     competencyId: string,
   ) =>
     getObjectivesForPair(
+      getSchoolYearConfiguration(year),
+      levelId,
+      competencyId,
+    );
+
+  const getPrerequisitesForLevelCompetency = (
+    year: string,
+    levelId: string,
+    competencyId: string,
+  ) =>
+    getPrerequisitesForPair(
       getSchoolYearConfiguration(year),
       levelId,
       competencyId,
@@ -1872,6 +1897,9 @@ export function AppDataProvider({ children }: PropsWithChildren) {
               objectives: item.objectives.filter(
                 (entry) => entry.levelId !== levelId,
               ),
+              prerequisiteObjectives: item.prerequisiteObjectives.filter(
+                (entry) => entry.levelId !== levelId,
+              ),
             }
           : item,
       ),
@@ -1933,6 +1961,23 @@ export function AppDataProvider({ children }: PropsWithChildren) {
               order: index + 1,
               description,
             })),
+          ],
+      prerequisiteObjectives: configuration.prerequisiteObjectives.some(
+        (item) =>
+          item.levelId === levelId && item.competencyId === competency.id,
+      )
+        ? configuration.prerequisiteObjectives
+        : [
+            ...configuration.prerequisiteObjectives,
+            ...(template?.defaultPrerequisites ?? []).map(
+              (description, index) => ({
+                id: createConfigId('prerequisite'),
+                levelId,
+                competencyId: competency.id,
+                order: index + 1,
+                description,
+              }),
+            ),
           ],
     };
     setState((prev) => {
@@ -2004,6 +2049,25 @@ export function AppDataProvider({ children }: PropsWithChildren) {
               })),
             ]
           : configuration.objectives,
+      prerequisiteObjectives:
+        associated &&
+        !configuration.prerequisiteObjectives.some(
+          (item) =>
+            item.levelId === levelId && item.competencyId === competencyId,
+        )
+          ? [
+              ...configuration.prerequisiteObjectives,
+              ...(template?.defaultPrerequisites ?? []).map(
+                (description, index) => ({
+                  id: createConfigId('prerequisite'),
+                  levelId,
+                  competencyId,
+                  order: index + 1,
+                  description,
+                }),
+              ),
+            ]
+          : configuration.prerequisiteObjectives,
     };
     setState((prev) => ({
       ...prev,
@@ -2042,6 +2106,50 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         ),
         ...pairObjectives.map((description, index) => ({
           id: createConfigId('objective'),
+          levelId,
+          competencyId,
+          order: index + 1,
+          description,
+        })),
+      ],
+    };
+    setState((prev) => ({
+      ...prev,
+      schoolYearConfigurations: prev.schoolYearConfigurations.map((item) =>
+        normalizeLabel(item.year) === normalizeLabel(year)
+          ? updatedConfiguration
+          : item,
+      ),
+    }));
+  };
+
+  const setConfiguredPrerequisites = (
+    year: string,
+    levelId: string,
+    competencyId: string,
+    descriptions: string[],
+  ) => {
+    const configuration = getSchoolYearConfiguration(year);
+    if (
+      !configuration ||
+      !configuration.associations.some(
+        (item) =>
+          item.levelId === levelId && item.competencyId === competencyId,
+      )
+    )
+      return;
+    const pairPrerequisites = descriptions
+      .map((description) => description.trim())
+      .filter(Boolean);
+    const updatedConfiguration: SchoolYearConfiguration = {
+      ...configuration,
+      prerequisiteObjectives: [
+        ...configuration.prerequisiteObjectives.filter(
+          (item) =>
+            !(item.levelId === levelId && item.competencyId === competencyId),
+        ),
+        ...pairPrerequisites.map((description, index) => ({
+          id: createConfigId('prerequisite'),
           levelId,
           competencyId,
           order: index + 1,
@@ -2864,6 +2972,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     classId: string;
     competency: string;
     competencyId?: string;
+    evaluationType?: 'competency' | 'prerequisites';
     title: string;
     subject?: string;
     level?: string;
@@ -2891,8 +3000,17 @@ export function AppDataProvider({ children }: PropsWithChildren) {
           normalizeLabel(item.name) === normalizeLabel(input.competency),
       );
     const competencyId = input.competencyId ?? competency?.id;
+    const evaluationType = input.evaluationType ?? 'competency';
+    if (
+      evaluationType === 'prerequisites' &&
+      (!competencyId ||
+        !getPrerequisitesForPair(configuration, levelId, competencyId).length)
+    ) {
+      return undefined;
+    }
     const duplicateExists = state.assessments.some((assessment) =>
       assessment.classId === input.classId &&
+      (assessment.evaluationType ?? 'competency') === evaluationType &&
       ((competencyId && assessment.competencyId === competencyId) ||
         normalizeLabel(assessment.competency) === normalizeLabel(input.competency)),
     );
@@ -2915,6 +3033,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       level: input.level ?? targetClass.level,
       competency: input.competency.trim(),
       ...(competencyId ? { competencyId } : {}),
+      evaluationType,
       support: input.support ?? '',
       sessionObjectives: input.sessionObjectives ?? '',
       status: 'Draft',
@@ -2925,9 +3044,10 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     if (!objectiveTexts || objectiveTexts.length === 0) {
       const configured =
         competencyId && levelId
-          ? getObjectivesForPair(configuration, levelId, competencyId).map(
-              (item) => item.description,
-            )
+          ? (evaluationType === 'prerequisites'
+              ? getPrerequisitesForPair(configuration, levelId, competencyId)
+              : getObjectivesForPair(configuration, levelId, competencyId)
+            ).map((item) => item.description)
           : [];
       const matched = COMPETENCY_TEMPLATES.find(
         (item) =>
@@ -3335,10 +3455,12 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       addOrAssociateCompetency,
       setCompetencyAssociation,
       setConfiguredObjectives,
+      setConfiguredPrerequisites,
       getSchoolYearConfiguration,
       getLevelIdForYear,
       getCompetenciesForLevel,
       getObjectivesForLevelCompetency,
+      getPrerequisitesForLevelCompetency,
       resetAllData,
       generateTestData,
       getBackupState,

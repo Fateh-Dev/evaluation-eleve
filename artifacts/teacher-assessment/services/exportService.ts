@@ -23,6 +23,7 @@ export type AssessmentExportData = {
     date: string;
     subject: string;
     competency: string;
+    evaluationType?: 'competency' | 'prerequisites';
     support: string;
     sessionObjectives: string;
   };
@@ -56,6 +57,8 @@ const COLOR_BORDER = '7F7F7F'; // Crisp border gray
  */
 export function generateAssessmentCsv(data: AssessmentExportData): Uint8Array {
   const rows: string[][] = [];
+  const criteriaLabel =
+    data.assessment.evaluationType === 'prerequisites' ? 'Prérequis' : 'Objectifs';
 
   // Header metadata
   rows.push([
@@ -68,7 +71,7 @@ export function generateAssessmentCsv(data: AssessmentExportData): Uint8Array {
     `Objectif de la séance : ${data.assessment.sessionObjectives || ''}`,
     `Support : ${data.assessment.support || ''}`,
   ]);
-  rows.push([`Objectifs d'évaluation (${data.objectives.length} Objectifs) :`]);
+  rows.push([`${criteriaLabel} d'évaluation (${data.objectives.length}) :`]);
   data.objectives.forEach((obj, idx) => {
     const num = String(obj.order || idx + 1).padStart(2, '0');
     rows.push([`${num}. ${obj.description}`]);
@@ -82,7 +85,8 @@ export function generateAssessmentCsv(data: AssessmentExportData): Uint8Array {
   const objHeaders: string[] = [];
   data.objectives.forEach((obj, idx) => {
     const num = String(obj.order || idx + 1).padStart(2, '0');
-    objHeaders.push(`Obj ${num} (+)`, `Obj ${num} (±)`, `Obj ${num} (-)`);
+    const criterion = data.assessment.evaluationType === 'prerequisites' ? 'Prér.' : 'Obj';
+    objHeaders.push(`${criterion} ${num} (+)`, `${criterion} ${num} (±)`, `${criterion} ${num} (-)`);
   });
   rows.push(['N°', 'Nom et Prénom', 'Présence', ...objHeaders, 'Total (+)', 'Total (±)', 'Total (-)']);
 
@@ -168,6 +172,8 @@ export async function generateAssessmentWorkbook(data: AssessmentExportData): Pr
   type Cell = { value: string | number; style?: number } | null;
   const zip = new JSZip();
   const rows: Cell[][] = [];
+  const criteriaLabel =
+    data.assessment.evaluationType === 'prerequisites' ? 'PRÉREQUIS' : 'OBJECTIFS';
   const merges: string[] = [];
   const columnCount = Math.max(8, 6 + data.objectives.length * 3);
   const lastColumn = excelColumn(columnCount - 1);
@@ -189,7 +195,7 @@ export async function generateAssessmentWorkbook(data: AssessmentExportData): Pr
   mergedLine(`Support : ${data.assessment.support || '—'}`, 2);
   rows.push([]);
 
-  mergedLine(`OBJECTIFS D’ÉVALUATION (${data.objectives.length})`, 3);
+  mergedLine(`${criteriaLabel} D’ÉVALUATION (${data.objectives.length})`, 3);
   data.objectives.forEach((objective, index) => {
     mergedLine(`${String(objective.order || index + 1).padStart(2, '0')}. ${objective.description}`, 4);
   });
@@ -205,7 +211,7 @@ export async function generateAssessmentWorkbook(data: AssessmentExportData): Pr
   data.objectives.forEach((objective, index) => {
     const firstColumn = groupedHeader.length;
     groupedHeader.push({
-      value: `Objectif ${String(objective.order || index + 1).padStart(2, '0')}`,
+      value: `${criteriaLabel === 'PRÉREQUIS' ? 'Prérequis' : 'Objectif'} ${String(objective.order || index + 1).padStart(2, '0')}`,
       style: 5,
     }, null, null);
     merges.push(`${excelColumn(firstColumn)}${headerRowNumber}:${excelColumn(firstColumn + 2)}${headerRowNumber}`);
@@ -410,6 +416,8 @@ function excelColumn(index: number) {
  */
 export async function generateAssessmentWord(data: AssessmentExportData): Promise<Uint8Array> {
   const zip = new JSZip();
+  const criteriaLabel =
+    data.assessment.evaluationType === 'prerequisites' ? 'PRÉREQUIS' : 'OBJECTIFS';
   const escapeXml = (value: string) => value.replace(/[&<>"']/g, (char) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;',
   })[char] ?? char);
@@ -438,7 +446,7 @@ export async function generateAssessmentWord(data: AssessmentExportData): Promis
     paragraph(`Évaluation : ${data.assessment.title || '—'}   |   Date : ${data.assessment.date || '—'}`),
     paragraph(`Objectif de la séance : ${data.assessment.sessionObjectives || '—'}`),
     paragraph(`Support : ${data.assessment.support || '—'}`, { after: 180 }),
-    sectionTitle(`OBJECTIFS D’ÉVALUATION (${data.objectives.length})`),
+    sectionTitle(`${criteriaLabel} D’ÉVALUATION (${data.objectives.length})`),
   ];
   data.objectives.forEach((objective, index) => {
     parts.push(paragraph(`${String(objective.order || index + 1).padStart(2, '0')}.  ${objective.description}`, { after: 45 }));
@@ -462,7 +470,7 @@ export async function generateAssessmentWord(data: AssessmentExportData): Promis
     cell('N°', numberWidth, { fill: '1F4E78', color: 'FFFFFF', bold: true, verticalMerge: 'restart' }),
     cell('Nom et prénom', nameWidth, { fill: '1F4E78', color: 'FFFFFF', bold: true, align: 'left', verticalMerge: 'restart' }),
     cell('Présence', presenceWidth, { fill: '1F4E78', color: 'FFFFFF', bold: true, verticalMerge: 'restart' }),
-    ...data.objectives.map((objective, index) => cell(`Objectif ${String(objective.order || index + 1).padStart(2, '0')}`, evaluationWidth * 3, { fill: '1F4E78', color: 'FFFFFF', bold: true, gridSpan: 3 })),
+    ...data.objectives.map((objective, index) => cell(`${criteriaLabel === 'PRÉREQUIS' ? 'Prérequis' : 'Objectif'} ${String(objective.order || index + 1).padStart(2, '0')}`, evaluationWidth * 3, { fill: '1F4E78', color: 'FFFFFF', bold: true, gridSpan: 3 })),
     cell('Totaux', totalCellWidth * 3, { fill: '1F4E78', color: 'FFFFFF', bold: true, gridSpan: 3 }),
   ];
   const subHeaders = [
@@ -1008,6 +1016,8 @@ export async function generateContinuousEvaluationWorkbook(
  */
 export function generateAssessmentPdfHtml(data: AssessmentExportData): string {
   const numObjectives = data.objectives.length;
+  const criteriaLabel =
+    data.assessment.evaluationType === 'prerequisites' ? 'Prérequis' : 'Objectifs';
   const absentPupilIds = new Set(data.absentPupilIds ?? []);
 
   // Compute totals
@@ -1066,7 +1076,7 @@ export function generateAssessmentPdfHtml(data: AssessmentExportData): string {
   }).join('');
 
   const objHeaders = data.objectives.map((obj) => `
-    <th colspan="3" class="th-obj">Obj ${String(obj.order).padStart(2, '0')}</th>
+    <th colspan="3" class="th-obj">${data.assessment.evaluationType === 'prerequisites' ? 'Prér.' : 'Obj'} ${String(obj.order).padStart(2, '0')}</th>
   `).join('');
 
   const subHeaders = data.objectives.map(() => `
@@ -1247,7 +1257,7 @@ export function generateAssessmentPdfHtml(data: AssessmentExportData): string {
       </div>
 
       <div class="objectives-box">
-        <div class="objectives-title">Objectifs d’évaluation (${numObjectives} objectifs) :</div>
+        <div class="objectives-title">${criteriaLabel} d’évaluation (${numObjectives}) :</div>
         <div class="objectives-grid">
           ${data.objectives.map(obj => `
             <div class="objective-item"><strong>${String(obj.order).padStart(2, '0')}.</strong> ${obj.description}</div>

@@ -42,7 +42,7 @@ export default function NewAssessmentScreen() {
   const existingCompetencyCount = existingLevelTest
     ? data.assessments.filter(
         (assessment) => assessment.levelTestId === existingLevelTest.id,
-      ).length
+      ).filter((assessment) => (assessment.evaluationType ?? 'competency') === 'competency').length
     : 0;
 
   const competencies = useMemo(
@@ -59,14 +59,21 @@ export default function NewAssessmentScreen() {
       selectedClass.level,
     ],
   );
+  const [evaluationType, setEvaluationType] = useState<
+    'competency' | 'prerequisites'
+  >('competency');
   const classAssessments = useMemo(
     () => data.getAssessmentsForClass(selectedClassId),
     [data.assessments, selectedClassId],
   );
-  const isCompetencyUsed = (competency: (typeof competencies)[number]) =>
+  const isCompetencyUsed = (
+    competency: (typeof competencies)[number],
+    type = evaluationType,
+  ) =>
     classAssessments.some((assessment) =>
-      assessment.competencyId === competency.id ||
-      normalizeLabel(assessment.competency) === normalizeLabel(competency.name),
+      (assessment.evaluationType ?? 'competency') === type &&
+      (assessment.competencyId === competency.id ||
+        normalizeLabel(assessment.competency) === normalizeLabel(competency.name)),
     );
   const [selectedCompetencyId, setSelectedCompetencyId] = useState('');
   const [title, setTitle] = useState('');
@@ -116,15 +123,41 @@ export default function NewAssessmentScreen() {
         nextCompetency.id,
       )
       .map((item) => item.description);
-    setTitle(template?.defaultTitle ?? nextCompetency.name);
-    setSupport(template?.defaultSupport ?? '');
-    setSessionObjectives(template?.defaultSessionObjectives ?? '');
-    setObjectives(
-      configuredObjectives.length
-        ? configuredObjectives
-        : (template?.defaultObjectives ?? ['Objectif 1']),
+    setTitle(
+      evaluationType === 'prerequisites'
+        ? `Évaluation des prérequis — ${nextCompetency.name}`
+        : template?.defaultTitle ?? nextCompetency.name,
     );
-  }, [selectedClassId, selectedCompetencyId, data.schoolYearConfigurations, data.assessments]);
+    setSupport(template?.defaultSupport ?? '');
+    setSessionObjectives(
+      evaluationType === 'prerequisites'
+        ? `Vérifier les prérequis de la compétence « ${nextCompetency.name} ».`
+        : template?.defaultSessionObjectives ?? '',
+    );
+    const configuredCriteria =
+      evaluationType === 'prerequisites'
+        ? data
+            .getPrerequisitesForLevelCompetency(
+              selectedClass.academicYear,
+              levelId,
+              nextCompetency.id,
+            )
+            .map((item) => item.description)
+        : configuredObjectives;
+    setObjectives(
+      configuredCriteria.length
+        ? configuredCriteria
+        : evaluationType === 'prerequisites'
+          ? []
+          : (template?.defaultObjectives ?? ['Objectif 1']),
+    );
+  }, [
+    selectedClassId,
+    selectedCompetencyId,
+    evaluationType,
+    data.schoolYearConfigurations,
+    data.assessments,
+  ]);
 
   const handleSelectCompetency = (competencyId: string) => {
     const competency = competencies.find((item) => item.id === competencyId);
@@ -164,14 +197,39 @@ export default function NewAssessmentScreen() {
       );
       return;
     }
-    if (objectives.length === 0) {
-      Alert.alert('Objectifs requis', 'Veuillez ajouter au moins un objectif.');
+    if (
+      evaluationType === 'prerequisites' &&
+      data.getPrerequisitesForLevelCompetency(
+        selectedClass.academicYear,
+        data.getLevelIdForYear(
+          selectedClass.academicYear,
+          selectedClass.levelId,
+          selectedClass.level,
+        ),
+        selectedCompetency.id,
+      ).length === 0
+    ) {
+      Alert.alert(
+        'Prérequis non configurés',
+        'Configurez au moins un prérequis pour cette compétence dans les paramètres pédagogiques avant de créer son test.',
+      );
       return;
     }
-    if (isCompetencyUsed(selectedCompetency)) {
+    if (objectives.length === 0) {
       Alert.alert(
-        'Compétence déjà évaluée',
-        `La compétence « ${selectedCompetency.name} » a déjà été ajoutée à ${selectedClass.name} pour l’année scolaire ${selectedClass.academicYear}.`,
+        evaluationType === 'prerequisites' ? 'Prérequis requis' : 'Objectifs requis',
+        evaluationType === 'prerequisites'
+          ? 'Configurez les prérequis de cette compétence dans la configuration pédagogique avant de créer le test.'
+          : 'Veuillez ajouter au moins un objectif.',
+      );
+      return;
+    }
+    if (isCompetencyUsed(selectedCompetency, evaluationType)) {
+      Alert.alert(
+        evaluationType === 'prerequisites'
+          ? 'Test des prérequis déjà créé'
+          : 'Compétence déjà évaluée',
+        `La compétence « ${selectedCompetency.name} » possède déjà ${evaluationType === 'prerequisites' ? 'un test des prérequis' : 'une évaluation habituelle'} pour ${selectedClass.name} pendant l’année scolaire ${selectedClass.academicYear}.`,
       );
       return;
     }
@@ -180,6 +238,7 @@ export default function NewAssessmentScreen() {
       classId: selectedClassId,
       competency: selectedCompetency.name,
       competencyId: selectedCompetency.id,
+      evaluationType,
       title: title.trim(),
       subject: subject.trim(),
       level: selectedClass.level,
@@ -202,10 +261,10 @@ export default function NewAssessmentScreen() {
   return (
     <Screen onTouchStart={() => setRemoveArmedObjectiveIndex(null)}>
       <AppHeader
-        eyebrow="Test de niveau"
+        eyebrow={evaluationType === 'prerequisites' ? 'Test des prérequis' : 'Test de niveau'}
         title={
           existingLevelTest
-            ? 'Ajouter une compétence'
+            ? 'Ajouter une évaluation'
             : 'Créer le test initial'
         }
         onBack={() => router.back()}
@@ -214,8 +273,8 @@ export default function NewAssessmentScreen() {
       <Surface style={styles.sectionCard}>
         <Text style={[styles.templateCount, { color: colors.mutedForeground }]}>
           {existingLevelTest
-            ? `Le test initial de ${selectedClass.name} pour ${selectedClass.academicYear} existe déjà. Ajoutez-y une compétence (${existingCompetencyCount} actuellement) ; un seul test initial est conservé par classe et par année.`
-            : `Vous créez le test initial de ${selectedClass.name} pour ${selectedClass.academicYear}. Les compétences ajoutées ensuite feront partie du même test.`}
+            ? `Le test initial de ${selectedClass.name} pour ${selectedClass.academicYear} existe déjà. ${existingCompetencyCount} compétence${existingCompetencyCount > 1 ? 's' : ''} évaluée${existingCompetencyCount > 1 ? 's' : ''} actuellement.`
+            : `Vous créez le test initial de ${selectedClass.name} pour ${selectedClass.academicYear}.`}
         </Text>
       </Surface>
 
@@ -267,6 +326,49 @@ export default function NewAssessmentScreen() {
         </ScrollView>
       </Surface>
 
+      <Surface style={styles.sectionCard}>
+        <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>
+          2. TYPE D’ÉVALUATION
+        </Text>
+        <View style={styles.typeChoices}>
+          {([
+            ['competency', 'Évaluation habituelle'],
+            ['prerequisites', 'Test des prérequis'],
+          ] as const).map(([type, label]) => {
+            const selected = evaluationType === type;
+            return (
+              <Pressable
+                key={type}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                onPress={() => setEvaluationType(type)}
+                style={[
+                  styles.typeChoice,
+                  {
+                    backgroundColor: selected ? colors.accent : colors.card,
+                    borderColor: selected ? colors.primary : colors.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.typeChoiceTitle,
+                    { color: selected ? colors.primary : colors.foreground },
+                  ]}
+                >
+                  {label}
+                </Text>
+                <Text style={[styles.typeChoiceDescription, { color: colors.mutedForeground }]}>
+                  {type === 'prerequisites'
+                    ? 'Mesure les acquis déjà nécessaires pour cette compétence.'
+                    : 'Évalue les objectifs habituels de la compétence.'}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </Surface>
+
       {/* Competencies configured for this school year and level */}
       <Surface
         style={styles.sectionCard}
@@ -274,11 +376,12 @@ export default function NewAssessmentScreen() {
         guideDescription="Choisissez une compétence disponible pour le niveau et l’année scolaire de la classe."
       >
         <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>
-          2. COMPÉTENCES ASSOCIÉES À {selectedClass.level.toLocaleUpperCase()}
+          3. COMPÉTENCES ASSOCIÉES À {selectedClass.level.toLocaleUpperCase()}
         </Text>
         <Text style={[styles.templateCount, { color: colors.mutedForeground }]}>
-          Année scolaire : {selectedClass.academicYear}. Les objectifs sont
-          copiés depuis la configuration de ce niveau.
+          Année scolaire : {selectedClass.academicYear}. {evaluationType === 'prerequisites'
+            ? 'Les prérequis enregistrés pour cette compétence seront copiés dans le test.'
+            : 'Les objectifs enregistrés pour cette compétence seront copiés dans le test.'}
         </Text>
         <View style={styles.templatesGrid}>
           {competencies.map((competency) => {
@@ -289,11 +392,18 @@ export default function NewAssessmentScreen() {
               selectedClass.levelId,
               selectedClass.level,
             );
-            const objectiveCount = data.getObjectivesForLevelCompetency(
-              selectedClass.academicYear,
-              levelId,
-              competency.id,
-            ).length;
+            const objectiveCount =
+              evaluationType === 'prerequisites'
+                ? data.getPrerequisitesForLevelCompetency(
+                    selectedClass.academicYear,
+                    levelId,
+                    competency.id,
+                  ).length
+                : data.getObjectivesForLevelCompetency(
+                    selectedClass.academicYear,
+                    levelId,
+                    competency.id,
+                  ).length;
             return (
               <Pressable
                 key={competency.id}
@@ -326,7 +436,7 @@ export default function NewAssessmentScreen() {
                 >
                   {isAlreadyUsed
                     ? `Déjà évaluée pour ${selectedClass.name} cette année`
-                    : `${objectiveCount} objectif${objectiveCount > 1 ? 's' : ''} configuré${objectiveCount > 1 ? 's' : ''}`}
+                    : `${objectiveCount} ${evaluationType === 'prerequisites' ? 'prérequis' : 'objectif'}${objectiveCount > 1 ? 's' : ''} configuré${objectiveCount > 1 ? 's' : ''}`}
                 </Text>
               </Pressable>
             );
@@ -348,6 +458,29 @@ export default function NewAssessmentScreen() {
             />
           </View>
         )}
+        {evaluationType === 'prerequisites' &&
+          selectedCompetency &&
+          data.getPrerequisitesForLevelCompetency(
+            selectedClass.academicYear,
+            data.getLevelIdForYear(
+              selectedClass.academicYear,
+              selectedClass.levelId,
+              selectedClass.level,
+            ),
+            selectedCompetency.id,
+          ).length === 0 && (
+            <View style={styles.prerequisiteHint}>
+              <Text style={[styles.templateCount, { color: colors.mutedForeground }]}>
+                Aucun prérequis n’est encore configuré pour cette compétence.
+              </Text>
+              <Button
+                label="Configurer les prérequis"
+                icon="settings"
+                secondary
+                onPress={() => router.push('/settings/pedagogical')}
+              />
+            </View>
+          )}
       </Surface>
 
       {/* Details Form */}
@@ -357,11 +490,12 @@ export default function NewAssessmentScreen() {
         guideDescription="Renseignez le titre, le support, l’objectif de séance et la date de l’évaluation."
       >
         <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>
-          3. DÉTAILS DE LA SÉANCE
+          4. DÉTAILS DE LA SÉANCE
         </Text>
         <Text style={[styles.templateCount, { color: colors.mutedForeground }]}>
-          Les objectifs sont copiés depuis la configuration du niveau. Les
-          modifications ci-dessous s’appliquent uniquement à cette évaluation.
+          {evaluationType === 'prerequisites'
+            ? 'Les prérequis sont copiés depuis la configuration pédagogique. Les modifications ci-dessous s’appliquent uniquement à ce test.'
+            : 'Les objectifs sont copiés depuis la configuration du niveau. Les modifications ci-dessous s’appliquent uniquement à cette évaluation.'}
         </Text>
 
         <View style={styles.field}>
@@ -469,7 +603,7 @@ export default function NewAssessmentScreen() {
       >
         <View style={styles.objectivesHeader}>
           <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>
-            4. OBJECTIFS DE CETTE COMPÉTENCE ({objectives.length})
+            5. {evaluationType === 'prerequisites' ? 'PRÉREQUIS' : 'OBJECTIFS DE CETTE COMPÉTENCE'} ({objectives.length})
           </Text>
         </View>
 
@@ -533,7 +667,7 @@ export default function NewAssessmentScreen() {
           <TextInput
             value={newObjectiveText}
             onChangeText={setNewObjectiveText}
-            placeholder="Ajouter un objectif personnalisé…"
+            placeholder={evaluationType === 'prerequisites' ? 'Ajouter un prérequis personnalisé…' : 'Ajouter un objectif personnalisé…'}
             placeholderTextColor={colors.mutedForeground}
             style={[
               styles.addObjectiveInput,
@@ -553,7 +687,9 @@ export default function NewAssessmentScreen() {
       {/* Submit / Cancel Actions */}
       <View style={styles.actions}>
         <Button
-          label="Créer cette compétence & Commencer l’évaluation"
+          label={evaluationType === 'prerequisites'
+            ? 'Créer le test des prérequis'
+            : 'Créer cette compétence & Commencer l’évaluation'}
           icon="check"
           onPress={create}
         />
@@ -591,6 +727,22 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     fontWeight: '700',
   },
+  typeChoices: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  typeChoice: {
+    flex: 1,
+    minWidth: 210,
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 12,
+    gap: 4,
+  },
+  typeChoiceTitle: { fontSize: 13, fontWeight: '700' },
+  typeChoiceDescription: { fontSize: 11, lineHeight: 16 },
+  prerequisiteHint: { gap: 8 },
   templatesGrid: {
     gap: 8,
   },

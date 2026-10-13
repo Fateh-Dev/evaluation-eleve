@@ -1,4 +1,4 @@
-import { COMPETENCY_TEMPLATES } from '@/constants/competencies';
+import { COMPETENCY_TEMPLATES } from '../constants/competencies.ts';
 
 export type SchoolLevel = {
   id: string;
@@ -30,6 +30,7 @@ export type SchoolYearConfiguration = {
   competencies: SchoolCompetency[];
   associations: LevelCompetencyAssociation[];
   objectives: ConfiguredObjective[];
+  prerequisiteObjectives: ConfiguredObjective[];
 };
 
 export type LegacyClass = {
@@ -115,6 +116,7 @@ export function createDefaultSchoolYearConfiguration(
   );
   const associations: LevelCompetencyAssociation[] = [];
   const objectives: ConfiguredObjective[] = [];
+  const prerequisiteObjectives: ConfiguredObjective[] = [];
 
   levels.forEach((level) => {
     competencies.forEach((competency) => {
@@ -129,10 +131,26 @@ export function createDefaultSchoolYearConfiguration(
           template?.defaultObjectives ?? ['Objectif 1'],
         ),
       );
+      if (template?.defaultPrerequisites) {
+        prerequisiteObjectives.push(
+          ...createDefaultObjectiveRows(
+            level.id,
+            competency.id,
+            template.defaultPrerequisites,
+          ),
+        );
+      }
     });
   });
 
-  return { year: year.trim(), levels, competencies, associations, objectives };
+  return {
+    year: year.trim(),
+    levels,
+    competencies,
+    associations,
+    objectives,
+    prerequisiteObjectives,
+  };
 }
 
 function normalizeSavedConfiguration(
@@ -209,6 +227,47 @@ function normalizeSavedConfiguration(
           : [];
       })
     : [];
+  const prerequisiteObjectives: ConfiguredObjective[] = Array.isArray(raw.prerequisiteObjectives)
+    ? raw.prerequisiteObjectives.flatMap((entry, index) => {
+        if (!entry || typeof entry !== 'object') return [];
+        const item = entry as Partial<ConfiguredObjective>;
+        return typeof item.levelId === 'string' &&
+          levelIds.has(item.levelId) &&
+          typeof item.competencyId === 'string' &&
+          competencyIds.has(item.competencyId) &&
+          typeof item.description === 'string' &&
+          item.description.trim()
+          ? [
+              {
+                id:
+                  typeof item.id === 'string'
+                    ? item.id
+                    : createConfigId('prerequisite'),
+                levelId: item.levelId,
+                competencyId: item.competencyId,
+                order: typeof item.order === 'number' ? item.order : index + 1,
+                description: item.description.trim(),
+              },
+            ]
+          : [];
+      })
+    : associations.flatMap((association) => {
+        const competency = competencies.find(
+          (item) => item.id === association.competencyId,
+        );
+        const template = COMPETENCY_TEMPLATES.find(
+          (item) =>
+            item.id === competency?.templateId ||
+            normalizeLabel(item.name) === normalizeLabel(competency?.name ?? ''),
+        );
+        return template?.defaultPrerequisites
+          ? createDefaultObjectiveRows(
+              association.levelId,
+              association.competencyId,
+              template.defaultPrerequisites,
+            )
+          : [];
+      });
 
   return {
     year: raw.year.trim(),
@@ -216,6 +275,7 @@ function normalizeSavedConfiguration(
     competencies,
     associations,
     objectives,
+    prerequisiteObjectives,
   };
 }
 
@@ -262,6 +322,20 @@ export function cloneSchoolYearConfiguration(
           ]
         : [];
     }),
+    prerequisiteObjectives: source.prerequisiteObjectives.flatMap((objective) => {
+      const levelId = levelIds.get(objective.levelId);
+      const competencyId = competencyIds.get(objective.competencyId);
+      return levelId && competencyId
+        ? [
+            {
+              ...objective,
+              id: createConfigId('prerequisite'),
+              levelId,
+              competencyId,
+            },
+          ]
+        : [];
+    }),
   };
 }
 
@@ -294,6 +368,7 @@ export function migrateSchoolYearConfigurations(
         competencies: [...existing.competencies],
         associations: [...existing.associations],
         objectives: [...existing.objectives],
+        prerequisiteObjectives: [...existing.prerequisiteObjectives],
       };
     }
 
@@ -420,6 +495,19 @@ export function getObjectivesForPair(
 ): ConfiguredObjective[] {
   if (!configuration) return [];
   return configuration.objectives
+    .filter(
+      (item) => item.levelId === levelId && item.competencyId === competencyId,
+    )
+    .sort((a, b) => a.order - b.order);
+}
+
+export function getPrerequisitesForPair(
+  configuration: SchoolYearConfiguration | undefined,
+  levelId: string,
+  competencyId: string,
+): ConfiguredObjective[] {
+  if (!configuration) return [];
+  return configuration.prerequisiteObjectives
     .filter(
       (item) => item.levelId === levelId && item.competencyId === competencyId,
     )

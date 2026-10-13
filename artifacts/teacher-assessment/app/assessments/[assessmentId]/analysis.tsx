@@ -35,6 +35,14 @@ export default function AssessmentAnalysisScreen() {
   const currentAssessment = useMemo(() => {
     return (assessmentId ? data.getAssessment(assessmentId) : null) ?? data.assessment;
   }, [assessmentId, data.assessments, data.assessment]);
+  const criterionLabel =
+    currentAssessment.evaluationType === 'prerequisites'
+      ? 'prérequis'
+      : 'objectif';
+  const criteriaLabel =
+    currentAssessment.evaluationType === 'prerequisites'
+      ? 'prérequis'
+      : 'objectifs';
 
   const currentClass = useMemo(() => {
     return data.classes.find((c) => c.id === currentAssessment.classId) ?? data.activeClass;
@@ -131,7 +139,7 @@ export default function AssessmentAnalysisScreen() {
       <Surface
         style={styles.chartsCard}
         guideTitle="Statistiques visuelles"
-        guideDescription="Cette zone compare les présences et les taux d’acquisition par objectif."
+        guideDescription={`Cette zone compare les présences et les taux d’acquisition par ${criterionLabel}.`}
       >
         <Text style={[styles.chartTitle, { color: colors.foreground }]}>Présence à l’évaluation</Text>
         <View style={styles.attendanceChart}>
@@ -172,9 +180,9 @@ export default function AssessmentAnalysisScreen() {
         </View>
 
         <View style={[styles.chartDivider, { backgroundColor: colors.border }]} />
-        <Text style={[styles.chartTitle, { color: colors.foreground }]}>Taux d’acquisition par objectif</Text>
+        <Text style={[styles.chartTitle, { color: colors.foreground }]}>Taux d’acquisition par {criterionLabel}</Text>
         <Text style={[styles.chartSubtitle, { color: colors.mutedForeground }]}>
-          Pourcentage d’élèves présents ayant acquis chaque objectif.
+          Pourcentage d’élèves présents ayant acquis chaque critère.
         </Text>
         {statistics.length > 0 && presentPupilCount > 0 ? (
           <View style={styles.barChart}>
@@ -193,7 +201,7 @@ export default function AssessmentAnalysisScreen() {
                   </View>
                   <View
                     accessible
-                    accessibilityLabel={`Objectif ${objective.order} : ${acquiredPercent}% acquis`}
+                    accessibilityLabel={`${criterionLabel} ${objective.order} : ${acquiredPercent}% acquis`}
                     style={[styles.barTrack, { backgroundColor: colors.muted }]}
                   >
                     <View style={[styles.barFill, { width: `${acquiredPercent}%`, backgroundColor: colors.successForeground }]} />
@@ -204,18 +212,18 @@ export default function AssessmentAnalysisScreen() {
           </View>
         ) : (
           <Text style={[styles.chartSubtitle, { color: colors.mutedForeground }]}>
-            {statistics.length === 0 ? 'Ajoutez des objectifs pour afficher le graphique.' : 'Aucun élève présent pour cette évaluation.'}
+            {statistics.length === 0 ? `Ajoutez des ${criteriaLabel} pour afficher le graphique.` : 'Aucun élève présent pour cette évaluation.'}
           </Text>
         )}
       </Surface>
 
-      <AnalysisSectionTitle title={`Résultats par objectif (${currentObjectives.length})`} />
+      <AnalysisSectionTitle title={`Résultats par ${criterionLabel} (${currentObjectives.length})`} />
       <View style={styles.objectives}>
         {statistics.map(({ objective, stat }) => (
           <Surface
             key={objective.id}
             style={styles.objectiveCard}
-            guideTitle={`Objectif ${objective.order}`}
+            guideTitle={`${criterionLabel} ${objective.order}`}
             guideDescription="Cette carte détaille le taux d’acquisition et le nombre d’élèves dans chaque catégorie de résultat."
           >
             <View style={styles.objectiveHeader}>

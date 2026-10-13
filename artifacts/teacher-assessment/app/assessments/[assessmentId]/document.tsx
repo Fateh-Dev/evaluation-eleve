@@ -33,6 +33,14 @@ export default function AssessmentDocumentScreen() {
   const currentAssessment = useMemo(() => {
     return (assessmentId ? data.getAssessment(assessmentId) : null) ?? data.assessment;
   }, [assessmentId, data.assessments, data.assessment]);
+  const criteriaLabel =
+    currentAssessment.evaluationType === 'prerequisites'
+      ? 'Prérequis'
+      : 'Objectifs';
+  const exportPrefix =
+    currentAssessment.evaluationType === 'prerequisites'
+      ? 'Prerequis'
+      : 'Evaluation';
 
   // Determine active/target class
   const currentClass = useMemo(() => {
@@ -161,7 +169,7 @@ export default function AssessmentDocumentScreen() {
     try {
       setExportingFormat('excel');
       const workbook = await generateAssessmentWorkbook(exportPayload);
-      const filename = `Evaluation_${currentClass.name.replace(/[^\p{L}\p{N}-]+/gu, '_')}_${currentAssessment.competency.replace(/[^\p{L}\p{N}-]+/gu, '_')}_${currentAssessment.date.replace(/[/\\:]/g, '-')}.xlsx`;
+      const filename = `${exportPrefix}_${currentClass.name.replace(/[^\p{L}\p{N}-]+/gu, '_')}_${currentAssessment.competency.replace(/[^\p{L}\p{N}-]+/gu, '_')}_${currentAssessment.date.replace(/[/\\:]/g, '-')}.xlsx`;
       await downloadFile(
         workbook,
         filename,
@@ -180,7 +188,7 @@ export default function AssessmentDocumentScreen() {
       setExportingFormat('word');
       const document = await generateAssessmentWord(exportPayload);
       const safeName = (value: string) => value.replace(/[^\p{L}\p{N}-]+/gu, '_');
-      const filename = `Evaluation_${safeName(currentClass.name)}_${safeName(currentAssessment.competency)}_${currentAssessment.date.replace(/[/\\:]/g, '-')}.docx`;
+      const filename = `${exportPrefix}_${safeName(currentClass.name)}_${safeName(currentAssessment.competency)}_${currentAssessment.date.replace(/[/\\:]/g, '-')}.docx`;
       await downloadFile(
         document,
         filename,
@@ -333,11 +341,11 @@ export default function AssessmentDocumentScreen() {
         {/* Objectives Section */}
         <GuideAnchor
           id="document-objectives"
-          title="Objectifs d’évaluation"
-          description="Cette partie du rapport présente les objectifs utilisés pour noter les élèves."
+          title={`${criteriaLabel} d’évaluation`}
+          description={`Cette partie du rapport présente les ${criteriaLabel.toLocaleLowerCase()} utilisés pour noter les élèves.`}
         >
           <Text style={styles.objectivesHeading}>
-            Objectifs d’évaluation ({currentObjectives.length} Objectifs) :
+            {criteriaLabel} d’évaluation ({currentObjectives.length}) :
           </Text>
         </GuideAnchor>
         <View style={styles.objectivesList}>
@@ -353,7 +361,7 @@ export default function AssessmentDocumentScreen() {
         <GuideAnchor
           id="document-results-grid"
           title="Grille des résultats"
-          description="La grille regroupe les élèves, leur présence et leurs résultats par objectif."
+          description={`La grille regroupe les élèves, leur présence et leurs résultats par ${criteriaLabel.toLocaleLowerCase()}.`}
         >
           <Text style={styles.gridTitle}>
             Grille d’analyse des résultats — Classe : {currentClass.name}
@@ -380,7 +388,7 @@ export default function AssessmentDocumentScreen() {
                   { width: Math.max(currentObjectives.length * 66, 66) },
                 ]}
               >
-                <Text style={[styles.thText, styles.thGroupText]}>Objectifs d’évaluation</Text>
+                <Text style={[styles.thText, styles.thGroupText]}>{criteriaLabel} d’évaluation</Text>
               </View>
               <View style={[styles.thCell, styles.colTotalGroup, styles.cellR1to2]}>
                 <Text style={styles.thText}>Total</Text>

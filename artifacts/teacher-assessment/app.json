@@ -1,23 +1,11 @@
 {
   "expo": {
+    "owner": "fateh",
     "name": "Chaibeddra Evaluation",
     "slug": "teacher-assessment",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "splash": {
-      "image": "./assets/images/launch-splash.png",
-      "imageWidth": 390,
-      "resizeMode": "contain",
-      "backgroundColor": "#FBF6EC",
-      "ios": {
-        "enableFullScreenImage_legacy": true
-      },
-      "android": {
-        "image": "./assets/images/icon_2.png",
-        "imageWidth": 180
-      }
-    },
     "scheme": "chaibeddra-evaluation",
     "userInterfaceStyle": "automatic",
     "ios": {
@@ -40,6 +28,22 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/launch-splash.png",
+          "imageWidth": 390,
+          "resizeMode": "contain",
+          "backgroundColor": "#FBF6EC",
+          "ios": {
+            "enableFullScreenImage_legacy": true
+          },
+          "android": {
+            "image": "./assets/images/icon_2.png",
+            "imageWidth": 180
+          }
+        }
+      ],
       "expo-secure-store",
       "expo-notifications",
       "@react-native-community/datetimepicker"
@@ -49,8 +53,9 @@
       "reactCompiler": true
     },
     "extra": {
+      "router": {},
       "eas": {
-        "projectId": "9ba40799-e5b4-498d-8e8d-0ecc8c9b0ade"
+        "projectId": "65f6b4e6-8e32-4279-90f6-fa6462b70c01"
       }
     }
   }

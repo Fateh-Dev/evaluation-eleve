@@ -26,6 +26,9 @@ export default function PedagogicalConfigurationManager() {
   const [selectedLevelId, setSelectedLevelId] = useState('');
   const [selectedCompetencyId, setSelectedCompetencyId] = useState('');
   const [objectiveDraft, setObjectiveDraft] = useState<string[]>([]);
+  const [objectiveListType, setObjectiveListType] = useState<
+    'objectives' | 'prerequisites'
+  >('objectives');
   const [editingYear, setEditingYear] = useState<string | null>(null);
   const [yearNameDraft, setYearNameDraft] = useState('');
   const [editingLevelId, setEditingLevelId] = useState<string | null>(null);
@@ -49,14 +52,14 @@ export default function PedagogicalConfigurationManager() {
     { id: 'year', label: 'Année', icon: 'calendar' as const },
     { id: 'levels', label: 'Niveaux', icon: 'layers' as const },
     { id: 'competencies', label: 'Compétences', icon: 'award' as const },
-    { id: 'objectives', label: 'Objectifs', icon: 'list' as const },
+    { id: 'objectives', label: 'Critères', icon: 'list' as const },
   ] as const;
   const stepIndex = steps.findIndex((item) => item.id === step);
   const stepTitles: Record<(typeof steps)[number]['id'], string> = {
     year: 'Choisir une année scolaire',
     levels: 'Organiser les niveaux',
     competencies: 'Associer les compétences',
-    objectives: 'Définir les objectifs',
+    objectives: 'Définir les objectifs et prérequis',
   };
 
   useEffect(() => {
@@ -92,16 +95,28 @@ export default function PedagogicalConfigurationManager() {
       setObjectiveDraft([]);
       return;
     }
+    const configuredObjectives =
+      objectiveListType === 'prerequisites'
+        ? data.getPrerequisitesForLevelCompetency(
+            selectedYear,
+            selectedLevelId,
+            selectedCompetencyId,
+          )
+        : data.getObjectivesForLevelCompetency(
+            selectedYear,
+            selectedLevelId,
+            selectedCompetencyId,
+          );
     setObjectiveDraft(
-      data
-        .getObjectivesForLevelCompetency(
-          selectedYear,
-          selectedLevelId,
-          selectedCompetencyId,
-        )
-        .map((objective) => objective.description),
+      configuredObjectives.map((objective) => objective.description),
     );
-  }, [selectedYear, selectedLevelId, selectedCompetencyId]);
+  }, [
+    selectedYear,
+    selectedLevelId,
+    selectedCompetencyId,
+    objectiveListType,
+    data.schoolYearConfigurations,
+  ]);
 
   const selectYear = (year: string) => {
     const nextConfiguration = data.getSchoolYearConfiguration(year);
@@ -342,16 +357,27 @@ export default function PedagogicalConfigurationManager() {
   const saveObjectives = () => {
     if (!selectedLevelId || !selectedCompetencyId) return;
     const cleaned = objectiveDraft.map((item) => item.trim()).filter(Boolean);
-    data.setConfiguredObjectives(
-      selectedYear,
-      selectedLevelId,
-      selectedCompetencyId,
-      cleaned,
-    );
+    if (objectiveListType === 'prerequisites') {
+      data.setConfiguredPrerequisites(
+        selectedYear,
+        selectedLevelId,
+        selectedCompetencyId,
+        cleaned,
+      );
+    } else {
+      data.setConfiguredObjectives(
+        selectedYear,
+        selectedLevelId,
+        selectedCompetencyId,
+        cleaned,
+      );
+    }
     setObjectiveDraft(cleaned);
     Alert.alert(
       'Configuration enregistrée',
-      'La liste d’objectifs est enregistrée pour cette année, ce niveau et cette compétence.',
+      objectiveListType === 'prerequisites'
+        ? 'La liste des prérequis est enregistrée pour cette année, ce niveau et cette compétence.'
+        : 'La liste d’objectifs est enregistrée pour cette année, ce niveau et cette compétence.',
     );
   };
 
@@ -378,7 +404,7 @@ export default function PedagogicalConfigurationManager() {
       <Surface
         style={[styles.card, { borderColor: colors.border }]}
         guideTitle={stepTitles[step]}
-        guideDescription="Le guide de configuration suit l’ordre année scolaire, niveaux, compétences puis objectifs."
+        guideDescription="Le guide de configuration suit l’ordre année scolaire, niveaux, compétences puis objectifs et prérequis."
       >
         <Text style={[styles.help, { color: colors.mutedForeground }]}>
           Configurez progressivement chaque année. Les changements restent
@@ -430,7 +456,7 @@ export default function PedagogicalConfigurationManager() {
               <Feather name="list" size={14} color={colors.primary} />
               <View style={styles.selectionContextCopy}>
                 <Text style={[styles.selectionContextLabel, { color: colors.mutedForeground }]}>
-                  OBJECTIFS DE LA COMPÉTENCE
+                  OBJECTIFS ET PRÉREQUIS DE LA COMPÉTENCE
                 </Text>
                 <Text style={[styles.selectionSummaryText, { color: colors.foreground }]}>
                   {selectedCompetency?.name ?? 'Choisissez une compétence'}
@@ -885,7 +911,7 @@ export default function PedagogicalConfigurationManager() {
                 {linked && (
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={`Configurer les objectifs de ${competency.name}`}
+                    accessibilityLabel={`Configurer les objectifs et prérequis de ${competency.name}`}
                     onPress={() => {
                       setSelectedCompetencyId(competency.id);
                       setStep('objectives');
@@ -905,7 +931,7 @@ export default function PedagogicalConfigurationManager() {
                         { color: colors.primary },
                       ]}
                     >
-                      Objectifs
+                      Configurer
                     </Text>
                     <Feather
                       name="chevron-right"
@@ -981,6 +1007,44 @@ export default function PedagogicalConfigurationManager() {
                 <Feather name="plus" size={17} color={colors.primary} />
               </Pressable>
             </View>
+            <View style={styles.listTypeRow}>
+              {(['objectives', 'prerequisites'] as const).map((listType) => {
+                const selected = objectiveListType === listType;
+                const label =
+                  listType === 'prerequisites'
+                    ? 'Prérequis'
+                    : 'Objectifs de l’évaluation';
+                return (
+                  <Pressable
+                    key={listType}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    onPress={() => setObjectiveListType(listType)}
+                    style={[
+                      styles.listTypeButton,
+                      {
+                        backgroundColor: selected ? colors.accent : colors.card,
+                        borderColor: selected ? colors.primary : colors.border,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.listTypeButtonText,
+                        { color: selected ? colors.primary : colors.foreground },
+                      ]}
+                    >
+                      {label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Text style={[styles.help, { color: colors.mutedForeground }]}>
+              {objectiveListType === 'prerequisites'
+                ? 'Ces critères sont enregistrés séparément et seront copiés dans le test des prérequis de cette compétence.'
+                : 'Ces objectifs sont utilisés par le test habituel de cette compétence.'}
+            </Text>
             {objectiveDraft.map((objective, index) => (
               <View
                 key={`${selectedCompetency.id}-${index}`}
@@ -998,7 +1062,7 @@ export default function PedagogicalConfigurationManager() {
                       ),
                     )
                   }
-                  placeholder={`Objectif ${index + 1}`}
+                  placeholder={`${objectiveListType === 'prerequisites' ? 'Prérequis' : 'Objectif'} ${index + 1}`}
                   placeholderTextColor={colors.mutedForeground}
                   style={[
                     styles.input,
@@ -1012,7 +1076,7 @@ export default function PedagogicalConfigurationManager() {
                 />
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={`Supprimer l’objectif ${index + 1}`}
+                  accessibilityLabel={`Supprimer ${objectiveListType === 'prerequisites' ? 'le prérequis' : 'l’objectif'} ${index + 1}`}
                   onTouchStart={(event) => event.stopPropagation()}
                   onPress={() => requestRemoveObjective(index)}
                   style={[styles.removeButton, { backgroundColor: colors.errorSurface }]}
@@ -1023,12 +1087,13 @@ export default function PedagogicalConfigurationManager() {
             ))}
             {objectiveDraft.length === 0 && (
               <Text style={[styles.help, { color: colors.mutedForeground }]}>
-                Aucun objectif pour cette association. Ajoutez-en avant de créer
-                une évaluation.
+                {objectiveListType === 'prerequisites'
+                  ? 'Aucun prérequis configuré. Ajoutez-en avant de créer le test des prérequis.'
+                  : 'Aucun objectif pour cette association. Ajoutez-en avant de créer une évaluation.'}
               </Text>
             )}
             <Button
-              label="Enregistrer les objectifs"
+              label={`Enregistrer ${objectiveListType === 'prerequisites' ? 'les prérequis' : 'les objectifs'}`}
               icon="save"
               onPress={saveObjectives}
             />
@@ -1168,6 +1233,15 @@ const styles = StyleSheet.create({
   objectivesButtonText: { fontSize: 11, fontWeight: '700' },
   objectiveEditor: { borderWidth: 1, borderRadius: 13, padding: 12, gap: 9 },
   editorHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  listTypeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  listTypeButton: {
+    minHeight: 38,
+    borderWidth: 1,
+    borderRadius: 9,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  listTypeButtonText: { fontSize: 12, fontWeight: '700' },
   editorCopy: { flex: 1, gap: 3 },
   editorTitle: { fontSize: 14, fontWeight: '800' },
   order: { width: 22, textAlign: 'center', fontSize: 10, fontWeight: '800' },

@@ -28,8 +28,8 @@ export default function AssessmentsScreen() {
     const selected = data.assessments.filter((item) => selection.selectedIds.includes(item.id));
     if (selected.length === 0) return;
     Alert.alert(
-      'Supprimer les compétences sélectionnées',
-      `Supprimer ${selected.length} compétence${selected.length > 1 ? 's' : ''} ? Toutes les notes et tous les objectifs associés seront également effacés.`,
+      'Supprimer les évaluations sélectionnées',
+      `Supprimer ${selected.length} évaluation${selected.length > 1 ? 's' : ''} ? Toutes les notes et tous les critères associés seront également effacés.`,
       [
         { text: 'Annuler', style: 'cancel' },
         {
@@ -46,7 +46,7 @@ export default function AssessmentsScreen() {
 
   return (
     <Screen>
-      <AppHeader eyebrow="Plus · Évaluation ponctuelle" title="Test de niveau initial" />
+      <AppHeader eyebrow="Plus · Évaluation ponctuelle" title="Évaluations des compétences" />
 
       {/* Class Filter Bar */}
       {data.classes.length > 0 && (
@@ -105,15 +105,15 @@ export default function AssessmentsScreen() {
 
       {data.classes.length > 0 && (
         <Button
-          label="Ajouter une compétence au test initial"
+          label="Ajouter une évaluation"
           icon="plus"
           onPress={() => router.push('/assessments/new')}
         />
       )}
 
       <SectionTitle
-        title={`Compétences évaluées (${filteredAssessments.length})`}
-        action={data.classes.length > 0 ? '+ Ajouter une compétence' : undefined}
+        title={`Évaluations (${filteredAssessments.length})`}
+        action={data.classes.length > 0 ? '+ Ajouter une évaluation' : undefined}
         onAction={() => router.push('/assessments/new')}
       />
       <ListSelectionToolbar
@@ -144,15 +144,15 @@ export default function AssessmentsScreen() {
         <Surface style={styles.emptyContainer}>
           <Feather name="award" size={32} color={colors.mutedForeground} />
           <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
-            Aucun test initial enregistré
+            Aucune évaluation enregistrée
           </Text>
           <Text style={[styles.emptySubtitle, { color: colors.mutedForeground }]}>
             {selectedClassId === 'all'
-              ? 'Créez le test initial d’une classe en y ajoutant sa première compétence.'
-              : 'Le test initial de cette classe n’a pas encore de compétence. Ajoutez-en une pour le commencer.'}
+              ? 'Créez une évaluation habituelle ou un test des prérequis pour une compétence de classe.'
+              : 'Aucune évaluation n’a encore été créée pour cette classe. Ajoutez une évaluation habituelle ou un test des prérequis.'}
           </Text>
           <Button
-            label="Créer le test initial"
+            label="Créer une évaluation"
             icon="plus"
             onPress={() => router.push(`/assessments/new${selectedClassId !== 'all' ? `?classId=${selectedClassId}` : ''}`)}
           />
@@ -193,7 +193,7 @@ export default function AssessmentsScreen() {
                       Test initial · {itemClass?.academicYear ?? ''}
                     </Text>
                     <Text style={[styles.levelTestGroupSubtitle, { color: colors.mutedForeground }]}>
-                      {itemClass?.name ?? item.level} · {groupCompetencyCount} compétence{groupCompetencyCount > 1 ? 's' : ''}
+                      {itemClass?.name ?? item.level} · {groupCompetencyCount} évaluation{groupCompetencyCount > 1 ? 's' : ''}
                     </Text>
                   </View>
                 )}
@@ -219,6 +219,13 @@ export default function AssessmentsScreen() {
                         {item.competency}
                       </Text>
                     </View>
+                    {item.evaluationType === 'prerequisites' && (
+                      <View style={[styles.classPill, { backgroundColor: colors.secondary }]}>
+                        <Text style={[styles.classPillText, { color: colors.foreground }]}>
+                          Test des prérequis
+                        </Text>
+                      </View>
+                    )}
                   </View>
                   <Text style={[styles.progressNumber, { color: colors.primary }]}>
                     {progressPercent}%
@@ -237,7 +244,7 @@ export default function AssessmentsScreen() {
 
                 <View style={styles.metaRow}>
                   <Text style={[styles.metaText, { color: colors.mutedForeground }]}>
-                    {objList.length} objectifs
+                    {objList.length} {item.evaluationType === 'prerequisites' ? 'prérequis' : 'objectifs'}
                   </Text>
                   <Text style={[styles.metaDot, { color: colors.mutedForeground }]}>•</Text>
                   <Text style={[styles.metaText, { color: colors.mutedForeground }]}>
