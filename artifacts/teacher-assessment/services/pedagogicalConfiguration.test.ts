@@ -1,16 +1,23 @@
-import assert from 'node:assert/strict';
+import assert from "node:assert/strict";
 import {
   cloneSchoolYearConfiguration,
   createDefaultSchoolYearConfiguration,
   getObjectivesForPair,
   getPrerequisitesForPair,
   migrateSchoolYearConfigurations,
-} from './pedagogicalConfiguration.ts';
+} from "./pedagogicalConfiguration.ts";
 
-const configuration = createDefaultSchoolYearConfiguration('2026-2027');
-const level = configuration.levels.find((item) => item.name === '2AS');
+const configuration = createDefaultSchoolYearConfiguration("2026-2027");
+assert.equal(
+  configuration.competencies.some(
+    (item) => item.name === "Évaluation diagnostique",
+  ),
+  false,
+  "L’évaluation diagnostique n’est pas modélisée comme une compétence",
+);
+const level = configuration.levels.find((item) => item.name === "2AS");
 const competency = configuration.competencies.find(
-  (item) => item.id === 'comprehension-ecrite',
+  (item) => item.id === "comprehension-ecrite",
 );
 
 assert.ok(level);
@@ -27,7 +34,7 @@ assert.equal(
   11,
 );
 
-const cloned = cloneSchoolYearConfiguration(configuration, '2027-2028');
+const cloned = cloneSchoolYearConfiguration(configuration, "2027-2028");
 const clonedLevel = cloned.levels.find((item) => item.name === level.name);
 const clonedCompetency = cloned.competencies.find(
   (item) => item.name === competency.name,
@@ -48,24 +55,28 @@ const { prerequisiteObjectives: _oldPrerequisites, ...legacyConfiguration } =
 void _oldPrerequisites;
 const migrated = migrateSchoolYearConfigurations(
   [legacyConfiguration],
-  '2026-2027',
+  "2026-2027",
   [],
   [],
   {},
 );
-const migratedLevel = migrated[0].levels.find((item) => item.name === '2AS');
+const migratedLevel = migrated[0].levels.find((item) => item.name === "2AS");
 const migratedCompetency = migrated[0].competencies.find(
-  (item) => item.id === 'comprehension-ecrite',
+  (item) => item.id === "comprehension-ecrite",
 );
 assert.ok(migratedLevel);
 assert.ok(migratedCompetency);
 assert.equal(
-  getPrerequisitesForPair(
-    migrated[0],
-    migratedLevel.id,
-    migratedCompetency.id,
-  ).length,
+  getPrerequisitesForPair(migrated[0], migratedLevel.id, migratedCompetency.id)
+    .length,
   7,
 );
+assert.equal(
+  migrated[0].competencies.some(
+    (item) => item.name === "Évaluation diagnostique",
+  ),
+  false,
+  "La migration ne crée pas de compétence diagnostique",
+);
 
-console.log('Tests de configuration des prérequis réussis.');
+console.log("Tests de configuration des prérequis réussis.");

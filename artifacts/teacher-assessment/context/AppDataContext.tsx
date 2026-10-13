@@ -32,6 +32,19 @@ import {
   findScheduleOccurrenceConflict,
   getScheduleOccurrencesForDate,
 } from '@/services/schedule';
+import {
+  createDefaultTrainingPlan,
+  DEFAULT_DEMO_CLASSES,
+  DEFAULT_TRAINING_FILIERE_NAMES,
+  getTrainingPlanSessions,
+  SEQUENCE_ACTIVITY_TYPES,
+  setTrainingSessionAssignmentExecuted,
+  upsertTrainingSessionAssignment,
+  validateTrainingPlan,
+  type TrainingFiliere,
+  type TrainingPlan,
+  type TrainingSessionAssignment,
+} from '@/services/trainingPlan';
 
 export type EvaluationValue =
   'NotEvaluated' | 'Acquired' | 'PartiallyAcquired' | 'NotAcquired';
@@ -42,6 +55,7 @@ export type ClassItem = {
   level: string;
   levelId?: string;
   academicYear: string;
+  filiereId?: string;
   active?: boolean;
 };
 
@@ -160,6 +174,8 @@ export type Assessment = {
   id: string;
   classId: string;
   levelTestId?: string;
+  trainingSessionId?: string;
+  trainingStudyObjectId?: string;
   title: string;
   date: string;
   subject: string;
@@ -196,7 +212,10 @@ export type AppState = {
   archivedAcademicYears: string[];
   schoolYearConfigurations: SchoolYearConfiguration[];
   classes: ClassItem[];
+  trainingFilieres: TrainingFiliere[];
   scheduleSessions: ScheduleSession[];
+  trainingPlans: TrainingPlan[];
+  trainingSessionAssignments: TrainingSessionAssignment[];
   scheduleOccurrenceOverrides: ScheduleOccurrenceOverride[];
   attendanceRecords: AttendanceRecord[];
   continuousEvaluations: ContinuousEvaluationRecord[];
@@ -236,7 +255,10 @@ export type AppDataContextValue = {
   archivedAcademicYears: string[];
   schoolYearConfigurations: SchoolYearConfiguration[];
   classes: ClassItem[];
+  trainingFilieres: TrainingFiliere[];
   scheduleSessions: ScheduleSession[];
+  trainingPlans: TrainingPlan[];
+  trainingSessionAssignments: TrainingSessionAssignment[];
   scheduleOccurrenceOverrides: ScheduleOccurrenceOverride[];
   attendanceRecords: AttendanceRecord[];
   continuousEvaluations: ContinuousEvaluationRecord[];
@@ -357,8 +379,19 @@ export type AppDataContextValue = {
     level: string;
     levelId?: string;
     academicYear?: string;
+    filiereId?: string;
+    filiereName?: string;
   }) => string;
+  createTrainingFiliere: (schoolYearId: string, name: string) => string | undefined;
+  assignClassToFiliere: (classId: string, filiereId: string) => boolean;
   setActiveClass: (classId: string) => void;
+  saveTrainingPlan: (plan: TrainingPlan) => void;
+  getTrainingPlanForClass: (classId: string) => TrainingPlan | undefined;
+  getTrainingPlanForFiliere: (filiereId: string) => TrainingPlan | undefined;
+  setTrainingSessionAssignment: (
+    input: Omit<TrainingSessionAssignment, 'id' | 'executedAt'> & { executedAt?: string },
+  ) => void;
+  setTrainingSessionExecuted: (assignmentId: string, executed: boolean) => void;
   addScheduleSession: (input: Omit<ScheduleSession, 'id'>) => string | undefined;
   updateScheduleSession: (sessionId: string, input: Omit<ScheduleSession, 'id'>) => boolean;
   deleteScheduleSession: (sessionId: string) => void;
@@ -442,6 +475,8 @@ export type AppDataContextValue = {
   // Assessment / Competency Actions
   createAssessment: (input: {
     classId: string;
+    trainingSessionId?: string;
+    trainingStudyObjectId?: string;
     competency: string;
     competencyId?: string;
     evaluationType?: 'competency' | 'prerequisites';
@@ -510,6 +545,147 @@ export type AppDataContextValue = {
 };
 
 const STORAGE_KEY = '@teacher-assessment/app-state-v4';
+
+function isTrainingPlan(value: unknown): value is TrainingPlan {
+  if (!value || typeof value !== 'object') return false;
+  const plan = value as Partial<TrainingPlan>;
+  return typeof plan.id === 'string' &&
+    (typeof plan.filiereId === 'string' || typeof plan.classId === 'string') &&
+    typeof plan.schoolYearId === 'string' &&
+    typeof plan.filiereName === 'string' &&
+    Array.isArray(plan.projects) && plan.projects.every((project) => {
+      if (
+        typeof project.id !== 'string' ||
+        typeof project.title !== 'string' ||
+        !Number.isInteger(project.order) ||
+        !Array.isArray(project.studyObjects) ||
+        (project.launch !== undefined &&
+          (typeof project.launch.id !== 'string' || typeof project.launch.title !== 'string'))
+      ) return false;
+      return project.studyObjects.every((studyObject) => {
+        if (
+          typeof studyObject.id !== 'string' ||
+          typeof studyObject.title !== 'string' ||
+          !Number.isInteger(studyObject.order) ||
+          (studyObject.prerequisites !== undefined &&
+            (!Array.isArray(studyObject.prerequisites) ||
+              !studyObject.prerequisites.every((item) => typeof item === 'string'))) ||
+          !Array.isArray(studyObject.sequences) ||
+          (studyObject.diagnostic !== undefined &&
+            (typeof studyObject.diagnostic.id !== 'string' ||
+              typeof studyObject.diagnostic.title !== 'string'))
+        ) return false;
+        return studyObject.sequences.every((sequence) =>
+          typeof sequence.id === 'string' &&
+          typeof sequence.title === 'string' &&
+          Number.isInteger(sequence.order) &&
+          (sequence.competencyIds === undefined ||
+            (Array.isArray(sequence.competencyIds) &&
+              sequence.competencyIds.every((id) => typeof id === 'string'))) &&
+          Array.isArray(sequence.sessions) &&
+          sequence.sessions.every((session) =>
+            typeof session.id === 'string' &&
+            typeof session.title === 'string' &&
+            (session.type === 'lancement' ||
+              session.type === 'diagnostic' ||
+              SEQUENCE_ACTIVITY_TYPES.some((type) => type === session.type)) &&
+            Number.isInteger(session.order),
+          ),
+        );
+      });
+    });
+}
+
+function isTrainingFiliere(value: unknown): value is TrainingFiliere {
+  if (!value || typeof value !== 'object') return false;
+  const filiere = value as Partial<TrainingFiliere>;
+  return typeof filiere.id === 'string' &&
+    typeof filiere.name === 'string' &&
+    typeof filiere.schoolYearId === 'string';
+}
+
+function isTrainingSessionAssignment(value: unknown): value is TrainingSessionAssignment {
+  if (!value || typeof value !== 'object') return false;
+  const assignment = value as Partial<TrainingSessionAssignment>;
+  return typeof assignment.id === 'string' &&
+    typeof assignment.classId === 'string' &&
+  (assignment.filiereId === undefined || typeof assignment.filiereId === 'string') &&
+    typeof assignment.scheduleSessionId === 'string' &&
+    typeof assignment.occurrenceDate === 'string' &&
+    /^\d{4}-\d{2}-\d{2}$/.test(assignment.occurrenceDate) &&
+    typeof assignment.trainingSessionId === 'string' &&
+    (assignment.executedAt === undefined || typeof assignment.executedAt === 'string');
+}
+
+function migrateTrainingStructure(
+  storedClasses: ClassItem[],
+  storedFilieres: unknown,
+  storedPlans: unknown,
+) {
+  const filieres = Array.isArray(storedFilieres)
+    ? storedFilieres.filter(isTrainingFiliere)
+    : [];
+  const classFilieres = new Map(
+    storedClasses
+      .filter((classItem) => typeof classItem.filiereId === 'string')
+      .map((classItem) => [classItem.id, classItem.filiereId!]),
+  );
+  const plans: TrainingPlan[] = [];
+  for (const plan of (Array.isArray(storedPlans) ? storedPlans : []).filter(isTrainingPlan)) {
+    if (plan.filiereId) {
+      if (!filieres.some((filiere) => filiere.id === plan.filiereId)) {
+        filieres.push({
+          id: plan.filiereId,
+          name: plan.filiereName,
+          schoolYearId: plan.schoolYearId,
+        });
+      }
+      plans.push(plan);
+      continue;
+    }
+
+    const ownerClass = storedClasses.find(
+      (classItem) => classItem.id === plan.classId &&
+        classItem.academicYear === plan.schoolYearId,
+    );
+    if (!ownerClass || !plan.classId) continue;
+    const filiereId = `training-filiere-migrated-${plan.id}`;
+    if (!filieres.some((filiere) => filiere.id === filiereId)) {
+      filieres.push({
+        id: filiereId,
+        name: plan.filiereName,
+        schoolYearId: plan.schoolYearId,
+      });
+    }
+    classFilieres.set(ownerClass.id, filiereId);
+    const { classId: _legacyClassId, ...filierePlan } = plan;
+    plans.push({ ...filierePlan, filiereId });
+  }
+
+  const validFiliereIds = new Set(filieres.map((filiere) => filiere.id));
+  const classes = storedClasses.map((classItem) => {
+    const filiereId = classFilieres.get(classItem.id);
+    const filiere = filieres.find((item) => item.id === filiereId);
+    return filiere && filiere.schoolYearId === classItem.academicYear
+      ? { ...classItem, filiereId: filiere.id }
+      : { ...classItem, filiereId: undefined };
+  });
+  const plansByFiliere = new Set(plans.map((plan) => plan.filiereId));
+  for (const filiere of filieres) {
+    if (plansByFiliere.has(filiere.id)) continue;
+    plans.push(createDefaultTrainingPlan(
+      filiere.id,
+      filiere.name,
+      filiere.schoolYearId,
+      createConfigId,
+    ));
+  }
+  return {
+    classes,
+    trainingFilieres: filieres,
+    trainingPlans: plans.filter((plan) => validFiliereIds.has(plan.filiereId)),
+  };
+}
 
 function isScheduleSession(value: unknown): value is ScheduleSession {
   if (!value || typeof value !== 'object') return false;
@@ -747,7 +923,10 @@ export function createEmptyState(): AppState {
       createDefaultSchoolYearConfiguration('2026-2027'),
     ],
     classes: [],
+    trainingFilieres: [],
     scheduleSessions: [],
+    trainingPlans: [],
+    trainingSessionAssignments: [],
     scheduleOccurrenceOverrides: [],
     attendanceRecords: [],
     continuousEvaluations: [],
@@ -786,7 +965,13 @@ export function AppDataProvider({ children }: PropsWithChildren) {
           try {
             const parsed = JSON.parse(stored) as Partial<AppState>;
             const academicYear = parsed.academicYear ?? '2026-2027';
-            const classes = Array.isArray(parsed.classes) ? parsed.classes : [];
+            const rawClasses = Array.isArray(parsed.classes) ? parsed.classes : [];
+            const trainingStructure = migrateTrainingStructure(
+              rawClasses,
+              parsed.trainingFilieres,
+              parsed.trainingPlans,
+            );
+            const classes = trainingStructure.classes;
             const rawAssessments = Array.isArray(parsed.assessments)
               ? parsed.assessments
               : [];
@@ -848,6 +1033,37 @@ export function AppDataProvider({ children }: PropsWithChildren) {
                   ),
               ),
             );
+            const trainingPlans = trainingStructure.trainingPlans;
+            const trainingSessionAssignments = Array.isArray(parsed.trainingSessionAssignments)
+              ? parsed.trainingSessionAssignments
+                    .filter(isTrainingSessionAssignment)
+                    .filter((assignment) =>
+                      trainingPlans.some((plan) =>
+                        (assignment.filiereId
+                          ? assignment.filiereId === plan.filiereId
+                          : classes.some((classItem) =>
+                              classItem.id === assignment.classId &&
+                              classItem.filiereId === plan.filiereId,
+                            )) &&
+                        getTrainingPlanSessions(plan).some(
+                          (session) => session.id === assignment.trainingSessionId,
+                        ),
+                      ) &&
+                      Array.isArray(parsed.scheduleSessions) &&
+                      (parsed.scheduleSessions.some((session) =>
+                          isScheduleSession(session) &&
+                          session.id === assignment.scheduleSessionId &&
+                          session.classId === assignment.classId,
+                        ) ||
+                        (Array.isArray(parsed.scheduleOccurrenceOverrides) &&
+                          parsed.scheduleOccurrenceOverrides.some((occurrence) =>
+                            isScheduleOccurrenceOverride(occurrence) &&
+                            occurrence.id === assignment.scheduleSessionId &&
+                            occurrence.status === 'extra' &&
+                            occurrence.classId === assignment.classId,
+                          ))),
+                    )
+              : [];
             setState((prev) => ({
               ...prev,
               ...parsed,
@@ -866,9 +1082,12 @@ export function AppDataProvider({ children }: PropsWithChildren) {
                 objectives,
               ),
               classes,
+              trainingFilieres: trainingStructure.trainingFilieres,
               scheduleSessions: Array.isArray(parsed.scheduleSessions)
                 ? parsed.scheduleSessions.filter(isScheduleSession).filter((session) => classes.some((classItem) => classItem.id === session.classId))
                 : [],
+              trainingPlans,
+              trainingSessionAssignments,
               scheduleOccurrenceOverrides: Array.isArray(parsed.scheduleOccurrenceOverrides)
                 ? parsed.scheduleOccurrenceOverrides
                     .filter(isScheduleOccurrenceOverride)
@@ -1103,9 +1322,32 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     level: string;
     levelId?: string;
     academicYear?: string;
+    filiereId?: string;
+    filiereName?: string;
   }) => {
-    const newId = createConfigId('class');
     const academicYear = (input.academicYear ?? state.academicYear).trim();
+    const filiere = state.trainingFilieres.find((item) =>
+      item.schoolYearId === academicYear &&
+      (item.id === input.filiereId ||
+        (input.filiereName !== undefined &&
+          normalizeLabel(item.name) === normalizeLabel(input.filiereName))),
+    );
+    const cleanFiliereName = input.filiereName?.trim();
+    if (!filiere && !cleanFiliereName) {
+      throw new Error('Choisissez une filière de la même année scolaire que la classe.');
+    }
+    const selectedFiliere = filiere ?? {
+      id: createConfigId('training-filiere'),
+      name: cleanFiliereName!,
+      schoolYearId: academicYear,
+    };
+    const newFilierePlan = filiere ? undefined : createDefaultTrainingPlan(
+      selectedFiliere.id,
+      selectedFiliere.name,
+      academicYear,
+      createConfigId,
+    );
+    const newId = createConfigId('class');
     let configuration =
       getSchoolYearConfiguration(academicYear) ??
       createDefaultSchoolYearConfiguration(academicYear, [input.level]);
@@ -1129,6 +1371,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       level: level.name,
       levelId: level.id,
       academicYear,
+      filiereId: selectedFiliere.id,
       active: true,
     };
 
@@ -1138,6 +1381,12 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       );
       return {
         ...prev,
+        trainingFilieres: filiere
+          ? prev.trainingFilieres
+          : [...prev.trainingFilieres, selectedFiliere],
+        trainingPlans: newFilierePlan
+          ? [...prev.trainingPlans, newFilierePlan]
+          : prev.trainingPlans,
         schoolYearConfigurations: hasConfiguration
           ? prev.schoolYearConfigurations.map((item) =>
               normalizeLabel(item.year) === normalizeLabel(academicYear)
@@ -1160,6 +1409,49 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     return newId;
   };
 
+  const createTrainingFiliere = (schoolYearId: string, name: string) => {
+    const cleanName = name.trim();
+    if (!cleanName || !schoolYearId.trim()) return undefined;
+    const existing = state.trainingFilieres.find((filiere) =>
+      filiere.schoolYearId === schoolYearId.trim() &&
+      normalizeLabel(filiere.name) === normalizeLabel(cleanName),
+    );
+    if (existing) return existing.id;
+    const id = createConfigId('training-filiere');
+    const filiere: TrainingFiliere = {
+      id,
+      name: cleanName,
+      schoolYearId: schoolYearId.trim(),
+    };
+    const plan: TrainingPlan = {
+      ...createDefaultTrainingPlan(
+        id,
+        cleanName,
+        filiere.schoolYearId,
+        createConfigId,
+      ),
+    };
+    setState((prev) => ({
+      ...prev,
+      trainingFilieres: [...prev.trainingFilieres, filiere],
+      trainingPlans: [...prev.trainingPlans, plan],
+    }));
+    return id;
+  };
+
+  const assignClassToFiliere = (classId: string, filiereId: string) => {
+    const classItem = state.classes.find((item) => item.id === classId);
+    const filiere = state.trainingFilieres.find((item) => item.id === filiereId);
+    if (!classItem || !filiere || classItem.academicYear !== filiere.schoolYearId) return false;
+    setState((prev) => ({
+      ...prev,
+      classes: prev.classes.map((item) =>
+        item.id === classId ? { ...item, filiereId } : item,
+      ),
+    }));
+    return true;
+  };
+
   const setActiveClass = (classId: string) => {
     const foundClass = state.classes.find((c) => c.id === classId);
     if (!foundClass) return;
@@ -1175,6 +1467,79 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       ...prev,
       activeClassId: classId,
       activeAssessmentId: nextAssessmentId,
+    }));
+  };
+
+  const saveTrainingPlan = (plan: TrainingPlan) => {
+    const filiere = state.trainingFilieres.find((item) => item.id === plan.filiereId);
+    if (!filiere || filiere.schoolYearId !== plan.schoolYearId) {
+      throw new Error('La filière du plan de formation est introuvable ou ne correspond pas à son année scolaire.');
+    }
+    setState((prev) => ({
+      ...prev,
+      trainingPlans: [
+        ...prev.trainingPlans.filter((item) => item.id !== plan.id && item.filiereId !== plan.filiereId),
+        plan,
+      ],
+      trainingSessionAssignments: prev.trainingSessionAssignments.filter(
+        (assignment) => !prev.classes.some((classItem) =>
+          classItem.id === assignment.classId && classItem.filiereId === plan.filiereId,
+        ) ||
+          getTrainingPlanSessions(plan).some((session) => session.id === assignment.trainingSessionId),
+      ),
+    }));
+  };
+
+  const getTrainingPlanForClass = (classId: string) =>
+    state.trainingPlans.find((plan) => {
+      const classItem = state.classes.find((item) => item.id === classId);
+      return Boolean(classItem?.filiereId && plan.filiereId === classItem.filiereId);
+    });
+
+  const getTrainingPlanForFiliere = (filiereId: string) =>
+    state.trainingPlans.find((plan) => plan.filiereId === filiereId);
+
+  const setTrainingSessionAssignment = (
+    input: Omit<TrainingSessionAssignment, 'id' | 'executedAt'> & { executedAt?: string },
+  ) => {
+    const validSchedule = state.scheduleSessions.some(
+      (session) => session.id === input.scheduleSessionId && session.classId === input.classId,
+    ) || state.scheduleOccurrenceOverrides.some(
+      (occurrence) => occurrence.id === input.scheduleSessionId &&
+        occurrence.status === 'extra' && occurrence.classId === input.classId,
+    );
+    const validTrainingSession = state.trainingPlans.some(
+      (plan) => state.classes.some((classItem) =>
+        classItem.id === input.classId && classItem.filiereId === plan.filiereId,
+      ) &&
+        validateTrainingPlan(plan).length === 0 &&
+        getTrainingPlanSessions(plan).some((session) => session.id === input.trainingSessionId),
+    );
+    if (!validSchedule || !validTrainingSession) {
+      throw new Error('Impossible d’associer cette séance au créneau ou au plan de formation sélectionné.');
+    }
+    setState((prev) => {
+      return {
+        ...prev,
+        trainingSessionAssignments: upsertTrainingSessionAssignment(
+          prev.trainingSessionAssignments,
+          {
+            ...input,
+            filiereId: state.classes.find((item) => item.id === input.classId)?.filiereId,
+          },
+        ),
+      };
+    });
+  };
+
+  const setTrainingSessionExecuted = (assignmentId: string, executed: boolean) => {
+    setState((prev) => ({
+      ...prev,
+      trainingSessionAssignments: setTrainingSessionAssignmentExecuted(
+        prev.trainingSessionAssignments,
+        assignmentId,
+        executed,
+      ),
     }));
   };
 
@@ -1323,6 +1688,9 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       scheduleOccurrenceOverrides: prev.scheduleOccurrenceOverrides.filter(
         (occurrence) => occurrence.id !== overrideId,
       ),
+      trainingSessionAssignments: prev.trainingSessionAssignments.filter(
+        (assignment) => assignment.scheduleSessionId !== overrideId,
+      ),
     }));
   };
 
@@ -1345,13 +1713,24 @@ export function AppDataProvider({ children }: PropsWithChildren) {
   };
 
   const deleteScheduleSession = (sessionId: string) => {
-    setState((prev) => ({
-      ...prev,
-      scheduleSessions: prev.scheduleSessions.filter((session) => session.id !== sessionId),
-      scheduleOccurrenceOverrides: prev.scheduleOccurrenceOverrides.filter(
-        (occurrence) => occurrence.sourceSessionId !== sessionId,
-      ),
-    }));
+    setState((prev) => {
+      const removedOverrideIds = new Set(
+        prev.scheduleOccurrenceOverrides
+          .filter((occurrence) => occurrence.sourceSessionId === sessionId)
+          .map((occurrence) => occurrence.id),
+      );
+      return {
+        ...prev,
+        scheduleSessions: prev.scheduleSessions.filter((session) => session.id !== sessionId),
+        scheduleOccurrenceOverrides: prev.scheduleOccurrenceOverrides.filter(
+          (occurrence) => occurrence.sourceSessionId !== sessionId,
+        ),
+        trainingSessionAssignments: prev.trainingSessionAssignments.filter(
+          (assignment) => assignment.scheduleSessionId !== sessionId &&
+            !removedOverrideIds.has(assignment.scheduleSessionId),
+        ),
+      };
+    });
   };
 
   const renameClass = (classId: string, name: string) => {
@@ -2174,7 +2553,12 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     if (!candidate.school || !Array.isArray(candidate.classes) || !Array.isArray(candidate.pupils) || !Array.isArray(candidate.assessments)) {
       throw new Error('Cette sauvegarde ne correspond pas à une sauvegarde Évaluation Élève.');
     }
-    const restoredClasses = candidate.classes;
+    const trainingStructure = migrateTrainingStructure(
+      candidate.classes,
+      candidate.trainingFilieres,
+      candidate.trainingPlans,
+    );
+    const restoredClasses = trainingStructure.classes;
     const restoredPupils = candidate.pupils;
     const migratedLevelTests = migrateLevelTests(
       restoredClasses,
@@ -2234,6 +2618,37 @@ export function AppDataProvider({ children }: PropsWithChildren) {
           ),
       ),
     );
+    const restoredTrainingPlans = trainingStructure.trainingPlans;
+    const restoredTrainingAssignments = Array.isArray(candidate.trainingSessionAssignments)
+      ? candidate.trainingSessionAssignments
+            .filter(isTrainingSessionAssignment)
+            .filter((assignment) =>
+              restoredTrainingPlans.some((plan) =>
+                (assignment.filiereId
+                  ? assignment.filiereId === plan.filiereId
+                  : restoredClasses.some((classItem) =>
+                      classItem.id === assignment.classId &&
+                      classItem.filiereId === plan.filiereId,
+                    )) &&
+                getTrainingPlanSessions(plan).some(
+                  (session) => session.id === assignment.trainingSessionId,
+                ),
+              ) &&
+              Array.isArray(candidate.scheduleSessions) &&
+              (candidate.scheduleSessions.some((session) =>
+                  isScheduleSession(session) &&
+                  session.id === assignment.scheduleSessionId &&
+                  session.classId === assignment.classId,
+                ) ||
+                (Array.isArray(candidate.scheduleOccurrenceOverrides) &&
+                  candidate.scheduleOccurrenceOverrides.some((occurrence) =>
+                    isScheduleOccurrenceOverride(occurrence) &&
+                    occurrence.id === assignment.scheduleSessionId &&
+                    occurrence.status === 'extra' &&
+                    occurrence.classId === assignment.classId,
+                  ))),
+            )
+      : [];
     const restored: AppState = {
       ...createEmptyState(),
       ...candidate,
@@ -2244,7 +2659,8 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       schoolYearConfigurations: Array.isArray(candidate.schoolYearConfigurations)
         ? candidate.schoolYearConfigurations
         : createEmptyState().schoolYearConfigurations,
-      classes: candidate.classes,
+      classes: restoredClasses,
+      trainingFilieres: trainingStructure.trainingFilieres,
       pupils: restoredPupils,
       assessments: migratedLevelTests.assessments,
       levelTests: migratedLevelTests.levelTests,
@@ -2257,6 +2673,8 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       scheduleSessions: Array.isArray(candidate.scheduleSessions)
         ? candidate.scheduleSessions.filter(isScheduleSession).filter((session) => restoredClasses.some((classItem) => classItem.id === session.classId))
         : [],
+      trainingPlans: restoredTrainingPlans,
+      trainingSessionAssignments: restoredTrainingAssignments,
       scheduleOccurrenceOverrides: Array.isArray(candidate.scheduleOccurrenceOverrides)
         ? candidate.scheduleOccurrenceOverrides
             .filter(isScheduleOccurrenceOverride)
@@ -2325,25 +2743,36 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     const savedConfiguration = configuration.levels.length
       ? configuration
       : { ...configuration, levels };
-    const classLevels = [
-      levels[0],
-      levels[0],
-      levels[Math.min(1, levels.length - 1)],
-      levels[Math.min(1, levels.length - 1)],
-      levels[Math.min(2, levels.length - 1)],
-    ];
-    const classDefinitions = [
-      ...classLevels.map((level, index) => ({
-        name: `Test ${level.name}-${String.fromCharCode(65 + index)}`,
-        level,
-      })),
-    ];
+    const trainingFilieres = DEFAULT_TRAINING_FILIERE_NAMES.map((name) => ({
+      id: createConfigId('demo-training-filiere'),
+      name,
+      schoolYearId: academicYear,
+    }));
+    const getLevel = (prefix: string) =>
+      levels.find((level) => normalizeLabel(level.name).startsWith(normalizeLabel(prefix))) ??
+      levels[0];
+    const filiereIdFor = (name: string) =>
+      trainingFilieres.find((filiere) => filiere.name === name)!.id;
+    const classDefinitions = DEFAULT_DEMO_CLASSES.map((definition) => ({
+      ...definition,
+      level: getLevel(definition.level),
+      filiereId: filiereIdFor(definition.filiereName),
+    }));
+    const trainingPlans = trainingFilieres.map((filiere) =>
+      createDefaultTrainingPlan(
+        filiere.id,
+        filiere.name,
+        academicYear,
+        createConfigId,
+      ),
+    );
     const classes: ClassItem[] = classDefinitions.map((definition) => ({
       id: createConfigId('demo-class'),
       name: definition.name,
       level: definition.level.name,
       levelId: definition.level.id,
       academicYear,
+      filiereId: definition.filiereId,
       active: true,
     }));
     const firstNames = [
@@ -2356,7 +2785,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       'Belkacem', 'Amrani', 'Brahimi', 'Mokrani', 'Zerrouki', 'Haddad', 'Ferhat',
       'Benali', 'Ait Ali', 'Kaci', 'Rahmani', 'Dahmani', 'Toumi',
     ];
-    const pupilCounts = [32, 34, 36, 38, 40];
+    const pupilCounts = [32, 34, 36, 38];
     const pupils: Pupil[] = classes.flatMap((classItem, classIndex) =>
       Array.from({ length: pupilCounts[classIndex] }, (_, index) => ({
         id: createConfigId('demo-pupil'),
@@ -2374,8 +2803,8 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       { dayOfWeek: 2, classIndex: 2, startTime: '08:00', endTime: '10:00' },
       { dayOfWeek: 2, classIndex: 3, startTime: '13:00', endTime: '14:00' },
       { dayOfWeek: 3, classIndex: 3, startTime: '09:00', endTime: '11:00' },
-      { dayOfWeek: 3, classIndex: 4, startTime: '14:00', endTime: '15:00' },
-      { dayOfWeek: 4, classIndex: 4, startTime: '09:00', endTime: '11:00' },
+      { dayOfWeek: 3, classIndex: 3, startTime: '14:00', endTime: '15:00' },
+      { dayOfWeek: 4, classIndex: 3, startTime: '09:00', endTime: '11:00' },
     ];
     const scheduleSessions: ScheduleSession[] = lessons.map((lesson) => ({
       id: createConfigId('demo-schedule'),
@@ -2416,6 +2845,8 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       activeContinuousEvaluationPeriodByYear: state.activeContinuousEvaluationPeriodByYear,
       continuousEvaluationSettings: state.continuousEvaluationSettings,
       classes,
+      trainingFilieres,
+      trainingPlans,
       pupils,
       scheduleSessions,
       activeClassId: classes[0]?.id ?? '',
@@ -2471,6 +2902,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         ...prev,
         classes: remainingClasses,
         scheduleSessions: prev.scheduleSessions.filter((session) => session.classId !== classId),
+        trainingSessionAssignments: prev.trainingSessionAssignments.filter((assignment) => assignment.classId !== classId),
         scheduleOccurrenceOverrides: prev.scheduleOccurrenceOverrides.filter(
           (occurrence) =>
             (!occurrence.sourceSessionId ||
@@ -2970,6 +3402,8 @@ export function AppDataProvider({ children }: PropsWithChildren) {
 
   const createAssessment = (input: {
     classId: string;
+    trainingSessionId?: string;
+    trainingStudyObjectId?: string;
     competency: string;
     competencyId?: string;
     evaluationType?: 'competency' | 'prerequisites';
@@ -3001,8 +3435,21 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       );
     const competencyId = input.competencyId ?? competency?.id;
     const evaluationType = input.evaluationType ?? 'competency';
+    const trainingStudyObject = input.trainingStudyObjectId
+      ? state.trainingPlans
+          .flatMap((plan) => plan.projects)
+          .flatMap((project) => project.studyObjects)
+          .find((studyObject) => studyObject.id === input.trainingStudyObjectId)
+      : undefined;
+    const isStudyObjectDiagnostic = Boolean(
+      input.trainingStudyObjectId &&
+      input.trainingSessionId &&
+      trainingStudyObject?.diagnostic?.id === input.trainingSessionId &&
+      (trainingStudyObject.prerequisites ?? []).some((item) => item.trim()),
+    );
     if (
       evaluationType === 'prerequisites' &&
+      !isStudyObjectDiagnostic &&
       (!competencyId ||
         !getPrerequisitesForPair(configuration, levelId, competencyId).length)
     ) {
@@ -3011,7 +3458,15 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     const duplicateExists = state.assessments.some((assessment) =>
       assessment.classId === input.classId &&
       (assessment.evaluationType ?? 'competency') === evaluationType &&
-      ((competencyId && assessment.competencyId === competencyId) ||
+      (input.trainingSessionId
+        ? assessment.trainingSessionId === input.trainingSessionId
+        : !assessment.trainingSessionId) &&
+      (input.trainingStudyObjectId
+        ? assessment.trainingStudyObjectId === input.trainingStudyObjectId
+        : !assessment.trainingStudyObjectId) &&
+      ((input.trainingStudyObjectId &&
+        assessment.trainingStudyObjectId === input.trainingStudyObjectId) ||
+        (competencyId && assessment.competencyId === competencyId) ||
         normalizeLabel(assessment.competency) === normalizeLabel(input.competency)),
     );
     if (duplicateExists) return undefined;
@@ -3027,6 +3482,10 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       id: newAssessmentId,
       classId: input.classId,
       levelTestId,
+      ...(input.trainingSessionId ? { trainingSessionId: input.trainingSessionId } : {}),
+      ...(input.trainingStudyObjectId
+        ? { trainingStudyObjectId: input.trainingStudyObjectId }
+        : {}),
       title: input.title.trim(),
       date: input.date ?? new Date().toLocaleDateString('fr-FR'),
       subject: input.subject ?? 'Français',
@@ -3043,12 +3502,17 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     let objectiveTexts = input.objectives;
     if (!objectiveTexts || objectiveTexts.length === 0) {
       const configured =
-        competencyId && levelId
+        isStudyObjectDiagnostic
+          ? (trainingStudyObject?.prerequisites ?? [])
+              .map((item) => item.trim())
+              .filter(Boolean)
+          : competencyId && levelId
           ? (evaluationType === 'prerequisites'
               ? getPrerequisitesForPair(configuration, levelId, competencyId)
               : getObjectivesForPair(configuration, levelId, competencyId)
             ).map((item) => item.description)
           : [];
+      if (isStudyObjectDiagnostic && configured.length === 0) return undefined;
       const matched = COMPETENCY_TEMPLATES.find(
         (item) =>
           item.id === competency?.templateId ||
@@ -3468,7 +3932,14 @@ export function AppDataProvider({ children }: PropsWithChildren) {
 
       // Methods
       createClass,
+      createTrainingFiliere,
+      assignClassToFiliere,
       setActiveClass,
+      saveTrainingPlan,
+      getTrainingPlanForClass,
+      getTrainingPlanForFiliere,
+      setTrainingSessionAssignment,
+      setTrainingSessionExecuted,
       addScheduleSession,
       updateScheduleSession,
       deleteScheduleSession,

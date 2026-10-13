@@ -107,6 +107,23 @@ Choisissez la date et la séance programmée. Indiquez **présent** ou **absent*
 
 Une séance récurrente décrit le créneau habituel; une annulation ou un report modifie uniquement l’occurrence concernée, pas les semaines suivantes.
 
+## Préparer et suivre le plan de formation
+
+1. Lors de la création d’une classe, choisir une filière existante ou en créer une. Dans **Plus → Plan de formation**, les classes déjà présentes peuvent être rattachées à une filière.
+2. Ouvrir **Plus → Plan de formation**, sélectionner la filière et ajouter ses projets, leurs lancements, les objets d’étude et leurs diagnostics. Toutes les classes de la filière partagent ce plan.
+3. Dans chaque objet d’étude, ajouter ses séquences, puis les séances typées. Les durées ne sont pas demandées.
+4. Consulter la vérification du plan : un projet doit comporter un lancement, chaque objet d’étude un diagnostic et chaque séquence doit respecter le nombre de séances et la répartition des activités indiqués.
+5. Dans le plan, toucher un projet, un objet d’étude ou une séquence pour développer/réduire ses détails. **Tout ouvrir / Tout réduire** permet de parcourir rapidement le plan. Le nombre de projets, objets d’étude, séquences et séances est indiqué dans le résumé.
+6. Le diagnostic appartient à l’objet d’étude dans son projet. Dans les séquences de cet objet, associer les compétences enseignées afin que l’application sache quels prérequis déjà configurés inclure dans son évaluation diagnostique.
+7. Depuis **Accueil**, pendant un cours de la classe, choisir la séance pédagogique qui correspond au cours du jour. Une fois le cours effectué, appuyer sur **Marquer réalisée**.
+8. Si la séance choisie est un diagnostic, **À faire aujourd’hui** propose directement les prérequis associés aux compétences des séquences de l’objet d’étude. Toucher une tâche ouvre la grille de saisie des résultats de la classe; ses critères et son titre sont préremplis, sans passer par un formulaire de création. Si l’évaluation existe déjà, la tâche permet de la reprendre.
+
+Pour les filières fournies (Lettres et philosophie, Langues étrangères, Sciences expérimentales, Mathématiques, Techniques mathématiques et Gestion et économie), un programme par défaut est prérempli selon les données pédagogiques communiquées. Les séquences commencent avec 9 séances (3 compréhensions de l’écrit); le professeur peut les modifier et ajouter une quatrième séance de compréhension de l’écrit pour atteindre 10. Les autres noms de filière restent vides et ne reçoivent pas de programme inventé.
+
+Les prérequis des compétences sont configurés par niveau dans **Plus → Configuration pédagogique**. Le diagnostic reste rattaché à l’objet d’étude et évalue les prérequis des compétences enseignées dans ses séquences. Aucun critère métier n’est inventé.
+
+Le plan et le suivi sont conservés localement avec les sauvegardes de l’application. La séance réalisée est associée à la date et au créneau concernés; la même séance pédagogique peut donc être suivie lors de plusieurs occurrences.
+
 ## Consulter les statistiques et exporter
 
 1. Ouvrir **Plus → Statistiques multicritères**.
@@ -157,7 +174,7 @@ Faites une sauvegarde avant toute opération de remplacement ou de suppression i
 
 Ces deux actions se trouvent dans **Paramètres de l’application → Gestion des données**.
 
-- **Générer les données de test** remplace les données pédagogiques existantes par cinq classes, entre 32 et 40 élèves par classe et un planning de 14 heures par semaine. La confirmation précise les données concernées; une sauvegarde automatique est lancée. Le profil enseignant et les informations de l’établissement sont conservés.
+- **Générer les données de test** remplace les données pédagogiques existantes par les classes 2AS LPH1, 2AS LPH2, 1AS SC3 et 1AS SC5, avec 32 à 38 élèves par classe, un planning de 14 heures par semaine et les plans de formation par défaut des filières fournies. Les deux classes LPH partagent le plan « Lettres et philosophie »; les deux classes SC partagent le plan « Sciences expérimentales ». La confirmation précise les données concernées; une sauvegarde automatique est lancée. Le profil enseignant et les informations de l’établissement sont conservés.
 - **Réinitialiser l’application** efface les données locales. L’action demande une confirmation renforcée; créez d’abord une sauvegarde si vous souhaitez garder une copie.
 
 N’utilisez pas ces actions sur vos données réelles sans avoir vérifié la confirmation et conservé une sauvegarde.

@@ -8,6 +8,7 @@ import { useColors } from '@/hooks/useColors';
 
 const MENU_ITEMS = [
   { group: 'Aide', label: 'Guide d’utilisation', detail: 'Trouver rapidement comment réaliser une action', icon: 'help-circle' as const, route: '/user-guide' as const },
+  { group: 'Organisation', label: 'Plan de formation', detail: 'Préparer les projets, objets d’étude et séances', icon: 'book-open' as const, route: '/training-plan' as const },
   { group: 'Organisation', label: 'Emploi du temps', detail: 'Séances de la semaine et rappels', icon: 'calendar' as const, route: '/schedule' as const },
   { group: 'Organisation', label: 'Fin d’année scolaire', detail: 'Archiver une année et préparer la suivante', icon: 'archive' as const, route: '/year-end' as const },
   { group: 'Organisation', label: 'Tous les élèves', detail: 'Rechercher parmi les élèves des classes', icon: 'user' as const, route: '/pupils-list' as const },

@@ -23,6 +23,7 @@ export default function OnboardingScreen() {
   const [wilaya, setWilaya] = useState(data.school.wilaya);
   const [academicYear, setAcademicYear] = useState(data.academicYear);
   const [className, setClassName] = useState('');
+  const [filiereName, setFiliereName] = useState('');
   const [level, setLevel] = useState(DEFAULT_SCHOOL_LEVELS[0]);
 
   const levels = useMemo(() => {
@@ -45,8 +46,8 @@ export default function OnboardingScreen() {
       setStep((current) => current + 1);
       return;
     }
-    if (!className.trim() || !level) {
-      Alert.alert('Classe requise', 'Saisissez le nom de votre classe et sélectionnez son niveau.');
+    if (!className.trim() || !level || !filiereName.trim()) {
+      Alert.alert('Informations requises', 'Saisissez le nom de votre classe et de sa filière, puis sélectionnez le niveau.');
       return;
     }
 
@@ -57,11 +58,20 @@ export default function OnboardingScreen() {
       academicYear: academicYear.trim(),
     });
     data.setActiveAcademicYear(academicYear.trim());
-    data.createClass({
-      name: className.trim(),
-      level,
-      academicYear: academicYear.trim(),
-    });
+    try {
+      data.createClass({
+        name: className.trim(),
+        level,
+        academicYear: academicYear.trim(),
+        filiereName: filiereName.trim(),
+      });
+    } catch (error) {
+      Alert.alert(
+        'Filière invalide',
+        error instanceof Error ? error.message : 'La filière n’a pas pu être créée.',
+      );
+      return;
+    }
     router.replace('/(tabs)');
   };
 
@@ -175,6 +185,17 @@ export default function OnboardingScreen() {
               />
             </View>
             <View style={styles.field}>
+              <Text style={[styles.label, { color: colors.mutedForeground }]}>FILIÈRE</Text>
+              <TextInput
+                autoCapitalize="words"
+                placeholder="Nom de la filière"
+                placeholderTextColor={colors.mutedForeground}
+                value={filiereName}
+                onChangeText={setFiliereName}
+                style={[styles.input, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]}
+              />
+            </View>
+            <View style={styles.field}>
               <Text style={[styles.label, { color: colors.mutedForeground }]}>NIVEAU</Text>
               <View style={styles.levelChoices}>
                 {levels.map((item) => {
@@ -204,7 +225,7 @@ export default function OnboardingScreen() {
             <View style={[styles.summary, { backgroundColor: colors.muted }]}>
               <Feather name="check-circle" size={16} color={colors.primary} />
               <Text style={[styles.summaryText, { color: colors.foreground }]}>
-                Votre espace sera prêt avec {schoolName.trim()} · {academicYear.trim()} · {className.trim() || 'votre classe'} ({level}).
+                Votre espace sera prêt avec {schoolName.trim()} · {academicYear.trim()} · {className.trim() || 'votre classe'} ({level}) · {filiereName.trim() || 'votre filière'}.
               </Text>
             </View>
           </>

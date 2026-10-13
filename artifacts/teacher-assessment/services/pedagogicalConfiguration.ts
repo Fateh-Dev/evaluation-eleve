@@ -1,4 +1,4 @@
-import { COMPETENCY_TEMPLATES } from '../constants/competencies.ts';
+import { COMPETENCY_TEMPLATES } from "../constants/competencies.ts";
 
 export type SchoolLevel = {
   id: string;
@@ -53,13 +53,13 @@ export type LegacyObjective = {
   description: string;
 };
 
-export const DEFAULT_SCHOOL_LEVELS = ['1AS', '2AS', '3AS'];
+export const DEFAULT_SCHOOL_LEVELS = ["1AS", "2AS", "3AS"];
 
 export function normalizeLabel(value: string): string {
   return value
     .trim()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLocaleLowerCase();
 }
 
@@ -88,7 +88,7 @@ function createDefaultObjectiveRows(
     .map((description) => description.trim())
     .filter(Boolean)
     .map((description, index) => ({
-      id: createConfigId('objective'),
+      id: createConfigId("objective"),
       levelId,
       competencyId,
       order: index + 1,
@@ -104,7 +104,7 @@ export function createDefaultSchoolYearConfiguration(
     ...DEFAULT_SCHOOL_LEVELS,
     ...additionalLevels,
   ]).map((name) => ({
-    id: createConfigId('level'),
+    id: createConfigId("level"),
     name,
   }));
   const competencies: SchoolCompetency[] = COMPETENCY_TEMPLATES.map(
@@ -128,7 +128,7 @@ export function createDefaultSchoolYearConfiguration(
         ...createDefaultObjectiveRows(
           level.id,
           competency.id,
-          template?.defaultObjectives ?? ['Objectif 1'],
+          template?.defaultObjectives ?? ["Objectif 1"],
         ),
       );
       if (template?.defaultPrerequisites) {
@@ -156,16 +156,16 @@ export function createDefaultSchoolYearConfiguration(
 function normalizeSavedConfiguration(
   value: unknown,
 ): SchoolYearConfiguration | undefined {
-  if (!value || typeof value !== 'object') return undefined;
+  if (!value || typeof value !== "object") return undefined;
   const raw = value as Partial<SchoolYearConfiguration>;
-  if (typeof raw.year !== 'string' || !raw.year.trim()) return undefined;
+  if (typeof raw.year !== "string" || !raw.year.trim()) return undefined;
 
   const levels: SchoolLevel[] = Array.isArray(raw.levels)
     ? raw.levels.flatMap((entry) => {
-        if (!entry || typeof entry !== 'object') return [];
+        if (!entry || typeof entry !== "object") return [];
         const item = entry as Partial<SchoolLevel>;
-        return typeof item.id === 'string' &&
-          typeof item.name === 'string' &&
+        return typeof item.id === "string" &&
+          typeof item.name === "string" &&
           item.name.trim()
           ? [{ id: item.id, name: item.name.trim() }]
           : [];
@@ -173,10 +173,10 @@ function normalizeSavedConfiguration(
     : [];
   const competencies: SchoolCompetency[] = Array.isArray(raw.competencies)
     ? raw.competencies.flatMap((entry) => {
-        if (!entry || typeof entry !== 'object') return [];
+        if (!entry || typeof entry !== "object") return [];
         const item = entry as Partial<SchoolCompetency>;
-        return typeof item.id === 'string' &&
-          typeof item.name === 'string' &&
+        return typeof item.id === "string" &&
+          typeof item.name === "string" &&
           item.name.trim()
           ? [
               {
@@ -196,56 +196,58 @@ function normalizeSavedConfiguration(
     ? raw.associations.filter(
         (item): item is LevelCompetencyAssociation =>
           Boolean(item) &&
-          typeof item.levelId === 'string' &&
+          typeof item.levelId === "string" &&
           levelIds.has(item.levelId) &&
-          typeof item.competencyId === 'string' &&
+          typeof item.competencyId === "string" &&
           competencyIds.has(item.competencyId),
       )
     : [];
   const objectives: ConfiguredObjective[] = Array.isArray(raw.objectives)
     ? raw.objectives.flatMap((entry, index) => {
-        if (!entry || typeof entry !== 'object') return [];
+        if (!entry || typeof entry !== "object") return [];
         const item = entry as Partial<ConfiguredObjective>;
-        return typeof item.levelId === 'string' &&
+        return typeof item.levelId === "string" &&
           levelIds.has(item.levelId) &&
-          typeof item.competencyId === 'string' &&
+          typeof item.competencyId === "string" &&
           competencyIds.has(item.competencyId) &&
-          typeof item.description === 'string' &&
+          typeof item.description === "string" &&
           item.description.trim()
           ? [
               {
                 id:
-                  typeof item.id === 'string'
+                  typeof item.id === "string"
                     ? item.id
-                    : createConfigId('objective'),
+                    : createConfigId("objective"),
                 levelId: item.levelId,
                 competencyId: item.competencyId,
-                order: typeof item.order === 'number' ? item.order : index + 1,
+                order: typeof item.order === "number" ? item.order : index + 1,
                 description: item.description.trim(),
               },
             ]
           : [];
       })
     : [];
-  const prerequisiteObjectives: ConfiguredObjective[] = Array.isArray(raw.prerequisiteObjectives)
+  const prerequisiteObjectives: ConfiguredObjective[] = Array.isArray(
+    raw.prerequisiteObjectives,
+  )
     ? raw.prerequisiteObjectives.flatMap((entry, index) => {
-        if (!entry || typeof entry !== 'object') return [];
+        if (!entry || typeof entry !== "object") return [];
         const item = entry as Partial<ConfiguredObjective>;
-        return typeof item.levelId === 'string' &&
+        return typeof item.levelId === "string" &&
           levelIds.has(item.levelId) &&
-          typeof item.competencyId === 'string' &&
+          typeof item.competencyId === "string" &&
           competencyIds.has(item.competencyId) &&
-          typeof item.description === 'string' &&
+          typeof item.description === "string" &&
           item.description.trim()
           ? [
               {
                 id:
-                  typeof item.id === 'string'
+                  typeof item.id === "string"
                     ? item.id
-                    : createConfigId('prerequisite'),
+                    : createConfigId("prerequisite"),
                 levelId: item.levelId,
                 competencyId: item.competencyId,
-                order: typeof item.order === 'number' ? item.order : index + 1,
+                order: typeof item.order === "number" ? item.order : index + 1,
                 description: item.description.trim(),
               },
             ]
@@ -258,7 +260,8 @@ function normalizeSavedConfiguration(
         const template = COMPETENCY_TEMPLATES.find(
           (item) =>
             item.id === competency?.templateId ||
-            normalizeLabel(item.name) === normalizeLabel(competency?.name ?? ''),
+            normalizeLabel(item.name) ===
+              normalizeLabel(competency?.name ?? ""),
         );
         return template?.defaultPrerequisites
           ? createDefaultObjectiveRows(
@@ -284,12 +287,12 @@ export function cloneSchoolYearConfiguration(
   targetYear: string,
 ): SchoolYearConfiguration {
   const levelIds = new Map(
-    source.levels.map((level) => [level.id, createConfigId('level')]),
+    source.levels.map((level) => [level.id, createConfigId("level")]),
   );
   const competencyIds = new Map(
     source.competencies.map((competency) => [
       competency.id,
-      createConfigId('competency'),
+      createConfigId("competency"),
     ]),
   );
 
@@ -315,27 +318,29 @@ export function cloneSchoolYearConfiguration(
         ? [
             {
               ...objective,
-              id: createConfigId('objective'),
+              id: createConfigId("objective"),
               levelId,
               competencyId,
             },
           ]
         : [];
     }),
-    prerequisiteObjectives: source.prerequisiteObjectives.flatMap((objective) => {
-      const levelId = levelIds.get(objective.levelId);
-      const competencyId = competencyIds.get(objective.competencyId);
-      return levelId && competencyId
-        ? [
-            {
-              ...objective,
-              id: createConfigId('prerequisite'),
-              levelId,
-              competencyId,
-            },
-          ]
-        : [];
-    }),
+    prerequisiteObjectives: source.prerequisiteObjectives.flatMap(
+      (objective) => {
+        const levelId = levelIds.get(objective.levelId);
+        const competencyId = competencyIds.get(objective.competencyId);
+        return levelId && competencyId
+          ? [
+              {
+                ...objective,
+                id: createConfigId("prerequisite"),
+                levelId,
+                competencyId,
+              },
+            ]
+          : [];
+      },
+    ),
   };
 }
 
@@ -353,7 +358,7 @@ export function migrateSchoolYearConfigurations(
     : [];
   const years = uniqueLabels([
     activeYear,
-    ...classes.map((item) => item.academicYear ?? ''),
+    ...classes.map((item) => item.academicYear ?? ""),
     ...savedConfigurations.map((item) => item.year),
   ]);
 
@@ -377,9 +382,9 @@ export function migrateSchoolYearConfigurations(
       classes
         .filter(
           (item) =>
-            normalizeLabel(item.academicYear ?? '') === normalizeLabel(year),
+            normalizeLabel(item.academicYear ?? "") === normalizeLabel(year),
         )
-        .map((item) => item.level ?? ''),
+        .map((item) => item.level ?? ""),
     );
     const yearClasses = classes.filter(
       (item) =>
@@ -398,7 +403,7 @@ export function migrateSchoolYearConfigurations(
           (item) => normalizeLabel(item.name) === normalizeLabel(levelName),
         );
       if (!level) {
-        level = { id: createConfigId('level'), name: levelName };
+        level = { id: createConfigId("level"), name: levelName };
         configuration.levels.push(level);
       }
 
@@ -422,7 +427,7 @@ export function migrateSchoolYearConfigurations(
             );
           if (!competency) {
             competency = {
-              id: assessment.competencyId || createConfigId('competency'),
+              id: assessment.competencyId || createConfigId("competency"),
               name: assessment.competency.trim(),
               ...(template ? { templateId: template.id } : {}),
             };
@@ -470,7 +475,7 @@ export function migrateSchoolYearConfigurations(
               )
             ) {
               const descriptions = template?.defaultObjectives ?? [
-                'Objectif 1',
+                "Objectif 1",
               ];
               configuration.objectives.push(
                 ...createDefaultObjectiveRows(

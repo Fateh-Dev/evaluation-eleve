@@ -35,6 +35,8 @@ export default function ClassesScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [newClassName, setNewClassName] = useState('');
   const [newClassLevelId, setNewClassLevelId] = useState('');
+  const [newClassFiliereId, setNewClassFiliereId] = useState('');
+  const [newFiliereName, setNewFiliereName] = useState('');
   const [newClassYear, setNewClassYear] = useState(
     data.academicYear || '2026-2027',
   );
@@ -44,6 +46,9 @@ export default function ClassesScreen() {
     data.getSchoolYearConfiguration(newClassYear);
   const selectedLevel = selectedYearConfiguration?.levels.find(
     (level) => level.id === newClassLevelId,
+  );
+  const newYearFilieres = data.trainingFilieres.filter(
+    (filiere) => filiere.schoolYearId === newClassYear,
   );
   const visibleClasses = data.classes.filter(
     (item) => item.academicYear === visibleYear,
@@ -60,12 +65,16 @@ export default function ClassesScreen() {
     setNewClassName('');
     setNewClassYear(year);
     setNewClassLevelId(level?.id ?? '');
+    setNewClassFiliereId(data.trainingFilieres.find((item) => item.schoolYearId === year)?.id ?? '');
+    setNewFiliereName('');
     setModalVisible(true);
   };
 
   const resetModal = () => {
     setNewClassName('');
     setNewClassLevelId('');
+    setNewClassFiliereId('');
+    setNewFiliereName('');
     setModalVisible(false);
   };
 
@@ -74,6 +83,8 @@ export default function ClassesScreen() {
     const level = config?.levels[0];
     setNewClassYear(year);
     setNewClassLevelId(level?.id ?? '');
+    setNewClassFiliereId(data.trainingFilieres.find((item) => item.schoolYearId === year)?.id ?? '');
+    setNewFiliereName('');
   };
 
   const selectClassLevel = (levelId: string) => {
@@ -81,19 +92,30 @@ export default function ClassesScreen() {
   };
 
   const handleCreateClass = () => {
-    if (!newClassName.trim() || !selectedLevel) {
+    if (!newClassName.trim() || !selectedLevel || (!newClassFiliereId && !newFiliereName.trim())) {
       Alert.alert(
         'Informations requises',
-        'Le nom et le niveau de la classe sont obligatoires.',
+        'Le nom, le niveau et la filière de la classe sont obligatoires.',
       );
       return;
     }
-    const createdId = data.createClass({
-      name: newClassName.trim(),
-      level: selectedLevel.name,
-      levelId: selectedLevel.id,
-      academicYear: newClassYear.trim(),
-    });
+    let createdId: string;
+    try {
+      createdId = data.createClass({
+        name: newClassName.trim(),
+        level: selectedLevel.name,
+        levelId: selectedLevel.id,
+        academicYear: newClassYear.trim(),
+        filiereId: newFiliereName.trim() ? undefined : newClassFiliereId,
+        filiereName: newFiliereName.trim() || undefined,
+      });
+    } catch (error) {
+      Alert.alert(
+        'Filière invalide',
+        error instanceof Error ? error.message : 'La filière n’a pas pu être créée ou sélectionnée.',
+      );
+      return;
+    }
     setVisibleYear(newClassYear);
     resetModal();
     router.push(`/classes/${createdId}`);
@@ -318,6 +340,9 @@ export default function ClassesScreen() {
                     {' · '}{activePeriod?.name ?? 'Aucune période'}
                     {' · '}{progress.completedCount}/{classPupils.length} évaluées
                   </Text>
+                  <Text style={[styles.classMeta, { color: colors.mutedForeground }]}>
+                    Filière : {data.trainingFilieres.find((item) => item.id === cls.filiereId)?.name ?? 'À affecter'}
+                  </Text>
                 </View>
 
                 <View style={styles.cardActionsRow}>
@@ -432,6 +457,61 @@ export default function ClassesScreen() {
                     );
                   })}
                 </ScrollView>
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>
+                  FILIÈRE
+                </Text>
+                {newYearFilieres.length ? (
+                  <View style={styles.levelButtons}>
+                    {newYearFilieres.map((filiere) => {
+                      const selected = filiere.id === newClassFiliereId && !newFiliereName.trim();
+                      return (
+                        <Pressable
+                          key={filiere.id}
+                          accessibilityRole="radio"
+                          accessibilityState={{ checked: selected }}
+                          onPress={() => {
+                            setNewClassFiliereId(filiere.id);
+                            setNewFiliereName('');
+                          }}
+                          style={[
+                            styles.levelChip,
+                            {
+                              backgroundColor: selected ? colors.primary : colors.secondary,
+                              borderColor: selected ? colors.primary : colors.border,
+                            },
+                          ]}
+                        >
+                          <Text style={[
+                            styles.levelChipText,
+                            { color: selected ? colors.primaryForeground : colors.foreground },
+                          ]}>
+                            {filiere.name}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                ) : null}
+                <TextInput
+                  value={newFiliereName}
+                  onChangeText={(value) => {
+                    setNewFiliereName(value);
+                    if (value.trim()) setNewClassFiliereId('');
+                  }}
+                  placeholder={newYearFilieres.length ? 'Ou créer une nouvelle filière' : 'Nom de la filière'}
+                  placeholderTextColor={colors.mutedForeground}
+                  style={[
+                    styles.input,
+                    {
+                      color: colors.foreground,
+                      borderColor: colors.border,
+                      backgroundColor: colors.background,
+                    },
+                  ]}
+                />
               </View>
 
               {/* School level */}

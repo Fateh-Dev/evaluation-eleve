@@ -167,30 +167,27 @@ export default function AssessmentsScreen() {
             const evaluatedTotal = stats.reduce((sum, s) => sum + s.evaluated, 0);
             const totalPossible = Math.max(classPupils.length * objList.length, 1);
             const progressPercent = Math.round((evaluatedTotal / totalPossible) * 100);
-            const groupId =
-              item.levelTestId ??
-              `${item.classId}::${itemClass?.academicYear ?? ''}`;
+            const getGroupId = (assessment: (typeof filteredAssessments)[number]) =>
+              assessment.trainingSessionId
+                ? `${assessment.classId}::diagnostic::${assessment.trainingSessionId}`
+                : assessment.levelTestId ??
+                  `${assessment.classId}::${data.classes.find((c) => c.id === assessment.classId)?.academicYear ?? ''}`;
+            const groupId = getGroupId(item);
             const previousItem = filteredAssessments[index - 1];
-            const previousClass = previousItem
-              ? data.classes.find((c) => c.id === previousItem.classId)
-              : undefined;
-            const previousGroupId = previousItem
-              ? previousItem.levelTestId ??
-                `${previousItem.classId}::${previousClass?.academicYear ?? ''}`
-              : undefined;
-            const startsLevelTest = groupId !== previousGroupId;
+            const previousGroupId = previousItem ? getGroupId(previousItem) : undefined;
+            const startsAssessmentGroup = groupId !== previousGroupId;
             const groupCompetencyCount = filteredAssessments.filter(
-              (assessment) =>
-                (assessment.levelTestId ??
-                  `${assessment.classId}::${data.classes.find((c) => c.id === assessment.classId)?.academicYear ?? ''}`) === groupId,
+              (assessment) => getGroupId(assessment) === groupId,
             ).length;
 
             return (
               <React.Fragment key={item.id}>
-                {startsLevelTest && (
+                {startsAssessmentGroup && (
                   <View style={styles.levelTestGroup}>
                     <Text style={[styles.levelTestGroupTitle, { color: colors.foreground }]}>
-                      Test initial · {itemClass?.academicYear ?? ''}
+                      {item.trainingSessionId
+                        ? `Diagnostic · ${item.title}`
+                        : `Test initial · ${itemClass?.academicYear ?? ''}`}
                     </Text>
                     <Text style={[styles.levelTestGroupSubtitle, { color: colors.mutedForeground }]}>
                       {itemClass?.name ?? item.level} · {groupCompetencyCount} évaluation{groupCompetencyCount > 1 ? 's' : ''}

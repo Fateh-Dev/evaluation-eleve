@@ -27,7 +27,13 @@ import { normalizeLabel } from '@/services/pedagogicalConfiguration';
 export default function NewAssessmentScreen() {
   const colors = useColors();
   const data = useAppData();
-  const params = useLocalSearchParams<{ classId?: string }>();
+  const params = useLocalSearchParams<{
+    classId?: string;
+    evaluationType?: string;
+    trainingSessionId?: string;
+    diagnosticTitle?: string;
+    studyObjectTitle?: string;
+  }>();
 
   const [selectedClassId, setSelectedClassId] = useState<string>(
     params.classId || data.activeClassId || data.classes[0]?.id || '',
@@ -61,7 +67,7 @@ export default function NewAssessmentScreen() {
   );
   const [evaluationType, setEvaluationType] = useState<
     'competency' | 'prerequisites'
-  >('competency');
+  >(params.evaluationType === 'prerequisites' ? 'prerequisites' : 'competency');
   const classAssessments = useMemo(
     () => data.getAssessmentsForClass(selectedClassId),
     [data.assessments, selectedClassId],
@@ -72,9 +78,36 @@ export default function NewAssessmentScreen() {
   ) =>
     classAssessments.some((assessment) =>
       (assessment.evaluationType ?? 'competency') === type &&
+      (params.trainingSessionId
+        ? assessment.trainingSessionId === params.trainingSessionId
+        : !assessment.trainingSessionId) &&
       (assessment.competencyId === competency.id ||
         normalizeLabel(assessment.competency) === normalizeLabel(competency.name)),
     );
+  const selectableCompetencies = useMemo(
+    () => evaluationType === 'prerequisites'
+      ? competencies.filter((competency) => {
+          const levelId = data.getLevelIdForYear(
+            selectedClass.academicYear,
+            selectedClass.levelId,
+            selectedClass.level,
+          );
+          return data.getPrerequisitesForLevelCompetency(
+            selectedClass.academicYear,
+            levelId,
+            competency.id,
+          ).length > 0;
+        })
+      : competencies,
+    [
+      competencies,
+      data.schoolYearConfigurations,
+      evaluationType,
+      selectedClass.academicYear,
+      selectedClass.levelId,
+      selectedClass.level,
+    ],
+  );
   const [selectedCompetencyId, setSelectedCompetencyId] = useState('');
   const [title, setTitle] = useState('');
   const [subject, setSubject] = useState('Français');
@@ -96,8 +129,8 @@ export default function NewAssessmentScreen() {
 
   useEffect(() => {
     const nextCompetency =
-      competencies.find((item) => item.id === selectedCompetencyId && !isCompetencyUsed(item)) ??
-      competencies.find((item) => !isCompetencyUsed(item));
+      selectableCompetencies.find((item) => item.id === selectedCompetencyId && !isCompetencyUsed(item)) ??
+      selectableCompetencies.find((item) => !isCompetencyUsed(item));
     setSelectedCompetencyId(nextCompetency?.id ?? '');
     if (!nextCompetency) {
       setTitle('');
@@ -125,13 +158,13 @@ export default function NewAssessmentScreen() {
       .map((item) => item.description);
     setTitle(
       evaluationType === 'prerequisites'
-        ? `Évaluation des prérequis — ${nextCompetency.name}`
+        ? `${params.diagnosticTitle ? `${params.diagnosticTitle} — ` : 'Évaluation des prérequis — '}${nextCompetency.name}`
         : template?.defaultTitle ?? nextCompetency.name,
     );
     setSupport(template?.defaultSupport ?? '');
     setSessionObjectives(
       evaluationType === 'prerequisites'
-        ? `Vérifier les prérequis de la compétence « ${nextCompetency.name} ».`
+        ? `Évaluation diagnostique de la classe${params.studyObjectTitle ? ` pour l’objet d’étude « ${params.studyObjectTitle} »` : ''} : vérifier les prérequis de la compétence « ${nextCompetency.name} ».`
         : template?.defaultSessionObjectives ?? '',
     );
     const configuredCriteria =
@@ -153,8 +186,12 @@ export default function NewAssessmentScreen() {
     );
   }, [
     selectedClassId,
+    selectableCompetencies,
     selectedCompetencyId,
     evaluationType,
+    params.diagnosticTitle,
+    params.studyObjectTitle,
+    params.trainingSessionId,
     data.schoolYearConfigurations,
     data.assessments,
   ]);
@@ -236,6 +273,7 @@ export default function NewAssessmentScreen() {
 
     const createdId = data.createAssessment({
       classId: selectedClassId,
+      ...(params.trainingSessionId ? { trainingSessionId: params.trainingSessionId } : {}),
       competency: selectedCompetency.name,
       competencyId: selectedCompetency.id,
       evaluationType,
@@ -261,9 +299,13 @@ export default function NewAssessmentScreen() {
   return (
     <Screen onTouchStart={() => setRemoveArmedObjectiveIndex(null)}>
       <AppHeader
-        eyebrow={evaluationType === 'prerequisites' ? 'Test des prérequis' : 'Test de niveau'}
+        eyebrow={params.trainingSessionId
+          ? 'Évaluation diagnostique de la classe'
+          : evaluationType === 'prerequisites' ? 'Test des prérequis' : 'Test de niveau'}
         title={
-          existingLevelTest
+          params.trainingSessionId
+            ? 'Évaluer les prérequis'
+            : existingLevelTest
             ? 'Ajouter une évaluation'
             : 'Créer le test initial'
         }
@@ -272,7 +314,9 @@ export default function NewAssessmentScreen() {
       />
       <Surface style={styles.sectionCard}>
         <Text style={[styles.templateCount, { color: colors.mutedForeground }]}>
-          {existingLevelTest
+          {params.trainingSessionId
+            ? `Évaluation liée au diagnostic « ${params.diagnosticTitle ?? 'Diagnostic'} »${params.studyObjectTitle ? ` — ${params.studyObjectTitle}` : ''}, pour les élèves de ${selectedClass.name}.`
+            : existingLevelTest
             ? `Le test initial de ${selectedClass.name} pour ${selectedClass.academicYear} existe déjà. ${existingCompetencyCount} compétence${existingCompetencyCount > 1 ? 's' : ''} évaluée${existingCompetencyCount > 1 ? 's' : ''} actuellement.`
             : `Vous créez le test initial de ${selectedClass.name} pour ${selectedClass.academicYear}.`}
         </Text>
@@ -287,86 +331,98 @@ export default function NewAssessmentScreen() {
         <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>
           1. CHOISIR LA CLASSE
         </Text>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.classChips}
-        >
-          {data.classes.map((cls) => {
-            const isSelected = cls.id === selectedClassId;
-            return (
-              <Pressable
-                key={cls.id}
-                onPress={() => setSelectedClassId(cls.id)}
-                style={[
-                  styles.classChip,
-                  {
-                    backgroundColor: isSelected
-                      ? colors.primary
-                      : colors.secondary,
-                    borderColor: isSelected ? colors.primary : colors.border,
-                  },
-                ]}
-              >
-                <Text
+        {params.trainingSessionId ? (
+          <Text style={[styles.templateTitle, { color: colors.foreground }]}>
+            {selectedClass.name} ({selectedClass.level})
+          </Text>
+        ) : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.classChips}
+          >
+            {data.classes.map((cls) => {
+              const isSelected = cls.id === selectedClassId;
+              return (
+                <Pressable
+                  key={cls.id}
+                  onPress={() => setSelectedClassId(cls.id)}
                   style={[
-                    styles.classChipText,
+                    styles.classChip,
                     {
-                      color: isSelected
-                        ? colors.primaryForeground
-                        : colors.foreground,
+                      backgroundColor: isSelected
+                        ? colors.primary
+                        : colors.secondary,
+                      borderColor: isSelected ? colors.primary : colors.border,
                     },
                   ]}
                 >
-                  {cls.name} ({cls.level})
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+                  <Text
+                    style={[
+                      styles.classChipText,
+                      {
+                        color: isSelected
+                          ? colors.primaryForeground
+                          : colors.foreground,
+                      },
+                    ]}
+                  >
+                    {cls.name} ({cls.level})
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        )}
       </Surface>
 
       <Surface style={styles.sectionCard}>
         <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>
-          2. TYPE D’ÉVALUATION
+          {params.trainingSessionId ? '2. DIAGNOSTIC DES PRÉREQUIS' : '2. TYPE D’ÉVALUATION'}
         </Text>
-        <View style={styles.typeChoices}>
-          {([
-            ['competency', 'Évaluation habituelle'],
-            ['prerequisites', 'Test des prérequis'],
-          ] as const).map(([type, label]) => {
-            const selected = evaluationType === type;
-            return (
-              <Pressable
-                key={type}
-                accessibilityRole="button"
-                accessibilityState={{ selected }}
-                onPress={() => setEvaluationType(type)}
-                style={[
-                  styles.typeChoice,
-                  {
-                    backgroundColor: selected ? colors.accent : colors.card,
-                    borderColor: selected ? colors.primary : colors.border,
-                  },
-                ]}
-              >
-                <Text
+        {params.trainingSessionId ? (
+          <Text style={[styles.typeChoiceDescription, { color: colors.mutedForeground }]}>
+            Choisissez une compétence configurée et renseignez les résultats de toute la classe sur ses prérequis.
+          </Text>
+        ) : (
+          <View style={styles.typeChoices}>
+            {([
+              ['competency', 'Évaluation habituelle'],
+              ['prerequisites', 'Test des prérequis'],
+            ] as const).map(([type, label]) => {
+              const selected = evaluationType === type;
+              return (
+                <Pressable
+                  key={type}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  onPress={() => setEvaluationType(type)}
                   style={[
-                    styles.typeChoiceTitle,
-                    { color: selected ? colors.primary : colors.foreground },
+                    styles.typeChoice,
+                    {
+                      backgroundColor: selected ? colors.accent : colors.card,
+                      borderColor: selected ? colors.primary : colors.border,
+                    },
                   ]}
                 >
-                  {label}
-                </Text>
-                <Text style={[styles.typeChoiceDescription, { color: colors.mutedForeground }]}>
-                  {type === 'prerequisites'
-                    ? 'Mesure les acquis déjà nécessaires pour cette compétence.'
-                    : 'Évalue les objectifs habituels de la compétence.'}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+                  <Text
+                    style={[
+                      styles.typeChoiceTitle,
+                      { color: selected ? colors.primary : colors.foreground },
+                    ]}
+                  >
+                    {label}
+                  </Text>
+                  <Text style={[styles.typeChoiceDescription, { color: colors.mutedForeground }]}>
+                    {type === 'prerequisites'
+                      ? 'Mesure les acquis déjà nécessaires pour cette compétence.'
+                      : 'Évalue les objectifs habituels de la compétence.'}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
       </Surface>
 
       {/* Competencies configured for this school year and level */}
@@ -384,7 +440,7 @@ export default function NewAssessmentScreen() {
             : 'Les objectifs enregistrés pour cette compétence seront copiés dans le test.'}
         </Text>
         <View style={styles.templatesGrid}>
-          {competencies.map((competency) => {
+          {selectableCompetencies.map((competency) => {
             const isSelected = selectedCompetencyId === competency.id;
             const isAlreadyUsed = isCompetencyUsed(competency);
             const levelId = data.getLevelIdForYear(
@@ -458,6 +514,13 @@ export default function NewAssessmentScreen() {
             />
           </View>
         )}
+        {evaluationType === 'prerequisites' && competencies.length > 0 && selectableCompetencies.length === 0 ? (
+          <View style={styles.emptyCompetencies}>
+            <Text style={[styles.templateCount, { color: colors.mutedForeground }]}>
+              Aucun prérequis n’est configuré pour les compétences de ce niveau. Configurez-les dans les paramètres pédagogiques pour préparer ce diagnostic.
+            </Text>
+          </View>
+        ) : null}
         {evaluationType === 'prerequisites' &&
           selectedCompetency &&
           data.getPrerequisitesForLevelCompetency(

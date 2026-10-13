@@ -295,7 +295,7 @@ export default function SettingsScreen() {
     if (generatingTestData) return;
     Alert.alert(
       'Générer des données de test ?',
-      `Cette action remplacera les ${data.classes.length} classes, ${data.pupils.length} élèves, évaluations, présences et créneaux existants. Une sauvegarde automatique sera créée. Votre profil et les informations de l’établissement seront conservés.`,
+      `Cette action remplacera les ${data.classes.length} classes, ${data.pupils.length} élèves, évaluations, présences et créneaux existants par 2AS LPH1, 2AS LPH2, 1AS SC3 et 1AS SC5, avec leurs plans de filière par défaut. Une sauvegarde automatique sera créée. Votre profil et les informations de l’établissement seront conservés.`,
       [
         { text: 'Annuler', style: 'cancel' },
         {
@@ -764,7 +764,7 @@ export default function SettingsScreen() {
           <View style={styles.settingCopy}>
             <Text style={[styles.value, { color: colors.foreground }]}>Données de démonstration</Text>
             <Text style={[styles.help, { color: colors.mutedForeground }]}>
-              Remplacez les données pédagogiques par 5 classes de 32 à 40 élèves et un emploi du temps de 14 heures par semaine.
+              Remplacez les données pédagogiques par 4 classes (2AS LPH1, 2AS LPH2, 1AS SC3 et 1AS SC5), leurs filières et programmes par défaut, et un emploi du temps de 14 heures par semaine.
             </Text>
           </View>
         </View>
