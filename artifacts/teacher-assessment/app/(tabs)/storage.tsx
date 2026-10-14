@@ -1,6 +1,7 @@
 import { Alert } from "@/components/AppDialog";
 import { Feather } from "@expo/vector-icons";
 import React, { useMemo, useState } from "react";
+import { PdfPreviewModal } from "@/components/PdfPreviewModal";
 import {
   Modal,
   Pressable,
@@ -20,7 +21,7 @@ import {
   Surface,
 } from "@/components/AppShell";
 import { useColors } from "@/hooks/useColors";
-import { useStorage } from "@/context/StorageContext";
+import { useStorage, type StoredPdf } from "@/context/StorageContext";
 import { useListSelection } from "@/hooks/useListSelection";
 
 function formatSize(size?: number) {
@@ -43,6 +44,7 @@ export default function StorageScreen() {
   const [renameTarget, setRenameTarget] = useState<string | null>(null);
   const [renameInput, setRenameInput] = useState("");
   const [emptyTrashArmed, setEmptyTrashArmed] = useState(false);
+  const [previewFile, setPreviewFile] = useState<StoredPdf | null>(null);
   const filteredFiles = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
     const result = normalizedQuery
@@ -277,22 +279,11 @@ export default function StorageScreen() {
                 ) : (
                   <>
               <Pressable
-                onPress={() => {
-                  void storage
-                    .openPdf(file)
-                    .catch((error) =>
-                      Alert.alert(
-                        "PDF indisponible",
-                        error instanceof Error
-                          ? error.message
-                          : "Fichier illisible.",
-                      ),
-                    );
-                }}
+                onPress={() => setPreviewFile(file)}
                 style={[styles.action, { backgroundColor: colors.accent }]}
               >
                 <Feather
-                  name="external-link"
+                  name="eye"
                   size={17}
                   color={colors.primary}
                 />
@@ -432,6 +423,13 @@ export default function StorageScreen() {
           </Surface>
         </KeyboardAvoidingViewCompat>
       </Modal>
+      <PdfPreviewModal
+        visible={previewFile !== null}
+        title={previewFile?.name ?? "Document pédagogique"}
+        uri={previewFile?.uri}
+        filename={previewFile?.name ?? "document.pdf"}
+        onClose={() => setPreviewFile(null)}
+      />
     </Screen>
   );
 }

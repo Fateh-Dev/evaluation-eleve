@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 import { Alert } from "@/components/AppDialog";
+import { PdfPreviewModal } from "@/components/PdfPreviewModal";
 import {
   AppHeader,
   Button,
@@ -28,9 +29,9 @@ import {
   getContinuousEvaluationProgress,
 } from "@/services/continuousEvaluation";
 import {
-  exportClassAttendancePdf,
-  exportContinuousEvaluationPdf,
-  exportSchedulePdf,
+  generateClassAttendancePdfHtml,
+  generateContinuousEvaluationPdfHtml,
+  generateSchedulePdfHtml,
 } from "@/services/exportService";
 import {
   getScheduleOccurrencesForDate,
@@ -222,11 +223,13 @@ function TrainingSessionControl({
             <Button
               label={
                 assignment?.executedAt
-                  ? "Annuler la réalisation"
+                  ? "Annuler"
                   : "Marquer réalisée"
               }
               icon={assignment?.executedAt ? "rotate-ccw" : "check"}
               compact
+              warning={Boolean(assignment?.executedAt)}
+              style={styles.trainingCompleteButton}
               onPress={() =>
                 assignment &&
                 data.setTrainingSessionExecuted(
@@ -546,6 +549,7 @@ export default function DashboardScreen() {
   const data = useAppData();
   const [now, setNow] = useState(() => new Date());
   const [classPickerVisible, setClassPickerVisible] = useState(false);
+  const [pdfPreview, setPdfPreview] = useState<{ html: string; title: string; filename: string } | null>(null);
   const [exportingDailyOutput, setExportingDailyOutput] = useState<
     "absences" | "continuous" | "schedule" | null
   >(null);
@@ -789,7 +793,7 @@ export default function DashboardScreen() {
               (record.date >= dailyPeriod.startDate &&
                 record.date <= dailyPeriod.endDate),
           );
-        await exportClassAttendancePdf({
+        const exportData = {
           schoolName: data.school.name,
           teacherName: data.teacherName,
           className: reportClass.name,
@@ -830,6 +834,11 @@ export default function DashboardScreen() {
                 ),
             };
           }),
+        };
+        setPdfPreview({
+          html: generateClassAttendancePdfHtml(exportData),
+          title: `Présences — ${reportClass.name}`,
+          filename: `Presences_${reportClass.name}_${reportClass.academicYear}.pdf`,
         });
       } else if (kind === "continuous") {
         const reportClass = dailyClass!;
@@ -841,7 +850,7 @@ export default function DashboardScreen() {
               (record.date >= dailyPeriod.startDate &&
                 record.date <= dailyPeriod.endDate),
           );
-        await exportContinuousEvaluationPdf({
+        const exportData = {
           schoolName: data.school.name,
           teacherName: data.teacherName,
           className: reportClass.name,
@@ -912,9 +921,14 @@ export default function DashboardScreen() {
               attendanceSessions: attendance.total,
             };
           }),
+        };
+        setPdfPreview({
+          html: generateContinuousEvaluationPdfHtml(exportData),
+          title: `Évaluation continue — ${reportClass.name}`,
+          filename: `Evaluation_continue_${reportClass.name}_${reportClass.academicYear}_${dailyPeriod?.name ?? 'Periode'}.pdf`,
         });
       } else {
-        await exportSchedulePdf({
+        const exportData = {
           teacherName: data.teacherName,
           schoolName: data.school.name,
           city: data.school.wilaya,
@@ -930,6 +944,11 @@ export default function DashboardScreen() {
             room: session.room,
             notes: session.notes,
           })),
+        };
+        setPdfPreview({
+          html: generateSchedulePdfHtml(exportData),
+          title: "Emploi du temps",
+          filename: `Emploi_du_temps_${data.academicYear}.pdf`,
         });
       }
     } catch (error) {
@@ -1440,6 +1459,13 @@ export default function DashboardScreen() {
             onPress={() => data.setInterfaceMode("full")}
           />
         </View>
+        <PdfPreviewModal
+          visible={pdfPreview !== null}
+          title={pdfPreview?.title ?? "Document PDF"}
+          html={pdfPreview?.html}
+          filename={pdfPreview?.filename ?? "document.pdf"}
+          onClose={() => setPdfPreview(null)}
+        />
       </Screen>
     );
   }
@@ -2175,6 +2201,13 @@ export default function DashboardScreen() {
           </Surface>
         </View>
       </Modal>
+      <PdfPreviewModal
+        visible={pdfPreview !== null}
+        title={pdfPreview?.title ?? "Document PDF"}
+        html={pdfPreview?.html}
+        filename={pdfPreview?.filename ?? "document.pdf"}
+        onClose={() => setPdfPreview(null)}
+      />
     </Screen>
   );
 }
@@ -2217,7 +2250,8 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 3,
   },
-  trainingActions: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
+  trainingActions: { flexDirection: "row", alignItems: "stretch", gap: 7 },
+  trainingCompleteButton: { flex: 1 },
   currentSessionActions: { gap: 8 },
   modalBackdrop: {
     flex: 1,

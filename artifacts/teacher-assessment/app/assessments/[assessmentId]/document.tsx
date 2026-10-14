@@ -14,12 +14,13 @@ import {
   View,
 } from 'react-native';
 import { AppHeader, GuideAnchor, Screen, Surface } from '@/components/AppShell';
+import { PdfPreviewModal } from '@/components/PdfPreviewModal';
 import { useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
 import {
   AssessmentExportData,
   downloadFile,
-  exportAssessmentPdf,
+  generateAssessmentPdfHtml,
   generateAssessmentWord,
   generateAssessmentWorkbook,
 } from '@/services/exportService';
@@ -76,6 +77,7 @@ export default function AssessmentDocumentScreen() {
   }, [data.allRemediations, currentAssessment.id]);
 
   const [exportingFormat, setExportingFormat] = useState<'excel' | 'word' | 'pdf' | null>(null);
+  const [pdfPreviewVisible, setPdfPreviewVisible] = useState(false);
   const [individualDecisionDraft, setIndividualDecisionDraft] = useState(currentRemediation.individual);
   const [classDecisionDraft, setClassDecisionDraft] = useState(currentRemediation.classroom);
 
@@ -202,20 +204,7 @@ export default function AssessmentDocumentScreen() {
     }
   };
 
-  const printReport = async () => {
-    try {
-      setExportingFormat('pdf');
-      await exportAssessmentPdf(exportPayload);
-    } catch (error) {
-      console.error('Erreur impression/PDF:', error);
-      Alert.alert(
-        'Erreur PDF',
-        error instanceof Error ? error.message : 'Impossible de générer ou partager le document PDF.',
-      );
-    } finally {
-      setExportingFormat(null);
-    }
-  };
+  const printReport = () => setPdfPreviewVisible(true);
 
   const shareReport = async () => {
     try {
@@ -275,8 +264,8 @@ export default function AssessmentDocumentScreen() {
           onPress={printReport}
           disabled={exportingFormat !== null}
           accessibilityRole="button"
-          accessibilityLabel="Imprimer ou exporter en PDF"
-          accessibilityHint="Génère le rapport d’évaluation au format PDF"
+          accessibilityLabel="Aperçu ou export PDF"
+          accessibilityHint="Ouvre l’aperçu du document PDF avant de l’enregistrer ou l’imprimer"
           style={({ pressed }) => [
             styles.actionIconButton,
             { backgroundColor: colors.background, borderColor: colors.border, opacity: exportingFormat !== null && exportingFormat !== 'pdf' ? 0.45 : pressed ? 0.7 : 1 },
@@ -305,7 +294,7 @@ export default function AssessmentDocumentScreen() {
         <Surface style={styles.loadingBanner}>
           <ActivityIndicator size="small" color={colors.primary} />
           <Text style={[styles.loadingText, { color: colors.foreground }]}>
-          Préparation du fichier {exportingFormat === 'excel' ? 'Excel (.xlsx)' : exportingFormat === 'word' ? 'Word (.docx)' : 'PDF'} en cours…
+          Préparation du fichier {exportingFormat === 'excel' ? 'Excel (.xlsx)' : 'Word (.docx)'} en cours…
           </Text>
         </Surface>
       )}
@@ -588,6 +577,13 @@ export default function AssessmentDocumentScreen() {
           </Pressable>
         </View>
       </Surface>
+      <PdfPreviewModal
+        visible={pdfPreviewVisible}
+        title={`Évaluation — ${currentAssessment.title}`}
+        html={generateAssessmentPdfHtml(exportPayload)}
+        filename={`${exportPrefix}_${currentClass.name}_${currentAssessment.competency}_${currentAssessment.date}.pdf`}
+        onClose={() => setPdfPreviewVisible(false)}
+      />
     </Screen>
   );
 }

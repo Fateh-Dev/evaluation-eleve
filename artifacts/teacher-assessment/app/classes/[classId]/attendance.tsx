@@ -1,8 +1,9 @@
 import { Alert } from '@/components/AppDialog';
 import { AppHeader, Button, Screen, Surface } from '@/components/AppShell';
+import { PdfPreviewModal } from '@/components/PdfPreviewModal';
 import { useAppData, type AttendanceStatus } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
-import { exportDailyAttendancePdf } from '@/services/exportService';
+import { generateDailyAttendancePdfHtml } from '@/services/exportService';
 import { getScheduleOccurrencesForDate } from '@/services/schedule';
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -62,6 +63,7 @@ export default function ClassAttendanceScreen() {
   const sessionId = session?.id;
   const [statuses, setStatuses] = useState<Record<string, AttendanceStatus>>({});
   const [isExporting, setIsExporting] = useState(false);
+  const [pdfPreviewHtml, setPdfPreviewHtml] = useState('');
   const existingRecord = data.getAttendanceRecord(params.classId, sessionId, date);
 
   useEffect(() => {
@@ -144,7 +146,7 @@ export default function ClassAttendanceScreen() {
     }
     setIsExporting(true);
     try {
-      await exportDailyAttendancePdf({
+      const exportData = {
         schoolName: data.school.name,
         teacherName: data.teacherName,
         className: currentClass.name,
@@ -163,7 +165,8 @@ export default function ClassAttendanceScreen() {
           lastName: pupil.lastName,
           status: statuses[pupil.id],
         })),
-      });
+      };
+      setPdfPreviewHtml(generateDailyAttendancePdfHtml(exportData));
     } catch (error) {
       Alert.alert('Export impossible', error instanceof Error ? error.message : 'Impossible de générer le PDF de l’appel.');
     } finally {
@@ -359,6 +362,13 @@ export default function ClassAttendanceScreen() {
       <Text style={[styles.help, { color: colors.mutedForeground }]}>
         Les appels enregistrés serviront à calculer le taux de présence de chaque élève. Les jours sans appel ne sont pas comptés.
       </Text>
+      <PdfPreviewModal
+        visible={Boolean(pdfPreviewHtml)}
+        title={`Appel — ${currentClass.name}`}
+        html={pdfPreviewHtml}
+        filename={`Appel_${currentClass.name}_${date}.pdf`}
+        onClose={() => setPdfPreviewHtml('')}
+      />
     </Screen>
   );
 }

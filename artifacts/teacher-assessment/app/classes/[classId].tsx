@@ -14,14 +14,15 @@ import {
   View,
 } from 'react-native';
 import { AppHeader, Button, KeyboardAvoidingViewCompat, ListSelectionToolbar, Screen, SectionTitle, SelectionCheckbox, Surface } from '@/components/AppShell';
+import { PdfPreviewModal } from '@/components/PdfPreviewModal';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
 import { useListSelection } from '@/hooks/useListSelection';
 import {
   downloadFile,
-  exportClassAttendancePdf,
-  exportContinuousEvaluationPdf,
+  generateClassAttendancePdfHtml,
+  generateContinuousEvaluationPdfHtml,
   generateContinuousEvaluationWorkbook,
 } from '@/services/exportService';
 import {
@@ -175,7 +176,7 @@ export default function ClassDetailScreen() {
   const exportAttendanceList = async () => {
     setIsExportingAttendance(true);
     try {
-      await exportClassAttendancePdf({
+      const exportData = {
         schoolName: data.school.name,
         teacherName: data.teacherName,
         className: currentClass.name,
@@ -196,6 +197,11 @@ export default function ClassDetailScreen() {
               .map((record) => new Date(`${record.date}T00:00:00`).toLocaleDateString('fr-FR')),
           };
         }),
+      };
+      setPdfPreview({
+        html: generateClassAttendancePdfHtml(exportData),
+        title: `Présences — ${currentClass.name}`,
+        filename: `Presences_${currentClass.name}_${currentClass.academicYear}.pdf`,
       });
     } catch (error) {
       Alert.alert('Export impossible', error instanceof Error ? error.message : 'Impossible de générer la liste de présence.');
@@ -228,6 +234,7 @@ export default function ClassDetailScreen() {
   const [classDeleteArmed, setClassDeleteArmed] = useState(false);
   const [isExportingAttendance, setIsExportingAttendance] = useState(false);
   const [exportingContinuousFormat, setExportingContinuousFormat] = useState<'pdf' | 'excel' | null>(null);
+  const [pdfPreview, setPdfPreview] = useState<{ html: string; title: string; filename: string } | null>(null);
 
   const [classNameModalVisible, setClassNameModalVisible] = useState(false);
   const [classNameInput, setClassNameInput] = useState('');
@@ -272,7 +279,11 @@ export default function ClassDetailScreen() {
       const safePeriodName = (activeEvaluationPeriod?.name ?? 'evaluation')
         .replace(/[^\p{L}\p{N}-]+/gu, '_');
       if (format === 'pdf') {
-        await exportContinuousEvaluationPdf(exportData);
+        setPdfPreview({
+          html: generateContinuousEvaluationPdfHtml(exportData),
+          title: `Évaluation continue — ${currentClass.name}`,
+          filename: `Evaluation_continue_${safeClassName}_${safeAcademicYear}_${safePeriodName}.pdf`,
+        });
       } else {
         const workbook = await generateContinuousEvaluationWorkbook(exportData);
         await downloadFile(
@@ -1167,6 +1178,13 @@ export default function ClassDetailScreen() {
           </Surface>
         </KeyboardAvoidingViewCompat>
       </Modal>
+      <PdfPreviewModal
+        visible={pdfPreview !== null}
+        title={pdfPreview?.title ?? 'Document PDF'}
+        html={pdfPreview?.html}
+        filename={pdfPreview?.filename ?? 'document.pdf'}
+        onClose={() => setPdfPreview(null)}
+      />
     </Screen>
   );
 }

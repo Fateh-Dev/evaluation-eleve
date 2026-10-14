@@ -132,10 +132,15 @@ export function AppHeader({ eyebrow, title, onBack, onTitleLongPress, titleActio
   );
 }
 
-export function Button({ label, onPress, secondary = false, compact = false, icon, disabled = false, onTouchStart }: {
-  label: string; onPress: () => void; secondary?: boolean; compact?: boolean; icon?: keyof typeof Feather.glyphMap; disabled?: boolean; onTouchStart?: (event: import('react-native').GestureResponderEvent) => void;
+export function Button({ label, onPress, secondary = false, warning = false, compact = false, icon, disabled = false, onTouchStart, style }: {
+  label: string; onPress: () => void; secondary?: boolean; warning?: boolean; compact?: boolean; icon?: keyof typeof Feather.glyphMap; disabled?: boolean; onTouchStart?: (event: import('react-native').GestureResponderEvent) => void; style?: import('react-native').StyleProp<import('react-native').ViewStyle>;
 }) {
   const colors = useColors();
+  const contentColor = warning
+    ? colors.warningForeground
+    : secondary
+      ? colors.foreground
+      : colors.primaryForeground;
   return (
     <Pressable
       onPress={disabled ? undefined : () => onPress()}
@@ -146,14 +151,23 @@ export function Button({ label, onPress, secondary = false, compact = false, ico
         styles.button,
         compact && styles.buttonCompact,
         {
-          backgroundColor: secondary ? colors.card : colors.primary,
-          borderColor: secondary ? colors.border : colors.primary,
+          backgroundColor: warning
+            ? colors.warningSurface
+            : secondary
+              ? colors.card
+              : colors.primary,
+          borderColor: warning
+            ? colors.warningForeground
+            : secondary
+              ? colors.border
+              : colors.primary,
           opacity: disabled ? 0.45 : pressed ? 0.82 : 1,
         },
+        style,
       ]}
     >
-      {icon ? <Feather name={icon} size={compact ? 15 : 17} color={secondary ? colors.foreground : colors.primaryForeground} /> : null}
-      <Text style={[styles.buttonText, { color: secondary ? colors.foreground : colors.primaryForeground }]}>{label}</Text>
+      {icon ? <Feather name={icon} size={compact ? 15 : 17} color={contentColor} /> : null}
+      <Text style={[styles.buttonText, { color: contentColor }]}>{label}</Text>
     </Pressable>
   );
 }

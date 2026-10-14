@@ -12,8 +12,6 @@ const MENU_ITEMS = [
   { group: 'Organisation', label: 'Emploi du temps', detail: 'Séances de la semaine et rappels', icon: 'calendar' as const, route: '/schedule' as const },
   { group: 'Organisation', label: 'Fin d’année scolaire', detail: 'Archiver une année et préparer la suivante', icon: 'archive' as const, route: '/year-end' as const },
   { group: 'Organisation', label: 'Tous les élèves', detail: 'Rechercher parmi les élèves des classes', icon: 'user' as const, route: '/pupils-list' as const },
-  { group: 'Analyse', label: 'Statistiques multicritères', detail: 'Croiser les résultats et le suivi continu', icon: 'bar-chart-2' as const, route: '/statistics' as const },
-  { group: 'Analyse', label: 'Bilans trimestriels', detail: 'Imprimer le bilan d’un élève ou d’une classe', icon: 'file-text' as const, route: '/student-reports' as const },
   { group: 'Documents', label: 'Documents pédagogiques', detail: 'Consulter les documents enregistrés', icon: 'folder' as const, route: '/pdf-library' as const },
   { group: 'Paramètres', label: 'Configuration pédagogique', detail: 'Niveaux, compétences et objectifs', icon: 'sliders' as const, route: '/settings/pedagogical' as const },
   { group: 'Paramètres', label: 'Paramètres de l’application', detail: 'Profil, établissement, apparence et sauvegardes', icon: 'settings' as const, route: '/settings' as const },
@@ -108,7 +106,7 @@ export default function MoreScreen() {
         </View>
       ) : (
         <View style={styles.menuGroups}>
-          {['Aide', 'Organisation', 'Analyse', 'Documents', 'Paramètres'].map((group) => (
+          {['Aide', 'Organisation', 'Documents', 'Paramètres'].map((group) => (
             <View key={group} style={styles.menuGroup}>
               <Text style={[styles.groupTitle, { color: colors.mutedForeground }]}>{group}</Text>
               <View style={[styles.list, { borderTopColor: colors.border }]}>

@@ -25,14 +25,19 @@ function NativeTabLayout() {
         <NativeTabs.Trigger.Icon sf={{ default: 'person.2', selected: 'person.2.fill' }} />
         <NativeTabs.Trigger.Label>Classes</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="continuous">
-        <NativeTabs.Trigger.Icon sf={{ default: 'checklist', selected: 'checklist' }} />
-        <NativeTabs.Trigger.Label>Suivi</NativeTabs.Trigger.Label>
+      <NativeTabs.Trigger name="entry">
+        <NativeTabs.Trigger.Icon sf={{ default: 'square.and.pencil', selected: 'square.and.pencil' }} />
+        <NativeTabs.Trigger.Label>Saisie</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="reports">
+        <NativeTabs.Trigger.Icon sf={{ default: 'chart.bar', selected: 'chart.bar.fill' }} />
+        <NativeTabs.Trigger.Label>Bilans</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="more">
         <NativeTabs.Trigger.Icon sf={{ default: 'ellipsis', selected: 'ellipsis' }} />
         <NativeTabs.Trigger.Label>Plus</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="continuous" hidden />
       <NativeTabs.Trigger name="pupils" hidden />
       <NativeTabs.Trigger name="assessments" hidden />
       <NativeTabs.Trigger name="storage" hidden />
@@ -96,12 +101,20 @@ function ClassicTabLayout() {
         options={{ title: 'Classes', tabBarIcon: ({ color }) => <Feather name="users" size={22} color={color} /> }}
       />
       <Tabs.Screen
-        name="continuous"
-        options={{ title: 'Suivi', tabBarIcon: ({ color }) => <Feather name="check-square" size={22} color={color} /> }}
+        name="entry"
+        options={{ title: 'Saisie', tabBarIcon: ({ color }) => <Feather name="edit-3" size={22} color={color} /> }}
+      />
+      <Tabs.Screen
+        name="reports"
+        options={{ title: 'Bilans', tabBarIcon: ({ color }) => <Feather name="bar-chart-2" size={22} color={color} /> }}
       />
       <Tabs.Screen
         name="more"
         options={{ title: 'Plus', tabBarIcon: ({ color }) => <Feather name="more-horizontal" size={22} color={color} /> }}
+      />
+      <Tabs.Screen
+        name="continuous"
+        options={{ href: null }}
       />
       <Tabs.Screen
         name="assessments"

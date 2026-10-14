@@ -36,8 +36,9 @@ La barre de navigation principale donne accès à :
 
 - **Accueil** : classe active, aperçu du suivi et raccourcis liés à la journée.
 - **Classes** : créer et consulter les classes, leurs élèves et leurs données.
-- **Suivi** : périodes trimestrielles, évaluation continue et accès au test de niveau initial.
-- **Plus** : guide d’utilisation, emploi du temps, fin d’année scolaire, recherche d’élèves et de classes, statistiques, bilans trimestriels, documents pédagogiques et paramètres.
+- **Saisie** : choisir une classe puis faire l’appel, saisir le suivi continu ou créer une évaluation.
+- **Bilans** : consulter et imprimer les bilans trimestriels ou explorer les statistiques.
+- **Plus** : guide d’utilisation, emploi du temps, fin d’année scolaire, recherche d’élèves et de classes, périodes d’évaluation, documents pédagogiques et paramètres.
 
 Dans **Plus**, utilisez la recherche pour retrouver rapidement une classe par son nom ou un élève par son nom ou son matricule.
 
@@ -45,7 +46,7 @@ Pour obtenir les étapes d’une action directement dans l’application, ouvrez
 
 ## Mode quotidien
 
-Pour alléger l’accueil, ouvrez **Plus → Paramètres de l’application → Interface** et activez **Mode quotidien**. La section **Programme** affiche les séances du jour dans l’ordre, avec la classe en cours et la suivante ; utilisez **Consulter** pour ouvrir l’emploi du temps complet ou touchez une séance pour ouvrir sa classe. La **classe choisie** reste indépendante du programme : pendant une séance, l’appel et l’évaluation continue ciblent la classe en cours ; hors séance, ils utilisent la classe choisie. Si aucun cours n’est prévu aujourd’hui pour cette classe, le raccourci d’appel propose d’ouvrir l’emploi du temps. La section **États de sortie** imprime en PDF les présences et absences avec leurs dates pour la période active, les résultats continus de cette période, ou l’emploi du temps hebdomadaire de l’année active. Appuyez sur **Mode complet** sur l’accueil, ou désactivez le commutateur dans les paramètres, pour revenir au tableau de bord détaillé. Le choix est mémorisé sur l’appareil.
+Le mode quotidien est sélectionné par défaut lors d’une nouvelle installation. La section **Programme** affiche les séances du jour dans l’ordre, avec la classe en cours et la suivante ; utilisez **Consulter** pour ouvrir l’emploi du temps complet ou touchez une séance pour ouvrir sa classe. La **classe choisie** reste indépendante du programme : pendant une séance, l’appel et l’évaluation continue ciblent la classe en cours ; hors séance, ils utilisent la classe choisie. Si aucun cours n’est prévu aujourd’hui pour cette classe, le raccourci d’appel propose d’ouvrir l’emploi du temps. La section **États de sortie** imprime en PDF les présences et absences avec leurs dates pour la période active, les résultats continus de cette période, ou l’emploi du temps hebdomadaire de l’année active. Appuyez sur **Mode complet** sur l’accueil, ou désactivez le commutateur dans les paramètres, pour revenir au tableau de bord détaillé. Le choix est mémorisé sur l’appareil.
 
 ## Créer une classe et ajouter des élèves
 
@@ -67,8 +68,8 @@ Vérifiez l’aperçu et le nombre de lignes valides avant d’appuyer sur **Imp
 
 ## Faire un test de niveau initial
 
-1. Ouvrir **Suivi**.
-2. Appuyer sur **Test de niveau initial**.
+1. Ouvrir **Saisie**.
+2. Appuyer sur **Périodes et tests de niveau initial**, puis **Test de niveau initial**.
 3. Choisir la classe et le type d’évaluation : évaluation habituelle ou test des prérequis d’une compétence.
 4. Choisir la compétence, puis vérifier le titre, la date, le support et les critères proposés; les adapter si nécessaire.
 5. Ouvrir l’évaluation créée et renseigner les résultats des élèves pour chaque critère.
@@ -78,7 +79,7 @@ Le test initial sert à repérer les acquis de départ. Les compétences disponi
 
 ## Suivre les évaluations par trimestre
 
-Dans **Suivi**, choisissez l’année scolaire, puis la période à consulter. Les résultats sont conservés séparément pour chaque période.
+Dans **Saisie**, ouvrez **Périodes et tests de niveau initial**, choisissez l’année scolaire, puis la période à consulter. Les résultats sont conservés séparément pour chaque période.
 
 - Utilisez **Ajouter une période** pour créer un trimestre avec son nom, sa date de début et sa date de fin.
 - Sélectionnez une période pour la rendre active.
@@ -126,19 +127,19 @@ Le plan et le suivi sont conservés localement avec les sauvegardes de l’appli
 
 ## Consulter les statistiques et exporter
 
-1. Ouvrir **Plus → Statistiques multicritères**.
+1. Ouvrir **Bilans → Statistiques**.
 2. Choisir une classe, une période, un élève, un critère/compétence et un type d’évaluation.
 3. Replier ou déplier la zone des critères si nécessaire.
 4. Lire les résultats filtrés, puis appuyer sur **Exporter les résultats (CSV)** pour les exploiter dans un tableur.
 
-Pour obtenir un document lié à une évaluation précise, ouvrez cette évaluation et utilisez ses actions d’analyse ou d’export. Les exports disponibles dépendent du type d’écran : par exemple PDF pour l’appel et le planning, CSV pour les statistiques.
+Pour obtenir un document lié à une évaluation précise, ouvrez cette évaluation et utilisez ses actions d’analyse ou d’export. Lorsqu’un export PDF est proposé, l’application ouvre d’abord son aperçu; utilisez l’action de téléchargement/impression pour l’enregistrer ou l’imprimer. Sur appareil mobile, l’enregistrement passe par les options de partage du système; sur le web, utilisez la boîte d’impression du navigateur et choisissez l’enregistrement en PDF. Les exports disponibles dépendent du type d’écran : par exemple PDF pour l’appel et le planning, CSV pour les statistiques.
 
 ### Imprimer un bilan trimestriel
 
-1. Ouvrir **Plus → Bilans trimestriels**.
+1. Ouvrir **Bilans → Bilans trimestriels**.
 2. Choisir la classe et le trimestre.
 3. Choisir **Toute la classe** pour produire un document avec un bilan par élève, ou sélectionner un élève pour son bilan individuel.
-4. Vérifier l’aperçu, puis appuyer sur **Imprimer les bilans de la classe** ou **Imprimer le bilan de l’élève**.
+4. Appuyer sur **Aperçu du bilan** pour vérifier le document, puis utiliser l’action de téléchargement/impression dans l’aperçu.
 
 Le PDF rassemble les évaluations du trimestre, les résultats par compétence, le cahier, la participation, les présences, les absences et les scores calculés d’absence et de discipline. Les informations non saisies apparaissent comme manquantes plutôt que comme zéro.
 
@@ -153,7 +154,7 @@ Une seule année est active à la fois. L’année source et ses résultats sont
 
 ## Gérer les documents pédagogiques
 
-Ouvrir **Plus → Documents pédagogiques** pour consulter la bibliothèque de PDF de l’application. Depuis l’espace de stockage, il est possible d’ajouter un PDF, de le rechercher, de le renommer, de le supprimer ou de le restaurer depuis la corbeille.
+Ouvrir **Plus → Documents pédagogiques** pour consulter la bibliothèque de PDF de l’application. Touchez un document pour le prévisualiser dans l’application; l’action de téléchargement/partage permet de l’enregistrer ailleurs ou de le transmettre. Depuis l’espace de stockage, il est aussi possible d’ajouter un PDF, de le rechercher, de le renommer, de le supprimer ou de le restaurer depuis la corbeille.
 
 Cette bibliothèque est actuellement personnelle et stockée sur l’appareil; elle n’est pas synchronisée avec les autres utilisateurs.
 

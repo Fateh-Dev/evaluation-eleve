@@ -916,7 +916,7 @@ export function createEmptyState(): AppState {
       wilaya: '',
     },
     teacherName: '',
-    interfaceMode: 'full',
+    interfaceMode: 'daily',
     academicYear: '2026-2027',
     archivedAcademicYears: [],
     schoolYearConfigurations: [

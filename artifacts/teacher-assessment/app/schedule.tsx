@@ -1,9 +1,10 @@
 import { Alert } from '@/components/AppDialog';
 import { AppHeader, Button, ListSelectionToolbar, Screen, SectionTitle, SelectionCheckbox } from '@/components/AppShell';
+import { PdfPreviewModal } from '@/components/PdfPreviewModal';
 import type { ScheduleOccurrenceOverride, ScheduleSession } from '@/context/AppDataContext';
 import { useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
-import { exportSchedulePdf } from '@/services/exportService';
+import { generateSchedulePdfHtml } from '@/services/exportService';
 import { getScheduleOccurrencesForDate, WEEKDAYS } from '@/services/schedule';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { Feather } from '@expo/vector-icons';
@@ -51,6 +52,7 @@ export default function ScheduleScreen() {
   const [selectedWeekStart, setSelectedWeekStart] = useState(() => getSundayStart(new Date()));
   const [modalVisible, setModalVisible] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [pdfPreviewHtml, setPdfPreviewHtml] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [activeTimeField, setActiveTimeField] = useState<'startTime' | 'endTime' | null>(null);
   const [form, setForm] = useState<SessionForm>(blankForm((new Date().getDay() + 6) % 7));
@@ -291,7 +293,7 @@ export default function ScheduleScreen() {
   const handleExportPdf = async () => {
     setIsExporting(true);
     try {
-      await exportSchedulePdf({
+      const exportData = {
         teacherName: data.teacherName,
         schoolName: data.school.name,
         city: data.school.wilaya,
@@ -305,7 +307,8 @@ export default function ScheduleScreen() {
           room: session.room,
           notes: session.notes,
         })),
-      });
+      };
+      setPdfPreviewHtml(generateSchedulePdfHtml(exportData));
     } catch (error) {
       Alert.alert('Export impossible', error instanceof Error ? error.message : 'Impossible de créer le PDF.');
     } finally {
@@ -1058,6 +1061,13 @@ export default function ScheduleScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+      <PdfPreviewModal
+        visible={Boolean(pdfPreviewHtml)}
+        title="Emploi du temps"
+        html={pdfPreviewHtml}
+        filename={`Emploi_du_temps_${data.academicYear}.pdf`}
+        onClose={() => setPdfPreviewHtml('')}
+      />
     </Screen>
   );
 }
