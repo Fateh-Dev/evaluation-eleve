@@ -966,6 +966,26 @@ export default function DashboardScreen() {
   const teacherGreeting = data.teacherName
     ? `Bonjour, ${data.teacherName}`
     : "Bonjour, Enseignant";
+  const dailyOutputActions = [
+    {
+      kind: "absences" as const,
+      title: "Absences",
+      accessibilityLabel: `Imprimer les absences · ${dailyPeriod?.name ?? "année"}`,
+      icon: "user-x" as const,
+    },
+    {
+      kind: "continuous" as const,
+      title: "Évaluations",
+      accessibilityLabel: "Imprimer les résultats d’évaluation continue",
+      icon: "check-square" as const,
+    },
+    {
+      kind: "schedule" as const,
+      title: "Planning",
+      accessibilityLabel: "Imprimer l’emploi du temps",
+      icon: "calendar" as const,
+    },
+  ];
 
   if (!data.hydrated) return null;
   if (!data.teacherName && !data.school.name && !hasClasses) {
@@ -980,45 +1000,28 @@ export default function DashboardScreen() {
           <>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`Classe active : ${className}. Ouvrir les classes pour en choisir une autre.`}
+              accessibilityLabel={`Classe active : ${className}, ${activeClass.level}, ${activeClass.academicYear}, ${pupilCount} élèves. Toucher pour modifier.`}
               onPress={() => router.push("/classes")}
               style={[
                 styles.activeContext,
                 { backgroundColor: colors.card, borderColor: colors.border },
               ]}
             >
-              <View
-                style={[styles.contextIcon, { backgroundColor: colors.accent }]}
+              <Text
+                numberOfLines={1}
+                style={[styles.contextTitle, { color: colors.foreground }]}
               >
-                <Feather name="users" size={18} color={colors.primary} />
-              </View>
-              <View style={styles.contextCopy}>
-                <Text
-                  style={[
-                    styles.contextEyebrow,
-                    { color: colors.mutedForeground },
-                  ]}
-                >
-                  CLASSE CHOISIE · TOUCHER POUR MODIFIER
-                </Text>
-                <Text
-                  style={[styles.contextTitle, { color: colors.foreground }]}
-                >
-                  {className}
-                </Text>
-                <Text
-                  style={[
-                    styles.contextMeta,
-                    { color: colors.mutedForeground },
-                  ]}
-                >
-                  {activeClass.level} · {activeClass.academicYear} ·{" "}
-                  {pupilCount} élèves
-                </Text>
-              </View>
+                {className}
+              </Text>
+              <Text
+                numberOfLines={1}
+                style={[styles.contextMeta, { color: colors.mutedForeground }]}
+              >
+                · {pupilCount} élèves
+              </Text>
               <Feather
-                name="chevron-right"
-                size={18}
+                name="chevron-down"
+                size={16}
                 color={colors.mutedForeground}
               />
             </Pressable>
@@ -1036,16 +1039,9 @@ export default function DashboardScreen() {
                 {activeClass.name}.
               </Text>
             ) : null}
-            <View style={styles.dailyPeriod}>
-              <Text
-                style={[
-                  styles.contextEyebrow,
-                  { color: colors.mutedForeground },
-                ]}
-              >
-                PÉRIODE DE {dailyClass?.name ?? className}
-              </Text>
+            <View style={styles.periodBar}>
               <ScrollView
+                style={styles.periodScroll}
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.periodChoices}
@@ -1203,50 +1199,61 @@ export default function DashboardScreen() {
               </Pressable>
             </Surface>
             <SectionTitle title="États de sortie" />
-            <Surface style={styles.dailyCard}>
-              <Button
-                label={
-                  exportingDailyOutput === "absences"
-                    ? "Préparation…"
-                    : `Imprimer les absences · ${dailyPeriod?.name ?? "année"}`
-                }
-                icon="printer"
-                secondary
-                compact
-                disabled={Boolean(exportingDailyOutput) || !dailyClass}
-                onPress={() => {
-                  void exportDailyOutput("absences");
-                }}
-              />
-              <Button
-                label={
-                  exportingDailyOutput === "continuous"
-                    ? "Préparation…"
-                    : "Imprimer les résultats d’évaluation continue"
-                }
-                icon="printer"
-                secondary
-                compact
-                disabled={Boolean(exportingDailyOutput) || !dailyClass}
-                onPress={() => {
-                  void exportDailyOutput("continuous");
-                }}
-              />
-              <Button
-                label={
-                  exportingDailyOutput === "schedule"
-                    ? "Préparation…"
-                    : "Imprimer l’emploi du temps"
-                }
-                icon="printer"
-                secondary
-                compact
-                disabled={Boolean(exportingDailyOutput)}
-                onPress={() => {
-                  void exportDailyOutput("schedule");
-                }}
-              />
-            </Surface>
+            <View style={styles.outputGrid}>
+              {dailyOutputActions.map((action) => {
+                const isExporting = exportingDailyOutput === action.kind;
+                return (
+                  <Pressable
+                    key={action.kind}
+                    accessibilityRole="button"
+                    accessibilityLabel={action.accessibilityLabel}
+                    accessibilityHint="Prépare un aperçu PDF du document."
+                    disabled={
+                      Boolean(exportingDailyOutput) ||
+                      (action.kind !== "schedule" && !dailyClass)
+                    }
+                    onPress={() => {
+                      void exportDailyOutput(action.kind);
+                    }}
+                    style={({ pressed }) => [
+                      styles.outputAction,
+                      {
+                        backgroundColor: colors.card,
+                        borderColor: colors.border,
+                        opacity:
+                          Boolean(exportingDailyOutput) && !isExporting
+                            ? 0.55
+                            : pressed
+                              ? 0.76
+                              : 1,
+                      },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.outputIcon,
+                        { backgroundColor: colors.accent },
+                      ]}
+                    >
+                      <Feather
+                        name={action.icon}
+                        size={16}
+                        color={colors.primary}
+                      />
+                    </View>
+                    <Text
+                      numberOfLines={2}
+                      style={[
+                        styles.outputTitle,
+                        { color: colors.foreground },
+                      ]}
+                    >
+                      {isExporting ? "Préparation…" : action.title}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
             <SectionTitle
               title="Programme"
               action="Consulter"
@@ -1477,50 +1484,34 @@ export default function DashboardScreen() {
         <>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`Classe active : ${className}. Choisir une autre classe.`}
+            accessibilityLabel={`Classe active : ${className}, ${activeClass?.level}, ${activeClass?.academicYear}, ${pupilCount} élèves. Toucher pour modifier.`}
             onPress={() => setClassPickerVisible(true)}
             style={[
               styles.activeContext,
               { backgroundColor: colors.card, borderColor: colors.border },
             ]}
           >
-            <View
-              style={[styles.contextIcon, { backgroundColor: colors.accent }]}
+            <Text
+              numberOfLines={1}
+              style={[styles.contextTitle, { color: colors.foreground }]}
             >
-              <Feather name="users" size={18} color={colors.primary} />
-            </View>
-            <View style={styles.contextCopy}>
-              <Text
-                style={[
-                  styles.contextEyebrow,
-                  { color: colors.mutedForeground },
-                ]}
-              >
-                CLASSE ACTIVE
-              </Text>
-              <Text style={[styles.contextTitle, { color: colors.foreground }]}>
-                {className}
-              </Text>
-              <Text
-                style={[styles.contextMeta, { color: colors.mutedForeground }]}
-              >
-                {activeClass?.level} · {activeClass?.academicYear} ·{" "}
-                {pupilCount} élèves
-              </Text>
-            </View>
+              {className}
+            </Text>
+            <Text
+              numberOfLines={1}
+              style={[styles.contextMeta, { color: colors.mutedForeground }]}
+            >
+              · {pupilCount} élèves
+            </Text>
             <Feather
               name="chevron-down"
-              size={18}
+              size={16}
               color={colors.mutedForeground}
             />
           </Pressable>
-          <View style={styles.dashboardPeriods}>
-            <Text
-              style={[styles.contextEyebrow, { color: colors.mutedForeground }]}
-            >
-              TRIMESTRE
-            </Text>
+          <View style={styles.periodBar}>
             <ScrollView
+              style={styles.periodScroll}
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.periodChoices}
@@ -2214,20 +2205,14 @@ export default function DashboardScreen() {
 
 const styles = StyleSheet.create({
   activeContext: {
-    minHeight: 72,
+    minHeight: 44,
     borderWidth: 1,
-    borderRadius: 15,
-    padding: 12,
+    borderRadius: 13,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     flexDirection: "row",
     alignItems: "center",
-    gap: 11,
-  },
-  contextIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
+    gap: 5,
   },
   contextCopy: { flex: 1, minWidth: 0, gap: 2 },
   contextEyebrow: {
@@ -2236,11 +2221,42 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 1,
   },
-  contextTitle: { fontSize: 15, fontWeight: "800" },
-  contextMeta: { fontSize: 11, lineHeight: 15 },
-  dashboardPeriods: { gap: 6, marginTop: 10, marginBottom: 2 },
-  dailyPeriod: { gap: 6, marginTop: 14 },
+  contextTitle: { flexShrink: 1, minWidth: 0, fontSize: 14, fontWeight: "800" },
+  contextMeta: { flexShrink: 0, fontSize: 10, lineHeight: 14 },
+  periodBar: { flexDirection: "row", alignItems: "center", marginTop: 6 },
+  periodScroll: { flex: 1, minWidth: 0 },
   dailyCard: { gap: 10, padding: 14 },
+  outputGrid: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 8,
+  },
+  outputAction: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 72,
+    borderWidth: 1,
+    borderRadius: 13,
+    paddingHorizontal: 5,
+    paddingVertical: 7,
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+  },
+  outputIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  outputTitle: {
+    fontSize: 10,
+    lineHeight: 12,
+    fontWeight: "700",
+    textAlign: "center",
+  },
   trainingDaily: { gap: 8, paddingTop: 9 },
   subheading: { fontSize: 11, fontWeight: "700", textTransform: "uppercase" },
   trainingControl: { gap: 8 },
@@ -2294,18 +2310,18 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   dailyFooter: { marginTop: 18, marginBottom: 12 },
-  periodChoices: { alignItems: "center", gap: 7, paddingRight: 4 },
+  periodChoices: { alignItems: "center", gap: 5, paddingRight: 4 },
   periodChip: {
-    minHeight: 34,
+    minHeight: 30,
     borderWidth: 1,
     borderRadius: 999,
     justifyContent: "center",
-    paddingHorizontal: 13,
+    paddingHorizontal: 9,
   },
-  periodChipText: { fontSize: 11, fontWeight: "700" },
+  periodChipText: { fontSize: 10, fontWeight: "700" },
   managePeriodsChip: {
-    width: 34,
-    height: 34,
+    width: 30,
+    height: 30,
     borderWidth: 1,
     borderRadius: 999,
     alignItems: "center",

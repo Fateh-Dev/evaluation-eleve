@@ -4,6 +4,7 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { Linking } from 'react-native';
 import { Platform } from 'react-native';
+import { getWebPdf, getWebPdfId, isWebPdfUri } from '@/services/webPdfStorage';
 
 function safeFilename(value: string) {
   const base = value.replace(/\.pdf$/i, '').replace(/[^\p{L}\p{N}-]+/gu, '_');
@@ -45,6 +46,16 @@ export async function savePdfFromHtml(
 
 export async function saveExistingPdf(uri: string, title: string): Promise<void> {
   if (Platform.OS === 'web') {
+    if (isWebPdfUri(uri)) {
+      const file = await getWebPdf(getWebPdfId(uri));
+      const objectUrl = URL.createObjectURL(file);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = safeFilename(title);
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+      return;
+    }
     await Linking.openURL(uri);
     return;
   }

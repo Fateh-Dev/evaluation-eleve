@@ -199,7 +199,7 @@ export default function StudentReportsScreen() {
             accessibilityRole="button"
             accessibilityLabel={`Destinataire : ${pupilSelectionLabel}`}
             onPress={() => openPicker('pupil')}
-            style={[styles.selectionField, { backgroundColor: colors.card, borderColor: colors.border }]}
+            style={[styles.selectionField, styles.selectionFullWidth, { backgroundColor: colors.card, borderColor: colors.border }]}
           >
             <Text style={[styles.selectionLabel, { color: colors.mutedForeground }]}>ÉLÈVE OU CLASSE ENTIÈRE</Text>
             <View style={styles.selectionValueRow}>
@@ -324,8 +324,8 @@ export default function StudentReportsScreen() {
                     style={[
                       styles.optionRow,
                       {
-                        backgroundColor: selected ? colors.accent : colors.card,
-                        borderBottomColor: colors.border,
+                        backgroundColor: selected ? colors.accent : colors.background,
+                        borderColor: selected ? colors.primary : colors.border,
                       },
                     ]}
                   >
@@ -369,6 +369,7 @@ const styles = StyleSheet.create({
   help: { fontSize: 12, lineHeight: 18 },
   selectionRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   selectionField: { minWidth: 0, height: 58, borderWidth: 1, borderRadius: 13, paddingHorizontal: 12, paddingVertical: 8, justifyContent: 'center', alignSelf: 'flex-start' },
+  selectionFullWidth: { alignSelf: 'stretch' },
   selectionRowField: { flex: 1 },
   selectionLabel: { fontSize: 9, fontWeight: '700', letterSpacing: 0.7, marginBottom: 4 },
   selectionValueRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
@@ -386,16 +387,16 @@ const styles = StyleSheet.create({
   average: { fontSize: 18, fontWeight: '800' },
   summary: { fontSize: 11, lineHeight: 17 },
   exportAction: { marginTop: 12 },
-  modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(15, 23, 42, 0.4)' },
-  pickerSheet: { maxHeight: '75%', flexGrow: 0, flexShrink: 1, borderTopLeftRadius: 22, borderTopRightRadius: 22, paddingHorizontal: 18, paddingTop: 18, paddingBottom: 28 },
-  pickerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  modalBackdrop: { flex: 1, justifyContent: 'flex-end', paddingHorizontal: 12, paddingBottom: 12, backgroundColor: 'rgba(15, 23, 42, 0.4)' },
+  pickerSheet: { width: '100%', maxWidth: 560, maxHeight: '85%', alignSelf: 'center', flexGrow: 0, flexShrink: 1, borderRadius: 22, paddingHorizontal: 14, paddingTop: 14, paddingBottom: 12 },
+  pickerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
   pickerTitle: { fontSize: 18, fontWeight: '700' },
   closeButton: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
-  searchField: { minHeight: 42, borderWidth: 1, borderRadius: 12, paddingHorizontal: 11, flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+  searchField: { minHeight: 42, borderWidth: 1, borderRadius: 14, paddingHorizontal: 11, flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
   searchInput: { flex: 1, paddingVertical: 8, fontSize: 14 },
-  optionList: { flexGrow: 0, flexShrink: 1, maxHeight: '60%' },
-  optionListContent: { flexGrow: 0, paddingBottom: 6 },
-  optionRow: { minHeight: 54, borderBottomWidth: StyleSheet.hairlineWidth, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  optionList: { flex: 1, minHeight: 0 },
+  optionListContent: { flexGrow: 1, gap: 7, paddingBottom: 4 },
+  optionRow: { minHeight: 50, borderWidth: 1, borderRadius: 13, paddingHorizontal: 11, flexDirection: 'row', alignItems: 'center', gap: 10 },
   optionCopy: { flex: 1, gap: 3 },
   optionLabel: { fontSize: 14, fontWeight: '600' },
   optionDetail: { fontSize: 11 },

@@ -3,6 +3,8 @@ import {
   DEFAULT_DEMO_CLASSES,
   DEFAULT_TRAINING_FILIERE_NAMES,
   getTrainingPlanSessions,
+  isTrainingPlan,
+  parseTrainingPlanJson,
   setTrainingSessionAssignmentExecuted,
   upsertTrainingSessionAssignment,
   validateTrainingPlan,
@@ -16,6 +18,16 @@ function assertEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
     throw new Error(`${label}: attendu ${String(expected)}, obtenu ${String(actual)}.`);
   }
+}
+
+function assertThrows(action: () => unknown, expectedMessage: string, label: string) {
+  try {
+    action();
+  } catch (error) {
+    if (error instanceof Error && error.message.includes(expectedMessage)) return;
+    throw new Error(`${label}: le message d’erreur était inattendu.`);
+  }
+  throw new Error(`${label}: une erreur était attendue.`);
 }
 
 function sessionsFor(
@@ -253,6 +265,33 @@ function runTrainingPlanTests() {
     createDefaultTrainingPlan('filiere-custom', 'Autre filière', '2026-2027', createId).projects.length,
     0,
     'Une filière inconnue n’est pas préremplie avec un programme inventé',
+  );
+  const exportablePlan = createDefaultTrainingPlan(
+    'filiere-json',
+    'Filière JSON',
+    '2026-2027',
+    createId,
+  );
+  const planFile = JSON.stringify({
+    format: 'evaluation-eleve-training-plan',
+    version: 1,
+    plan: exportablePlan,
+  });
+  assertEqual(
+    parseTrainingPlanJson(planFile).filiereId,
+    exportablePlan.filiereId,
+    'Un fichier JSON exporté importe le plan de formation',
+  );
+  assertEqual(
+    parseTrainingPlanJson(JSON.stringify(exportablePlan)).id,
+    exportablePlan.id,
+    'Un plan JSON brut reste importable',
+  );
+  assertEqual(isTrainingPlan({ ...exportablePlan, projects: [{}] }), false, 'Un plan JSON mal formé est rejeté');
+  assertThrows(
+    () => parseTrainingPlanJson('{"format":"other"}'),
+    'export valide',
+    'Un autre format JSON est rejeté',
   );
 
   const assignment = {

@@ -577,8 +577,7 @@ ${parts.slice(1).join('')}
  * Copies the PDF produced by expo-print to an app-owned cache URI before sharing.
  * Expo print's temporary URI may not be readable by the native sharing provider.
  */
-export async function exportAssessmentPdf(data: AssessmentExportData): Promise<void> {
-  const html = generateAssessmentPdfHtml(data);
+export async function exportHtmlAsPdf(html: string, filename: string): Promise<void> {
   if (Platform.OS === 'web') {
     await Print.printAsync({ html });
     return;
@@ -588,8 +587,6 @@ export async function exportAssessmentPdf(data: AssessmentExportData): Promise<v
   if (!base64) {
     throw new Error('Expo Print n’a pas fourni le contenu du PDF.');
   }
-  const safeName = (value: string) => value.replace(/[^\p{L}\p{N}-]+/gu, '_');
-  const filename = `Evaluation_${safeName(data.className || 'Classe')}_${safeName(data.assessment?.title || 'Evaluation')}.pdf`;
   const cacheDirectory = LegacyFS.cacheDirectory ?? Paths.cache.uri;
   const targetUri = `${cacheDirectory.endsWith('/') ? cacheDirectory : `${cacheDirectory}/`}${Date.now()}-${filename}`;
   await LegacyFS.writeAsStringAsync(targetUri, base64, {
@@ -615,6 +612,12 @@ export async function exportAssessmentPdf(data: AssessmentExportData): Promise<v
     console.error('Erreur partage PDF:', error);
     throw new Error('Le PDF a été généré, mais le partage a échoué. Vérifiez les autorisations de fichiers de l’appareil et réessayez.');
   }
+}
+
+export async function exportAssessmentPdf(data: AssessmentExportData): Promise<void> {
+  const safeName = (value: string) => value.replace(/[^\p{L}\p{N}-]+/gu, '_');
+  const filename = `Evaluation_${safeName(data.className || 'Classe')}_${safeName(data.assessment?.title || 'Evaluation')}.pdf`;
+  await exportHtmlAsPdf(generateAssessmentPdfHtml(data), filename);
 }
 
 /**

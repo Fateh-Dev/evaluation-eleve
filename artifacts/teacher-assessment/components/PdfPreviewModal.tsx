@@ -75,7 +75,9 @@ export function PdfPreviewModal({
             <Feather name="download" size={17} color={colors.primaryForeground} />
           </Pressable>
         </View>
-        <PdfDocumentFrame html={html} uri={uri} />
+        <View style={styles.preview}>
+          <PdfDocumentFrame html={html} uri={uri} />
+        </View>
       </View>
     </Modal>
   );
@@ -83,6 +85,7 @@ export function PdfPreviewModal({
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
+  preview: { flex: 1, paddingHorizontal: 12 },
   header: { minHeight: 66, borderBottomWidth: StyleSheet.hairlineWidth, paddingHorizontal: 14, paddingVertical: 9, flexDirection: 'row', alignItems: 'center', gap: 11 },
   iconButton: { width: 38, height: 38, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
   titleContainer: { flex: 1, gap: 3 },

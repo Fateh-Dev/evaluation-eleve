@@ -8,6 +8,7 @@ import React, { useState } from 'react';
 import {
   Modal,
   Pressable,
+  Platform,
   ScrollView,
   StyleSheet,
   Switch,
@@ -26,6 +27,7 @@ import {
 import { PinEntryScreen } from '@/components/PinEntryScreen';
 import { RecoveryCodeDialog } from '@/components/RecoveryCodeDialog';
 import { useAppData } from '@/context/AppDataContext';
+import { useStorage } from '@/context/StorageContext';
 import { useReminders } from '@/context/ReminderContext';
 import { useSecurity } from '@/context/SecurityContext';
 import { useColors } from '@/hooks/useColors';
@@ -33,6 +35,7 @@ import { useColors } from '@/hooks/useColors';
 export default function SettingsScreen() {
   const colors = useColors();
   const data = useAppData();
+  const storage = useStorage();
   const reminders = useReminders();
   const security = useSecurity();
   const [pinInput, setPinInput] = useState('');
@@ -104,41 +107,86 @@ export default function SettingsScreen() {
   const handleCreateBackup = async () => {
     try {
       const timestamp = new Date().toISOString().slice(0, 10);
-      const uri = `${FileSystem.cacheDirectory}evaluation-eleve-${timestamp}.json`;
       const backupState = data.getBackupState();
-      await FileSystem.writeAsStringAsync(uri, JSON.stringify({
+      const pdfLibrary = await storage.getBackupData();
+      const contents = JSON.stringify({
         format: 'evaluation-eleve-backup',
-        version: 2,
+        version: 3,
         exportedAt: new Date().toISOString(),
-        includedCollections: [
-          'school', 'teacherName', 'academicYear', 'schoolYearConfigurations',
-          'classes', 'pupils', 'assessments', 'objectives', 'evaluations',
-          'absentPupilIds', 'remediations', 'activeClassId', 'activeAssessmentId',
-        ],
+        includedCollections: [...Object.keys(backupState), 'pdfLibrary.files', 'pdfLibrary.trash', 'pdfLibrary.folders'],
         counts: {
           classes: backupState.classes.length,
           pupils: backupState.pupils.length,
           assessments: backupState.assessments.length,
           schoolYearConfigurations: backupState.schoolYearConfigurations.length,
+          trainingPlans: backupState.trainingPlans.length,
+          pdfs: pdfLibrary.files.length,
+          trashedPdfs: pdfLibrary.trash.length,
+          pdfFolders: pdfLibrary.folders.length,
         },
         state: backupState,
-      }, null, 2));
-      if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri, { mimeType: 'application/json', dialogTitle: 'Enregistrer la sauvegarde' });
-      else Alert.alert('Sauvegarde créée', `Le fichier est disponible ici : ${uri}`);
-    } catch { Alert.alert('Erreur', 'Impossible de créer la sauvegarde.'); }
+        pdfLibrary,
+      }, null, 2);
+      const filename = `evaluation-eleve-${timestamp}.json`;
+      if (Platform.OS === 'web') {
+        const objectUrl = URL.createObjectURL(new Blob([contents], { type: 'application/json' }));
+        const link = document.createElement('a');
+        link.href = objectUrl;
+        link.download = filename;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+        return;
+      }
+      if (!FileSystem.cacheDirectory) throw new Error('Le dossier temporaire est indisponible.');
+      const uri = `${FileSystem.cacheDirectory}${filename}`;
+      await FileSystem.writeAsStringAsync(uri, contents);
+      if (!(await Sharing.isAvailableAsync())) throw new Error('Le partage de fichiers n’est pas disponible sur cet appareil.');
+      await Sharing.shareAsync(uri, { mimeType: 'application/json', dialogTitle: 'Enregistrer la sauvegarde' });
+    } catch (error) {
+      Alert.alert('Erreur', error instanceof Error ? error.message : 'Impossible de créer la sauvegarde complète.');
+    }
   };
   const handleRestoreBackup = async () => {
     try {
       const result = await File.pickFileAsync({ mimeTypes: ['application/json'] });
       if (result.canceled || !result.result) return;
       const raw = await result.result.text();
-      const parsed = JSON.parse(raw) as { format?: string; state?: unknown };
-      const backup = parsed.format === 'evaluation-eleve-backup' ? parsed.state : parsed;
+      const parsed: unknown = JSON.parse(raw);
+      let backup: unknown = parsed;
+      let pdfLibrary: unknown;
+      if (parsed && typeof parsed === 'object' && 'format' in parsed) {
+        const envelope = parsed as { format?: unknown; version?: unknown; state?: unknown; pdfLibrary?: unknown };
+        if (
+          envelope.format !== 'evaluation-eleve-backup' ||
+          (envelope.version !== 2 && envelope.version !== 3) ||
+          !envelope.state
+        ) {
+          throw new Error('Le fichier ne correspond pas à une sauvegarde Évaluation Élève.');
+        }
+        backup = envelope.state;
+        if ('pdfLibrary' in envelope) {
+          storage.validateBackupData(envelope.pdfLibrary);
+          pdfLibrary = envelope.pdfLibrary;
+        }
+      }
       Alert.alert('Restaurer cette sauvegarde ?', 'Les données actuelles seront remplacées par celles du fichier sélectionné.', [
         { text: 'Annuler', style: 'cancel' },
-        { text: 'Restaurer', onPress: () => { void data.restoreBackupState(backup).then(() => Alert.alert('Restauration terminée', 'Vos données ont été restaurées.')).catch((error: Error) => Alert.alert('Erreur', error.message)); } },
+        {
+          text: 'Restaurer',
+          onPress: () => {
+            void (async () => {
+              await data.restoreBackupState(backup);
+              if (pdfLibrary !== undefined) await storage.restoreBackupData(pdfLibrary);
+              Alert.alert('Restauration terminée', 'Les données de l’application, le profil enseignant, les plans de formation et la bibliothèque PDF ont été restaurés.');
+            })().catch((error: unknown) => {
+              Alert.alert('Erreur', error instanceof Error ? error.message : 'La sauvegarde n’a pas pu être restaurée.');
+            });
+          },
+        },
       ]);
-    } catch { Alert.alert('Erreur', 'Le fichier sélectionné est invalide ou illisible.'); }
+    } catch (error) {
+      Alert.alert('Erreur', error instanceof Error ? error.message : 'Le fichier sélectionné est invalide ou illisible.');
+    }
   };
   const closePinSetup = () => {
     setEditingPin(false);
@@ -688,7 +736,7 @@ export default function SettingsScreen() {
           <View style={[styles.settingIcon, { backgroundColor: colors.accent }]}><Feather name="archive" size={18} color={colors.primary} /></View>
           <View style={styles.settingCopy}>
             <Text style={[styles.value, { color: colors.foreground }]}>Sauvegarde complète</Text>
-            <Text style={[styles.help, { color: colors.mutedForeground }]}>Enregistrez toutes les données de l’application — établissement, années scolaires, classes, élèves, évaluations, objectifs, résultats et remédiations — dans un fichier JSON sur votre appareil ou dans un autre emplacement.</Text>
+            <Text style={[styles.help, { color: colors.mutedForeground }]}>Enregistrez toutes les données, y compris le profil enseignant, les plans de formation et les PDF importés, dans un fichier JSON restaurable.</Text>
           </View>
         </View>
         <View style={styles.buttonRow}>

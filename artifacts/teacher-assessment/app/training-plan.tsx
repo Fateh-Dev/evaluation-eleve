@@ -1,7 +1,11 @@
 import { Feather } from "@expo/vector-icons";
+import { File } from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
+import * as Sharing from "expo-sharing";
 import { useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -10,10 +14,14 @@ import {
   View,
 } from "react-native";
 import { AppHeader, Button, Screen, Surface } from "@/components/AppShell";
+import { Alert } from "@/components/AppDialog";
 import { useAppData } from "@/context/AppDataContext";
 import { useColors } from "@/hooks/useColors";
 import {
   getTrainingPlanSessions,
+  isTrainingPlan,
+  normalizeTrainingPlan,
+  parseTrainingPlanJson,
   SEQUENCE_ACTIVITY_TYPES,
   type SequenceActivityType,
   type TrainingPlan,
@@ -339,6 +347,83 @@ export default function TrainingPlanScreen() {
     setPlanError("");
   };
 
+  const exportPlan = async () => {
+    if (!plan || !selectedFiliere) return;
+    const filename = `plan-formation-${selectedFiliere.name
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .toLowerCase()}.json`;
+    const contents = JSON.stringify({
+      format: "evaluation-eleve-training-plan",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      plan,
+    }, null, 2);
+    try {
+      if (Platform.OS === "web") {
+        const objectUrl = URL.createObjectURL(new Blob([contents], { type: "application/json" }));
+        const link = document.createElement("a");
+        link.href = objectUrl;
+        link.download = filename;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+        return;
+      }
+      if (!FileSystem.cacheDirectory) throw new Error("Le dossier temporaire est indisponible.");
+      const uri = `${FileSystem.cacheDirectory}${filename}`;
+      await FileSystem.writeAsStringAsync(uri, contents);
+      if (!(await Sharing.isAvailableAsync())) throw new Error("Le partage de fichiers n’est pas disponible sur cet appareil.");
+      await Sharing.shareAsync(uri, { mimeType: "application/json", dialogTitle: "Enregistrer le plan de formation" });
+    } catch (error) {
+      Alert.alert("Export impossible", error instanceof Error ? error.message : "Le plan de formation n’a pas pu être exporté.");
+    }
+  };
+
+  const importPlan = async () => {
+    if (!selectedFiliere) {
+      Alert.alert("Filière requise", "Créez ou sélectionnez une filière avant d’importer un plan.");
+      return;
+    }
+    try {
+      const result = await File.pickFileAsync({ mimeTypes: ["application/json"] });
+      if (result.canceled || !result.result) return;
+      const imported = parseTrainingPlanJson(await result.result.text());
+      const nextPlan = normalizeTrainingPlan({
+        ...imported,
+        id: plan?.id ?? imported.id,
+        filiereId: selectedFiliere.id,
+        schoolYearId: selectedFiliere.schoolYearId,
+        filiereName: selectedFiliere.name,
+        classId: undefined,
+      });
+      if (!isTrainingPlan(nextPlan)) throw new Error("Le plan importé contient des données invalides.");
+      const confirmImport = () => {
+        try {
+          savePlan(nextPlan);
+          Alert.alert("Importation terminée", `Le plan a été importé dans « ${selectedFiliere.name} ».`);
+        } catch (error) {
+          Alert.alert("Importation impossible", error instanceof Error ? error.message : "Le plan n’a pas pu être enregistré.");
+        }
+      };
+      if (plan) {
+        Alert.alert(
+          "Remplacer le plan actuel ?",
+          `Le plan de « ${selectedFiliere.name} » sera remplacé par celui du fichier.`,
+          [
+            { text: "Annuler", style: "cancel" },
+            { text: "Importer", onPress: confirmImport },
+          ],
+        );
+      } else {
+        confirmImport();
+      }
+    } catch (error) {
+      Alert.alert("Importation impossible", error instanceof Error ? error.message : "Le fichier de plan n’a pas pu être lu.");
+    }
+  };
+
   const createFiliere = (name: string) => {
     const filiereId = data.createTrainingFiliere(data.academicYear, name);
     if (!filiereId) {
@@ -433,6 +518,10 @@ export default function TrainingPlanScreen() {
         Chaque filière possède son plan de formation, partagé par toutes les
         classes qui lui sont rattachées.
       </Text>
+      <View style={styles.planFileActions}>
+        <Button label="Importer JSON" icon="upload" compact secondary onPress={() => { void importPlan(); }} />
+        <Button label="Exporter JSON" icon="download" compact disabled={!plan} onPress={() => { void exportPlan(); }} />
+      </View>
       <Surface style={styles.sectionCard}>
         <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
           Filières · {data.academicYear}
@@ -1240,6 +1329,7 @@ export default function TrainingPlanScreen() {
 
 const styles = StyleSheet.create({
   intro: { fontSize: 14, lineHeight: 21, marginBottom: 4 },
+  planFileActions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
   classChoices: { gap: 8, paddingVertical: 4 },
   classChip: {
     borderWidth: 1,

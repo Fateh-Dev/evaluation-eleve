@@ -58,10 +58,13 @@
     "zod-validation-error": "^3.4.0"
   },
   "dependencies": {
+    "@config-plugins/react-native-blob-util": "14.0.2",
+    "@config-plugins/react-native-pdf": "14.0.2",
     "@react-native-community/datetimepicker": "9.1.0",
     "@types/jszip": "^3.4.1",
     "expo": "~57.0.26",
     "expo-crypto": "~57.0.3",
+    "expo-dev-client": "~57.0.20",
     "expo-document-picker": "~57.0.3",
     "expo-file-system": "^57.0.7",
     "expo-local-authentication": "~57.0.3",
@@ -70,8 +73,11 @@
     "expo-secure-store": "~57.0.4",
     "expo-sharing": "^57.0.22",
     "jszip": "^3.10.2",
+    "pdfjs-dist": "^5.7.284",
     "react": "19.2.3",
     "react-native": "0.86.3",
+    "react-native-blob-util": "0.25.1",
+    "react-native-pdf": "7.0.5",
     "react-native-webview": "13.16.1"
   }
 }

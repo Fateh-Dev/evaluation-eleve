@@ -33,11 +33,13 @@ import {
   getScheduleOccurrencesForDate,
 } from '@/services/schedule';
 import {
+  assertTrainingPlanIsValid,
   createDefaultTrainingPlan,
   DEFAULT_DEMO_CLASSES,
   DEFAULT_TRAINING_FILIERE_NAMES,
   getTrainingPlanSessions,
-  SEQUENCE_ACTIVITY_TYPES,
+  isTrainingPlan,
+  normalizeTrainingPlan,
   setTrainingSessionAssignmentExecuted,
   upsertTrainingSessionAssignment,
   validateTrainingPlan,
@@ -545,56 +547,6 @@ export type AppDataContextValue = {
 };
 
 const STORAGE_KEY = '@teacher-assessment/app-state-v4';
-
-function isTrainingPlan(value: unknown): value is TrainingPlan {
-  if (!value || typeof value !== 'object') return false;
-  const plan = value as Partial<TrainingPlan>;
-  return typeof plan.id === 'string' &&
-    (typeof plan.filiereId === 'string' || typeof plan.classId === 'string') &&
-    typeof plan.schoolYearId === 'string' &&
-    typeof plan.filiereName === 'string' &&
-    Array.isArray(plan.projects) && plan.projects.every((project) => {
-      if (
-        typeof project.id !== 'string' ||
-        typeof project.title !== 'string' ||
-        !Number.isInteger(project.order) ||
-        !Array.isArray(project.studyObjects) ||
-        (project.launch !== undefined &&
-          (typeof project.launch.id !== 'string' || typeof project.launch.title !== 'string'))
-      ) return false;
-      return project.studyObjects.every((studyObject) => {
-        if (
-          typeof studyObject.id !== 'string' ||
-          typeof studyObject.title !== 'string' ||
-          !Number.isInteger(studyObject.order) ||
-          (studyObject.prerequisites !== undefined &&
-            (!Array.isArray(studyObject.prerequisites) ||
-              !studyObject.prerequisites.every((item) => typeof item === 'string'))) ||
-          !Array.isArray(studyObject.sequences) ||
-          (studyObject.diagnostic !== undefined &&
-            (typeof studyObject.diagnostic.id !== 'string' ||
-              typeof studyObject.diagnostic.title !== 'string'))
-        ) return false;
-        return studyObject.sequences.every((sequence) =>
-          typeof sequence.id === 'string' &&
-          typeof sequence.title === 'string' &&
-          Number.isInteger(sequence.order) &&
-          (sequence.competencyIds === undefined ||
-            (Array.isArray(sequence.competencyIds) &&
-              sequence.competencyIds.every((id) => typeof id === 'string'))) &&
-          Array.isArray(sequence.sessions) &&
-          sequence.sessions.every((session) =>
-            typeof session.id === 'string' &&
-            typeof session.title === 'string' &&
-            (session.type === 'lancement' ||
-              session.type === 'diagnostic' ||
-              SEQUENCE_ACTIVITY_TYPES.some((type) => type === session.type)) &&
-            Number.isInteger(session.order),
-          ),
-        );
-      });
-    });
-}
 
 function isTrainingFiliere(value: unknown): value is TrainingFiliere {
   if (!value || typeof value !== 'object') return false;

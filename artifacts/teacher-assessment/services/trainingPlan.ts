@@ -12,12 +12,49 @@ export type TrainingSessionType =
   | 'diagnostic'
   | SequenceActivityType;
 
+export const DEFAULT_SESSION_DURATION_HOURS = 1;
+
+export const SESSION_TYPE_LABELS: Record<TrainingSessionType, string> = {
+  lancement: 'Lancement',
+  diagnostic: 'Diagnostic',
+  'mise-en-place': 'Mise en place',
+  'comprehension-orale': 'Compréhension de l’oral',
+  'production-orale': 'Production de l’oral',
+  'comprehension-ecrite': 'Compréhension de l’écrit',
+  'production-ecrite': 'Production de l’écrit',
+};
+
 export type TrainingPlanSession = {
   id: string;
   title: string;
   type: TrainingSessionType;
   order: number;
+  /** Durée de la séance en heures. La durée par activité interne n’est pas définie. */
+  durationHours?: number;
   competencyIds?: string[];
+};
+
+export type UnmappedSourceItem = {
+  kind: 'project' | 'study-object';
+  title: string;
+  originNote: string;
+};
+
+export type TrainingPlanGaps = {
+  /** Compétences du test de niveau : liste métier non fournie, sélection extensible. */
+  levelTestCompetencyIds: string[];
+  /** Forme du test de niveau (à compléter). */
+  levelTestFormKind?: string;
+  /** Mode de notation du test de niveau (à compléter). */
+  levelTestScoringMode?: string;
+  /** Fréquence de l’évaluation continue (à compléter). */
+  continuousEvaluationFrequency?: string;
+  /** Instruments de l’évaluation continue (à compléter). */
+  continuousEvaluationInstruments: string[];
+  /** Durées d’activités internes à une séance (à compléter, non figées). */
+  activityDurationHoursByType: Partial<Record<SequenceActivityType, number>>;
+  /** Élément présent dans des fiches mais absent de la carte de cette filière. */
+  unmappedSourceItems: UnmappedSourceItem[];
 };
 
 export type TrainingSequence = {
@@ -51,9 +88,100 @@ export type TrainingPlan = {
   schoolYearId: string;
   filiereName: string;
   projects: TrainingProject[];
+  gaps?: TrainingPlanGaps;
   /** Present only while reading state saved by the earlier class-scoped version. */
   classId?: string;
 };
+
+export function isTrainingPlan(value: unknown): value is TrainingPlan {
+  if (!value || typeof value !== 'object') return false;
+  const plan = value as Partial<TrainingPlan>;
+  return typeof plan.id === 'string' &&
+    (typeof plan.filiereId === 'string' || typeof plan.classId === 'string') &&
+    typeof plan.schoolYearId === 'string' &&
+    typeof plan.filiereName === 'string' &&
+    Array.isArray(plan.projects) && plan.projects.every((project) => {
+      if (
+        !project ||
+        typeof project.id !== 'string' ||
+        typeof project.title !== 'string' ||
+        !Number.isInteger(project.order) ||
+        !Array.isArray(project.studyObjects) ||
+        (project.launch !== undefined &&
+          (!project.launch ||
+            typeof project.launch.id !== 'string' ||
+            typeof project.launch.title !== 'string' ||
+            (project.launch.durationHours !== undefined &&
+              !(typeof project.launch.durationHours === 'number' &&
+                Number.isFinite(project.launch.durationHours)))))
+      ) return false;
+      return project.studyObjects.every((studyObject) => {
+        if (
+          !studyObject ||
+          typeof studyObject.id !== 'string' ||
+          typeof studyObject.title !== 'string' ||
+          !Number.isInteger(studyObject.order) ||
+          (studyObject.prerequisites !== undefined &&
+            (!Array.isArray(studyObject.prerequisites) ||
+              !studyObject.prerequisites.every((item) => typeof item === 'string'))) ||
+          !Array.isArray(studyObject.sequences) ||
+          (studyObject.diagnostic !== undefined &&
+            (!studyObject.diagnostic ||
+              typeof studyObject.diagnostic.id !== 'string' ||
+              typeof studyObject.diagnostic.title !== 'string'))
+        ) return false;
+        return studyObject.sequences.every((sequence) =>
+          Boolean(sequence) &&
+          typeof sequence.id === 'string' &&
+          typeof sequence.title === 'string' &&
+          Number.isInteger(sequence.order) &&
+          (sequence.competencyIds === undefined ||
+            (Array.isArray(sequence.competencyIds) &&
+              sequence.competencyIds.every((id) => typeof id === 'string'))) &&
+          Array.isArray(sequence.sessions) &&
+          sequence.sessions.every((session) =>
+            Boolean(session) &&
+            typeof session.id === 'string' &&
+            typeof session.title === 'string' &&
+            (session.type === 'lancement' ||
+              session.type === 'diagnostic' ||
+              SEQUENCE_ACTIVITY_TYPES.some((type) => type === session.type)) &&
+            Number.isInteger(session.order) &&
+            (session.durationHours === undefined ||
+              (typeof session.durationHours === 'number' && Number.isFinite(session.durationHours))),
+          ),
+        );
+      });
+    });
+}
+
+export function parseTrainingPlanJson(json: string): TrainingPlan {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    throw new Error('Le fichier sélectionné ne contient pas un JSON valide.');
+  }
+  if (
+    parsed &&
+    typeof parsed === 'object' &&
+    'format' in parsed
+  ) {
+    const envelope = parsed as { format?: unknown; version?: unknown; plan?: unknown };
+    if (
+      envelope.format !== 'evaluation-eleve-training-plan' ||
+      envelope.version !== 1 ||
+      !isTrainingPlan(envelope.plan)
+    ) {
+      throw new Error('Ce fichier n’est pas un export valide de plan de formation.');
+    }
+    return envelope.plan;
+  }
+  if (!isTrainingPlan(parsed)) {
+    throw new Error('Le fichier ne contient pas un plan de formation valide.');
+  }
+  return parsed;
+}
 
 export type TrainingFiliere = {
   id: string;
@@ -83,7 +211,9 @@ export type TrainingPlanValidationError = {
     | 'invalid-written-production-count'
     | 'invalid-oral-comprehension-count'
     | 'invalid-oral-production-count'
-    | 'invalid-setup-count';
+    | 'invalid-setup-count'
+    | 'diagnostic-count-mismatch'
+    | 'invalid-session-duration';
   message: string;
   projectId?: string;
   studyObjectId?: string;
@@ -125,6 +255,36 @@ type DefaultProjectDefinition = {
   title: string;
   studyObjects: DefaultStudyObjectDefinition[];
 };
+
+const THEATRE_STUDY_OBJECT_TITLE = 'Le discours théâtral';
+
+export function createEmptyTrainingPlanGaps(): TrainingPlanGaps {
+  return {
+    levelTestCompetencyIds: [],
+    continuousEvaluationInstruments: [],
+    activityDurationHoursByType: {},
+    unmappedSourceItems: [],
+  };
+}
+
+export function getSessionDurationHours(session: TrainingPlanSession): number {
+  return session.durationHours ?? DEFAULT_SESSION_DURATION_HOURS;
+}
+
+export function moveOrderedItem<T extends { id: string; order: number }>(
+  items: T[],
+  id: string,
+  direction: -1 | 1,
+): T[] {
+  const sorted = [...items].sort((left, right) => left.order - right.order);
+  const index = sorted.findIndex((item) => item.id === id);
+  const target = index + direction;
+  if (index < 0 || target < 0 || target >= sorted.length) return items;
+  const reordered = [...sorted];
+  const [moved] = reordered.splice(index, 1);
+  reordered.splice(target, 0, moved);
+  return reordered.map((item, order) => ({ ...item, order }));
+}
 
 function getDefaultProjectDefinitions(filiereName: string): DefaultProjectDefinition[] | undefined {
   const normalizedName = filiereName.trim().toLocaleLowerCase('fr');
@@ -189,6 +349,21 @@ function getDefaultProjectDefinitions(filiereName: string): DefaultProjectDefini
   return [projectOne, projectTwo, projectThree];
 }
 
+function makeDefaultSession(
+  createId: (prefix: string) => string,
+  type: TrainingSessionType,
+  title: string,
+  order = 0,
+): TrainingPlanSession {
+  return {
+    id: createId('training-session'),
+    title,
+    type,
+    order,
+    durationHours: DEFAULT_SESSION_DURATION_HOURS,
+  };
+}
+
 export function createDefaultTrainingPlan(
   filiereId: string,
   filiereName: string,
@@ -196,31 +371,34 @@ export function createDefaultTrainingPlan(
   createId: (prefix: string) => string,
 ): TrainingPlan {
   const definitions = getDefaultProjectDefinitions(filiereName) ?? [];
+  const hasTheatreObject = definitions.some((project) =>
+    project.studyObjects.some((studyObject) => studyObject.title === THEATRE_STUDY_OBJECT_TITLE),
+  );
+  const gaps = createEmptyTrainingPlanGaps();
+  if (definitions.length > 0 && !hasTheatreObject) {
+    gaps.unmappedSourceItems = [{
+      kind: 'study-object',
+      title: THEATRE_STUDY_OBJECT_TITLE,
+      originNote:
+        'Présent dans les plans Lettres/Langues ; absent de la carte de cette filière. Le plan d’origine doit être vérifié.',
+    }];
+  }
   return {
     id: createId('training-plan'),
     filiereId,
     filiereName,
     schoolYearId,
+    gaps,
     projects: definitions.map((projectDefinition, projectIndex) => ({
       id: createId('training-project'),
       title: projectDefinition.title,
       order: projectIndex,
-      launch: {
-        id: createId('training-session'),
-        title: 'Lancement du projet',
-        type: 'lancement',
-        order: 0,
-      },
+      launch: makeDefaultSession(createId, 'lancement', 'Lancement du projet'),
       studyObjects: projectDefinition.studyObjects.map((studyObjectDefinition, studyObjectIndex) => ({
         id: createId('study-object'),
         title: studyObjectDefinition.title,
         order: studyObjectIndex,
-        diagnostic: {
-          id: createId('training-session'),
-          title: 'Évaluation diagnostique',
-          type: 'diagnostic',
-          order: 0,
-        },
+        diagnostic: makeDefaultSession(createId, 'diagnostic', 'Évaluation diagnostique'),
         sequences: studyObjectDefinition.sequences.map((sequenceDefinition, sequenceIndex) => {
           const sessionDefinitions: Array<{
             type: SequenceActivityType;
@@ -242,16 +420,55 @@ export function createDefaultTrainingPlan(
             id: createId('training-sequence'),
             title: sequenceDefinition.title,
             order: sequenceIndex,
-            sessions: sessionDefinitions.map((session, sessionIndex) => ({
-              id: createId('training-session'),
-              title: session.title,
-              type: session.type,
-              order: sessionIndex,
-            })),
+            sessions: sessionDefinitions.map((session, sessionIndex) =>
+              makeDefaultSession(createId, session.type, session.title, sessionIndex),
+            ),
           };
         }),
       })),
     })),
+  };
+}
+
+export function normalizeTrainingPlan(plan: TrainingPlan): TrainingPlan {
+  const gaps = {
+    ...createEmptyTrainingPlanGaps(),
+    ...(plan.gaps ?? {}),
+    levelTestCompetencyIds: plan.gaps?.levelTestCompetencyIds ?? [],
+    continuousEvaluationInstruments: plan.gaps?.continuousEvaluationInstruments ?? [],
+    activityDurationHoursByType: plan.gaps?.activityDurationHoursByType ?? {},
+    unmappedSourceItems: plan.gaps?.unmappedSourceItems ?? [],
+  };
+  const withDuration = (session?: TrainingPlanSession) =>
+    session
+      ? { ...session, durationHours: getSessionDurationHours(session) }
+      : session;
+  return {
+    ...plan,
+    gaps,
+    projects: [...plan.projects]
+      .sort((left, right) => left.order - right.order)
+      .map((project) => ({
+        ...project,
+        launch: withDuration(project.launch),
+        studyObjects: [...project.studyObjects]
+          .sort((left, right) => left.order - right.order)
+          .map((studyObject) => ({
+            ...studyObject,
+            diagnostic: withDuration(studyObject.diagnostic),
+            sequences: [...studyObject.sequences]
+              .sort((left, right) => left.order - right.order)
+              .map((sequence) => ({
+                ...sequence,
+                sessions: [...sequence.sessions]
+                  .sort((left, right) => left.order - right.order)
+                  .map((session) => ({
+                    ...session,
+                    durationHours: getSessionDurationHours(session),
+                  })),
+              })),
+          })),
+      })),
   };
 }
 
@@ -330,6 +547,16 @@ export function validateTrainingPlan(
         projectId: project.id,
       });
     }
+    const diagnosticCount = project.studyObjects.filter(
+      (studyObject) => studyObject.diagnostic?.title.trim(),
+    ).length;
+    if (project.studyObjects.length > 0 && diagnosticCount !== project.studyObjects.length) {
+      errors.push({
+        code: 'diagnostic-count-mismatch',
+        message: `Le projet « ${project.title} » doit compter autant de diagnostics que d’objets d’étude (${diagnosticCount} diagnostic(s) pour ${project.studyObjects.length} objet(s)).`,
+        projectId: project.id,
+      });
+    }
     for (const studyObject of project.studyObjects) {
       if (!studyObject.diagnostic?.title.trim()) {
         errors.push({
@@ -352,7 +579,28 @@ export function validateTrainingPlan(
       }
     }
   }
+  for (const session of getTrainingPlanSessions(plan)) {
+    const duration = getSessionDurationHours(session);
+    if (!Number.isFinite(duration) || duration <= 0) {
+      errors.push({
+        code: 'invalid-session-duration',
+        message: `La séance « ${session.title} » doit avoir une durée positive (en heures).`,
+      });
+    }
+  }
   return errors;
+}
+
+export function formatTrainingPlanValidationMessages(
+  errors: TrainingPlanValidationError[],
+): string {
+  return errors.map((error) => error.message).join('\n');
+}
+
+export function assertTrainingPlanIsValid(plan: TrainingPlan): void {
+  const errors = validateTrainingPlan(plan);
+  if (errors.length === 0) return;
+  throw new Error(formatTrainingPlanValidationMessages(errors));
 }
 
 export function validateTrainingSequence(

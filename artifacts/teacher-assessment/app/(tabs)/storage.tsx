@@ -14,14 +14,12 @@ import {
   AppHeader,
   Button,
   KeyboardAvoidingViewCompat,
-  ListSelectionToolbar,
   Screen,
-  SectionTitle,
   SelectionCheckbox,
   Surface,
 } from "@/components/AppShell";
 import { useColors } from "@/hooks/useColors";
-import { useStorage, type StoredPdf } from "@/context/StorageContext";
+import { useStorage, type StorageFolder, type StoredPdf } from "@/context/StorageContext";
 import { useListSelection } from "@/hooks/useListSelection";
 
 function formatSize(size?: number) {
@@ -41,17 +39,36 @@ export default function StorageScreen() {
   const selection = useListSelection();
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<"date" | "name" | "size">("date");
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
+  const [folderModalVisible, setFolderModalVisible] = useState(false);
+  const [folderName, setFolderName] = useState("");
+  const [moveTarget, setMoveTarget] = useState<StoredPdf | null>(null);
+  const [moveFolderId, setMoveFolderId] = useState<string | null>(null);
   const [renameTarget, setRenameTarget] = useState<string | null>(null);
   const [renameInput, setRenameInput] = useState("");
-  const [emptyTrashArmed, setEmptyTrashArmed] = useState(false);
+  const [emptyingTrash, setEmptyingTrash] = useState(false);
   const [previewFile, setPreviewFile] = useState<StoredPdf | null>(null);
+  const visibleFolders = useMemo(
+    () => storage.folders.filter((folder) => folder.parentId === currentFolderId),
+    [currentFolderId, storage.folders],
+  );
+  const folderPath = useMemo(() => {
+    const path: StorageFolder[] = [];
+    let folder = storage.folders.find((item) => item.id === currentFolderId);
+    while (folder) {
+      path.unshift(folder);
+      folder = storage.folders.find((item) => item.id === folder?.parentId);
+    }
+    return path;
+  }, [currentFolderId, storage.folders]);
   const filteredFiles = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
     const result = normalizedQuery
       ? storage.files.filter((file) =>
-          file.name.toLocaleLowerCase().includes(normalizedQuery),
+          file.folderId === currentFolderId && file.name.toLocaleLowerCase().includes(normalizedQuery),
         )
-      : [...storage.files];
+      : storage.files.filter((file) => (file.folderId ?? null) === currentFolderId);
     return result.sort((a, b) =>
       sort === "name"
         ? a.name.localeCompare(b.name)
@@ -59,11 +76,35 @@ export default function StorageScreen() {
           ? (b.size ?? 0) - (a.size ?? 0)
           : b.createdAt.localeCompare(a.createdAt),
     );
-  }, [query, sort, storage.files]);
+  }, [currentFolderId, query, sort, storage.files]);
+
+  const orderedFolders = useMemo(
+    () => [...visibleFolders].sort((a, b) => a.name.localeCompare(b.name)),
+    [visibleFolders],
+  );
+  const orderedFoldersForMove = useMemo(() => {
+    const getPath = (folder: StorageFolder) => {
+      const names = [folder.name];
+      let parent = storage.folders.find((item) => item.id === folder.parentId);
+      while (parent) {
+        names.unshift(parent.name);
+        parent = storage.folders.find((item) => item.id === parent?.parentId);
+      }
+      return names.join(" / ");
+    };
+    return [...storage.folders]
+      .map((folder) => ({ ...folder, pathLabel: getPath(folder) }))
+      .sort((a, b) => a.pathLabel.localeCompare(b.pathLabel));
+  }, [storage.folders]);
+  const navigateToFolder = (folderId: string | null) => {
+    setCurrentFolderId(folderId);
+    setQuery("");
+    selection.cancelSelection();
+  };
 
   const handleUpload = async () => {
     try {
-      await storage.uploadPdf();
+      await storage.uploadPdf(currentFolderId);
     } catch (error) {
       Alert.alert(
         "Import impossible",
@@ -71,6 +112,55 @@ export default function StorageScreen() {
           ? error.message
           : "Le fichier PDF n’a pas pu être ajouté au stockage.",
       );
+    }
+  };
+  const saveFolder = async () => {
+    try {
+      await storage.createFolder(folderName, currentFolderId);
+      setFolderName("");
+      setFolderModalVisible(false);
+    } catch (error) {
+      Alert.alert("Création impossible", error instanceof Error ? error.message : "Le dossier n’a pas pu être créé.");
+    }
+  };
+  const handleDeleteFolder = (folder: StorageFolder) => {
+    const hasFiles = storage.files.some((file) => file.folderId === folder.id);
+    const hasFolders = storage.folders.some((item) => item.parentId === folder.id);
+    const hasTrashedFiles = storage.trash.some((file) => file.folderId === folder.id);
+    if (hasFiles || hasFolders || hasTrashedFiles) {
+      Alert.alert(
+        "Dossier non vide",
+        "Déplacez les PDF et sous-dossiers qu’il contient. Restaurez ou supprimez définitivement les PDF qui se trouvent dans la corbeille.",
+      );
+      return;
+    }
+    Alert.alert(
+      "Supprimer ce dossier ?",
+      `Le dossier « ${folder.name} » sera supprimé.`,
+      [
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Supprimer",
+          style: "destructive",
+          onPress: () => {
+            void storage.deleteFolder(folder.id).catch((error) => {
+              Alert.alert(
+                "Suppression impossible",
+                error instanceof Error ? error.message : "Le dossier n’a pas pu être supprimé.",
+              );
+            });
+          },
+        },
+      ],
+    );
+  };
+  const saveMove = async () => {
+    if (!moveTarget) return;
+    try {
+      await storage.movePdfToFolder(moveTarget.id, moveFolderId);
+      setMoveTarget(null);
+    } catch (error) {
+      Alert.alert("Déplacement impossible", error instanceof Error ? error.message : "Le PDF n’a pas pu être déplacé.");
     }
   };
   const handleDeleteSelectedFiles = () => {
@@ -107,7 +197,39 @@ export default function StorageScreen() {
   };
 
   return (
-    <Screen onTouchStart={() => setEmptyTrashArmed(false)}>
+    <Screen
+      floatingContent={selection.isSelecting ? (
+        <View style={[styles.selectionDock, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[styles.selectionDockCount, { color: colors.foreground }]}>
+            {selection.selectedIds.length} sélectionné{selection.selectedIds.length > 1 ? "s" : ""}
+          </Text>
+          <View style={styles.selectionDockActions}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Annuler la sélection"
+              onPress={selection.cancelSelection}
+              style={[styles.selectionDockButton, { backgroundColor: colors.secondary }]}
+            >
+              <Feather name="x" size={19} color={colors.foreground} />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Supprimer les PDF sélectionnés"
+              accessibilityState={{ disabled: selection.selectedIds.length === 0 }}
+              disabled={selection.selectedIds.length === 0}
+              onPress={handleDeleteSelectedFiles}
+              style={[
+                styles.selectionDockButton,
+                { backgroundColor: colors.errorSurface },
+                selection.selectedIds.length === 0 && styles.selectionDockButtonDisabled,
+              ]}
+            >
+              <Feather name="trash-2" size={18} color={colors.errorForeground} />
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
+    >
       <AppHeader eyebrow="Documents de l’enseignant" title="Stockage" />
       <Surface style={styles.hero}>
         <View style={[styles.heroIcon, { backgroundColor: colors.accent }]}>
@@ -123,7 +245,7 @@ export default function StorageScreen() {
           </Text>
         </View>
         <Button
-          label="Ajouter un PDF"
+          label="Ajouter des PDF"
           icon="upload"
           compact
           onPress={() => {
@@ -159,7 +281,23 @@ export default function StorageScreen() {
           </Text>
         </Surface>
       ) : null}
-      <SectionTitle title={`Documents (${storage.files.length})`} />
+      <View style={styles.breadcrumbs}>
+        <Pressable onPress={() => navigateToFolder(null)}>
+          <Text style={[styles.breadcrumb, { color: currentFolderId ? colors.primary : colors.foreground }]}>
+            Mes documents
+          </Text>
+        </Pressable>
+        {folderPath.map((folder) => (
+          <React.Fragment key={folder.id}>
+            <Feather name="chevron-right" size={14} color={colors.mutedForeground} />
+            <Pressable onPress={() => navigateToFolder(folder.id)}>
+              <Text style={[styles.breadcrumb, { color: folder.id === currentFolderId ? colors.foreground : colors.primary }]}>
+                {folder.name}
+              </Text>
+            </Pressable>
+          </React.Fragment>
+        ))}
+      </View>
       <View
         style={[
           styles.searchBox,
@@ -181,31 +319,63 @@ export default function StorageScreen() {
           </Pressable>
         ) : null}
       </View>
-      <Pressable
-        onPress={() =>
-          setSort(sort === "date" ? "name" : sort === "name" ? "size" : "date")
-        }
-        style={[
-          styles.sortButton,
-          { borderColor: colors.border, backgroundColor: colors.card },
-        ]}
-      >
-        <Feather name="filter" size={15} color={colors.primary} />
-        <Text style={[styles.sortText, { color: colors.foreground }]}>
-          Tri :{" "}
-          {sort === "date" ? "plus récent" : sort === "name" ? "nom" : "taille"}
-        </Text>
-      </Pressable>
-      {storage.files.length > 0 ? (
-        <ListSelectionToolbar
-          active={selection.isSelecting}
-          selectedCount={selection.selectedIds.length}
-          onStart={() => selection.startSelecting()}
-          onCancel={selection.cancelSelection}
-          onDelete={handleDeleteSelectedFiles}
-        />
-      ) : null}
-      {filteredFiles.length === 0 ? (
+      <View style={styles.libraryActions}>
+        <View style={styles.libraryActionGroup}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Trier par ${sort === "date" ? "date, plus récent" : sort === "name" ? "nom" : "taille"}`}
+            onPress={() =>
+              setSort(sort === "date" ? "name" : sort === "name" ? "size" : "date")
+            }
+            style={[styles.compactControl, { backgroundColor: colors.card, borderColor: colors.border }]}
+          >
+            <Feather name="filter" size={15} color={colors.primary} />
+            <Text style={[styles.sortText, { color: colors.foreground }]}>
+              {sort === "date" ? "Récent" : sort === "name" ? "Nom" : "Taille"}
+            </Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Créer un dossier"
+            onPress={() => {
+              setFolderName("");
+              setFolderModalVisible(true);
+            }}
+            style={[styles.compactIconControl, { backgroundColor: colors.card, borderColor: colors.border }]}
+          >
+            <Feather name="folder-plus" size={17} color={colors.primary} />
+          </Pressable>
+          {storage.files.length > 0 && !selection.isSelecting ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Sélectionner des PDF"
+              onPress={() => selection.startSelecting()}
+              style={[styles.compactIconControl, { backgroundColor: colors.card, borderColor: colors.border }]}
+            >
+              <Feather name="check-square" size={17} color={colors.mutedForeground} />
+            </Pressable>
+          ) : null}
+        </View>
+        <View style={[styles.viewToggle, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Vue en liste"
+            onPress={() => setViewMode("list")}
+            style={[styles.viewOption, viewMode === "list" && { backgroundColor: colors.accent }]}
+          >
+            <Feather name="list" size={17} color={viewMode === "list" ? colors.primary : colors.mutedForeground} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Vue en grille"
+            onPress={() => setViewMode("grid")}
+            style={[styles.viewOption, viewMode === "grid" && { backgroundColor: colors.accent }]}
+          >
+            <Feather name="grid" size={17} color={viewMode === "grid" ? colors.primary : colors.mutedForeground} />
+          </Pressable>
+        </View>
+      </View>
+      {filteredFiles.length === 0 && orderedFolders.length === 0 ? (
         <Surface style={styles.empty}>
           <Feather
             name={query ? "search" : "file-text"}
@@ -213,16 +383,16 @@ export default function StorageScreen() {
             color={colors.mutedForeground}
           />
           <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
-            {query ? "Aucun document trouvé" : "Aucun PDF enregistré"}
+            {query ? "Aucun document trouvé" : "Aucun document dans ce dossier"}
           </Text>
           <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
             {query
               ? "Essayez un autre nom de fichier."
-              : "Ajoutez votre premier PDF pour constituer votre bibliothèque pédagogique."}
+              : "Ajoutez un PDF ou créez un dossier pour organiser vos documents pédagogiques."}
           </Text>
           {!query ? (
             <Button
-              label="Ajouter un PDF"
+              label="Ajouter des PDF"
               compact
               icon="plus"
               onPress={() => {
@@ -232,12 +402,48 @@ export default function StorageScreen() {
           ) : null}
         </Surface>
       ) : (
-        <View style={styles.list}>
+        <View style={[styles.list, viewMode === "grid" && styles.grid]}>
+          {orderedFolders.map((folder) => {
+            const childCount = storage.files.filter((file) => file.folderId === folder.id).length;
+            const nestedCount = storage.folders.filter((item) => item.parentId === folder.id).length;
+            return (
+              <Surface key={folder.id} style={[styles.folderCard, viewMode === "grid" && styles.folderGridCard]}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Ouvrir le dossier ${folder.name}`}
+                  onPress={() => {
+                    navigateToFolder(folder.id);
+                  }}
+                  style={[styles.folderOpen, viewMode === "grid" && styles.folderOpenGrid]}
+                >
+                  <View style={[styles.folderIcon, { backgroundColor: colors.accent }]}>
+                    <Feather name="folder" size={21} color={colors.primary} />
+                  </View>
+                  <View style={styles.fileCopy}>
+                    <Text numberOfLines={2} style={[styles.fileName, { color: colors.foreground }]}>{folder.name}</Text>
+                    <Text style={[styles.fileMeta, { color: colors.mutedForeground }]}>
+                      {childCount} PDF · {nestedCount} dossier{nestedCount === 1 ? "" : "s"}
+                    </Text>
+                  </View>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Supprimer le dossier ${folder.name}`}
+                  onPress={() => handleDeleteFolder(folder)}
+                  hitSlop={8}
+                  style={styles.folderDelete}
+                >
+                  <Feather name="trash-2" size={16} color={colors.destructive} />
+                </Pressable>
+              </Surface>
+            );
+          })}
           {filteredFiles.map((file) => (
             <Surface
               key={file.id}
               style={[
                 styles.fileCard,
+                viewMode === "grid" && styles.fileGridCard,
                 selection.selectedIds.includes(file.id) && {
                   backgroundColor: colors.card,
                   borderColor: colors.destructive,
@@ -248,6 +454,7 @@ export default function StorageScreen() {
               <View
                 style={[
                   styles.fileIcon,
+                  viewMode === "grid" && styles.fileGridIcon,
                   { backgroundColor: colors.errorSurface },
                 ]}
               >
@@ -257,7 +464,7 @@ export default function StorageScreen() {
                   color={colors.errorForeground}
                 />
               </View>
-              <View style={styles.fileCopy}>
+              <View style={[styles.fileCopy, viewMode === "grid" && styles.fileGridCopy]}>
                 <Pressable
                   onTouchStart={(event) => event.stopPropagation()}
                   onPress={() => {
@@ -274,64 +481,54 @@ export default function StorageScreen() {
                   {new Date(file.createdAt).toLocaleDateString("fr-FR")}
                 </Text>
               </View>
-                {selection.isSelecting ? (
-                  <SelectionCheckbox checked={selection.selectedIds.includes(file.id)} />
-                ) : (
-                  <>
-              <Pressable
-                onPress={() => setPreviewFile(file)}
-                style={[styles.action, { backgroundColor: colors.accent }]}
-              >
-                <Feather
-                  name="eye"
-                  size={17}
-                  color={colors.primary}
-                />
-              </Pressable>
-              <Pressable
-                onPress={() => {
-                  setRenameTarget(file.id);
-                  setRenameInput(file.name.replace(/\.pdf$/i, ""));
-                }}
-                style={[styles.action, { backgroundColor: colors.secondary }]}
-              >
-                <Feather name="edit-2" size={16} color={colors.foreground} />
-              </Pressable>
-                </>
+              {selection.isSelecting ? (
+                <SelectionCheckbox checked={selection.selectedIds.includes(file.id)} />
+              ) : (
+                <View style={[styles.fileActions, viewMode === "grid" && styles.fileGridActions]}>
+                  <Pressable
+                    onPress={() => setPreviewFile(file)}
+                    style={[styles.action, { backgroundColor: colors.accent }]}
+                  >
+                    <Feather name="eye" size={17} color={colors.primary} />
+                  </Pressable>
+                  <Pressable
+                    onPress={() => {
+                      setRenameTarget(file.id);
+                      setRenameInput(file.name.replace(/\.pdf$/i, ""));
+                    }}
+                    style={[styles.action, { backgroundColor: colors.secondary }]}
+                  >
+                    <Feather name="edit-2" size={16} color={colors.foreground} />
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Déplacer ${file.name} vers un dossier`}
+                    onPress={() => {
+                      setMoveFolderId(file.folderId ?? null);
+                      setMoveTarget(file);
+                    }}
+                    style={[styles.action, { backgroundColor: colors.secondary }]}
+                  >
+                    <Feather name="folder" size={16} color={colors.foreground} />
+                  </Pressable>
+                </View>
               )}
             </Surface>
           ))}
         </View>
       )}
       {storage.trash.length > 0 ? (
-        <Surface
-          style={[
-            styles.trash,
-            emptyTrashArmed && {
-              backgroundColor: colors.card,
-              borderColor: colors.destructive,
-              borderWidth: 2,
-            },
-          ]}
-        >
+        <Surface style={styles.trash}>
           <View style={styles.trashHeader}>
-            <Text
-              onLongPress={() => setEmptyTrashArmed(true)}
-              accessibilityHint="Maintenez appuyé pour afficher l’action de vidage."
-              style={[styles.trashTitle, { color: colors.foreground }]}
-            >
+            <Text style={[styles.trashTitle, { color: colors.foreground }]}>
               Corbeille ({storage.trash.length})
             </Text>
-            {emptyTrashArmed ? (
-              <Button
-                label="Vider"
-                compact
-                secondary
-                icon="trash-2"
-                onTouchStart={(event) => event.stopPropagation()}
-                onPress={() => {
-                  setEmptyTrashArmed(false);
-                  Alert.alert(
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Vider la corbeille"
+              accessibilityState={{ disabled: emptyingTrash }}
+              disabled={emptyingTrash}
+              onPress={() => Alert.alert(
                   "Vider la corbeille ?",
                   "Les fichiers seront définitivement supprimés.",
                   [
@@ -339,15 +536,32 @@ export default function StorageScreen() {
                     {
                       text: "Supprimer",
                       style: "destructive",
-                      onPress: () => {
-                        void storage.emptyTrash();
+                      onPress: async () => {
+                        setEmptyingTrash(true);
+                        try {
+                          await storage.emptyTrash();
+                        } catch (error) {
+                          Alert.alert(
+                            "Suppression impossible",
+                            error instanceof Error ? error.message : "La corbeille n’a pas pu être vidée.",
+                          );
+                        } finally {
+                          setEmptyingTrash(false);
+                        }
                       },
                     },
                   ],
-                  );
-                }}
-              />
-            ) : null}
+                )}
+              style={({ pressed }) => [
+                styles.emptyTrashButton,
+                {
+                  backgroundColor: colors.errorSurface,
+                  opacity: emptyingTrash ? 0.5 : pressed ? 0.75 : 1,
+                },
+              ]}
+            >
+              <Feather name="trash-2" size={17} color={colors.errorForeground} />
+            </Pressable>
           </View>
           {storage.trash.map((file) => (
             <View key={file.id} style={styles.trashRow}>
@@ -379,6 +593,87 @@ export default function StorageScreen() {
           ))}
         </Surface>
       ) : null}
+      <Modal
+        visible={folderModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setFolderModalVisible(false)}
+      >
+        <KeyboardAvoidingViewCompat style={styles.modalBackdrop}>
+          <Surface style={styles.renameModal}>
+            <Text style={[styles.renameTitle, { color: colors.foreground }]}>
+              Créer un dossier
+            </Text>
+            <TextInput
+              value={folderName}
+              onChangeText={setFolderName}
+              autoFocus
+              placeholder="Nom du dossier"
+              placeholderTextColor={colors.mutedForeground}
+              onSubmitEditing={() => { void saveFolder(); }}
+              style={[
+                styles.renameInput,
+                {
+                  color: colors.foreground,
+                  borderColor: colors.border,
+                  backgroundColor: colors.background,
+                },
+              ]}
+            />
+            <View style={styles.buttonRow}>
+              <Button label="Créer" compact onPress={() => { void saveFolder(); }} />
+              <Button label="Annuler" compact secondary onPress={() => setFolderModalVisible(false)} />
+            </View>
+          </Surface>
+        </KeyboardAvoidingViewCompat>
+      </Modal>
+      <Modal
+        visible={moveTarget !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMoveTarget(null)}
+      >
+        <KeyboardAvoidingViewCompat style={styles.modalBackdrop}>
+          <Surface style={styles.renameModal}>
+            <Text style={[styles.renameTitle, { color: colors.foreground }]}>
+              Déplacer le PDF
+            </Text>
+            <View style={styles.destinationList}>
+              <Pressable
+                onPress={() => setMoveFolderId(null)}
+                style={[
+                  styles.destinationOption,
+                  { borderColor: colors.border, backgroundColor: moveFolderId === null ? colors.accent : colors.background },
+                ]}
+              >
+                <Feather name="home" size={17} color={colors.primary} />
+                <Text style={[styles.destinationText, { color: colors.foreground }]}>Mes documents</Text>
+                {moveFolderId === null ? <Feather name="check" size={17} color={colors.primary} /> : null}
+              </Pressable>
+              {orderedFoldersForMove.map((folder) => (
+                <Pressable
+                  key={folder.id}
+                  onPress={() => setMoveFolderId(folder.id)}
+                  style={[
+                    styles.destinationOption,
+                    { borderColor: colors.border, backgroundColor: moveFolderId === folder.id ? colors.accent : colors.background },
+                  ]}
+                >
+                  <Feather name="folder" size={17} color={colors.primary} />
+                  <Text numberOfLines={1} style={[styles.destinationText, { color: colors.foreground }]}>
+                    {folder.pathLabel}
+                  </Text>
+                  {moveFolderId === folder.id ? <Feather name="check" size={17} color={colors.primary} /> : null}
+                </Pressable>
+              ))}
+            </View>
+            <View style={styles.buttonRow}>
+              <Button label="Déplacer" compact onPress={() => { void saveMove(); }} />
+              <Button label="Annuler" compact secondary onPress={() => setMoveTarget(null)} />
+            </View>
+          </Surface>
+        </KeyboardAvoidingViewCompat>
+      </Modal>
       <Modal
         visible={Boolean(renameTarget)}
         transparent
@@ -456,30 +751,78 @@ const styles = StyleSheet.create({
   },
   warningText: { flex: 1, fontSize: 12, lineHeight: 17, fontWeight: "700" },
   searchBox: {
-    minHeight: 48,
+    minHeight: 42,
     borderWidth: 1,
     borderRadius: 14,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
     paddingHorizontal: 14,
-    marginBottom: 10,
+    marginBottom: 8,
   },
-  searchInput: { flex: 1, fontSize: 14, paddingVertical: 10 },
-  sortButton: {
-    alignSelf: "flex-start",
+  searchInput: { flex: 1, fontSize: 14, paddingVertical: 7 },
+  breadcrumbs: { flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 10, flexWrap: "wrap" },
+  breadcrumb: { fontSize: 12, fontWeight: "700" },
+  compactControl: {
+    height: 36,
     flexDirection: "row",
     alignItems: "center",
-    gap: 7,
+    justifyContent: "center",
+    gap: 6,
     borderWidth: 1,
     borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    marginBottom: 10,
+    paddingHorizontal: 9,
+  },
+  compactIconControl: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderRadius: 10,
   },
   sortText: { fontSize: 12, fontWeight: "700" },
+  libraryActions: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 7, marginBottom: 8 },
+  libraryActionGroup: { flexDirection: "row", alignItems: "center", gap: 7 },
+  viewToggle: { flexDirection: "row", alignItems: "center", padding: 3, borderWidth: 1, borderRadius: 11, gap: 2 },
+  viewOption: { width: 34, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center" },
   list: { gap: 10, paddingBottom: 24 },
+  grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", gap: 10 },
   fileCard: { flexDirection: "row", alignItems: "center", gap: 8, padding: 13 },
+  fileGridCard: { width: "48%", minHeight: 160, flexDirection: "column", alignItems: "stretch", justifyContent: "space-between", gap: 10 },
+  fileActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  fileGridActions: { justifyContent: "flex-start" },
+  fileGridIcon: { alignSelf: "flex-start" },
+  fileGridCopy: { width: "100%", minHeight: 44 },
+  selectionDock: {
+    minHeight: 54,
+    maxWidth: 360,
+    alignSelf: "center",
+    borderWidth: 1,
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 18,
+    opacity: 0.96,
+    shadowColor: "#172b3a",
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.2,
+    shadowRadius: 14,
+    elevation: 9,
+  },
+  selectionDockCount: { fontSize: 13, fontWeight: "700" },
+  selectionDockActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  selectionDockButton: { width: 38, height: 38, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  selectionDockButtonDisabled: { opacity: 0.45 },
+  folderCard: { overflow: "hidden" },
+  folderGridCard: { width: "48%" },
+  folderOpen: { flexDirection: "row", alignItems: "center", gap: 10, padding: 13, paddingRight: 42 },
+  folderOpenGrid: { minHeight: 160, flexDirection: "column", alignItems: "flex-start", justifyContent: "space-between" },
+  folderDelete: { position: "absolute", top: 10, right: 10, width: 30, height: 30, alignItems: "center", justifyContent: "center", borderRadius: 9 },
+  folderIcon: { width: 43, height: 43, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   fileIcon: {
     width: 43,
     height: 43,
@@ -517,6 +860,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
+  emptyTrashButton: { width: 36, height: 36, borderRadius: 11, alignItems: "center", justifyContent: "center" },
   trashTitle: { fontSize: 15, fontWeight: "800" },
   trashRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   trashName: { flex: 1, fontSize: 12 },
@@ -537,4 +881,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   buttonRow: { flexDirection: "row", gap: 10, marginTop: 4 },
+  destinationList: { maxHeight: 300, gap: 7 },
+  destinationOption: { minHeight: 42, borderWidth: 1, borderRadius: 11, paddingHorizontal: 11, flexDirection: "row", alignItems: "center", gap: 9 },
+  destinationText: { flex: 1, fontSize: 13, fontWeight: "600" },
 });

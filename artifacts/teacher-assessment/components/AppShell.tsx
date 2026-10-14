@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import React, { createContext, PropsWithChildren, useContext, useState } from 'react';
+import React, { createContext, PropsWithChildren, ReactNode, useContext, useEffect, useRef, useState } from 'react';
 import { Image, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,24 +10,32 @@ type ScreenGuideValue = {
 };
 
 const ScreenGuideContext = createContext<ScreenGuideValue | null>(null);
+const ScreenFloatingContentContext = createContext<((content: ReactNode | null) => void) | null>(null);
+const FLOATING_ACTION_BOTTOM_OFFSET = 96;
 
-export function Screen({ children, scroll = true, bottomPadding, onTouchStart }: PropsWithChildren<{ scroll?: boolean; bottomPadding?: number; onTouchStart?: () => void }>) {
+export function Screen({ children, scroll = true, bottomPadding, onTouchStart, floatingContent }: PropsWithChildren<{ scroll?: boolean; bottomPadding?: number; onTouchStart?: () => void; floatingContent?: ReactNode }>) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const [guideMessage, setGuideMessage] = useState<{ title: string; description: string } | null>(null);
+  const [registeredFloatingContent, setRegisteredFloatingContent] = useState<ReactNode>(null);
   const closeGuide = () => setGuideMessage(null);
   const guideContext = {
     show: (title: string, description: string) => setGuideMessage({ title, description }),
   };
 
-  const content = (
-    <ScreenGuideContext.Provider value={guideContext}>
-      <View
-        onTouchStart={onTouchStart}
-        style={[styles.screen, { backgroundColor: colors.background, paddingTop: insets.top + 18, paddingBottom: insets.bottom + (bottomPadding ?? 120) }]}
-      >
-        {children}
-      </View>
+  const screenContent = (
+    <ScreenFloatingContentContext.Provider value={setRegisteredFloatingContent}>
+      <ScreenGuideContext.Provider value={guideContext}>
+        <View
+          onTouchStart={onTouchStart}
+          style={[styles.screen, { backgroundColor: colors.background, paddingTop: insets.top + 18, paddingBottom: insets.bottom + (bottomPadding ?? 120) }]}
+        >
+          {children}
+        </View>
+      </ScreenGuideContext.Provider>
+    </ScreenFloatingContentContext.Provider>
+  );
+  const guideModal = (
       <Modal
         visible={guideMessage !== null}
         transparent
@@ -58,8 +66,30 @@ export function Screen({ children, scroll = true, bottomPadding, onTouchStart }:
           </View>
         </View>
       </Modal>
-    </ScreenGuideContext.Provider>
   );
+  const activeFloatingContent = floatingContent ?? registeredFloatingContent;
+  if (activeFloatingContent) {
+    return (
+      <View style={[styles.screenRoot, { backgroundColor: colors.background }]}>
+        {scroll ? (
+          <KeyboardAwareScrollViewCompat
+            style={{ flex: 1, backgroundColor: colors.background }}
+            bottomOffset={80}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {screenContent}
+          </KeyboardAwareScrollViewCompat>
+        ) : screenContent}
+        <View pointerEvents="box-none" style={[styles.floatingOverlay, { bottom: insets.bottom + FLOATING_ACTION_BOTTOM_OFFSET }]}>
+          {activeFloatingContent}
+        </View>
+        {guideModal}
+      </View>
+    );
+  }
+  const content = <>{screenContent}{guideModal}</>;
   if (!scroll) return content;
   return (
     <KeyboardAwareScrollViewCompat
@@ -188,10 +218,69 @@ export function ListSelectionToolbar({
   style?: object;
 }) {
   const colors = useColors();
+  const setFloatingContent = useContext(ScreenFloatingContentContext);
+  const actionsRef = useRef({ onCancel, onDelete });
+  actionsRef.current = { onCancel, onDelete };
+  const { border, card, foreground, secondary, errorSurface, errorForeground } = colors;
+  useEffect(() => {
+    if (!active || !setFloatingContent) return;
+    setFloatingContent(
+      <View style={[styles.floatingSelectionDock, { borderColor: border, backgroundColor: card }]}>
+        <Text style={[styles.selectionCount, { color: foreground }]}>
+          {selectedCount} sélectionné{selectedCount > 1 ? 's' : ''}
+        </Text>
+        <View style={styles.selectionActions}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Annuler la sélection"
+            onPress={() => actionsRef.current.onCancel()}
+            style={({ pressed }) => [
+              styles.floatingSelectionButton,
+              { backgroundColor: secondary, opacity: pressed ? 0.72 : 1 },
+            ]}
+          >
+            <Feather name="x" size={19} color={foreground} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Supprimer les éléments sélectionnés"
+            accessibilityState={{ disabled: selectedCount === 0 }}
+            disabled={selectedCount === 0}
+            onPress={() => actionsRef.current.onDelete()}
+            style={({ pressed }) => [
+              styles.floatingSelectionButton,
+              {
+                backgroundColor: errorSurface,
+                opacity: selectedCount === 0 ? 0.45 : pressed ? 0.72 : 1,
+              },
+            ]}
+          >
+            <Feather name="trash-2" size={18} color={errorForeground} />
+          </Pressable>
+        </View>
+      </View>,
+    );
+    return () => setFloatingContent(null);
+  }, [active, border, card, errorForeground, errorSurface, foreground, secondary, selectedCount, setFloatingContent]);
+  if (active && setFloatingContent) return null;
   if (!active) {
     return (
-      <View style={[styles.selectionToolbarContainer, style]}>
-        <Button label="Sélectionner" icon="check-square" secondary compact onPress={onStart} />
+      <View style={[styles.selectionStartContainer, style]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Sélectionner des éléments"
+          onPress={onStart}
+          style={({ pressed }) => [
+            styles.selectionStartButton,
+            {
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+              opacity: pressed ? 0.75 : 1,
+            },
+          ]}
+        >
+          <Feather name="check-square" size={17} color={colors.primary} />
+        </Pressable>
       </View>
     );
   }
@@ -310,6 +399,10 @@ export function ProgressBar({ value }: { value: number }) {
 }
 
 const styles = StyleSheet.create({
+  screenRoot: { flex: 1 },
+  floatingOverlay: { position: 'absolute', left: 0, right: 0, bottom: 10, zIndex: 20, alignItems: 'center' },
+  floatingSelectionDock: { minHeight: 54, maxWidth: 360, alignSelf: 'center', borderWidth: 1, borderRadius: 18, paddingHorizontal: 12, paddingVertical: 7, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 18, opacity: 0.96, shadowColor: '#172b3a', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.2, shadowRadius: 14, elevation: 9 },
+  floatingSelectionButton: { width: 38, height: 38, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
   screen: { flex: 1, width: '100%', maxWidth: 1180, alignSelf: 'center', paddingHorizontal: 20 },
   scrollContent: { flexGrow: 1 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 },
@@ -326,6 +419,8 @@ const styles = StyleSheet.create({
   button: { minHeight: 48, borderRadius: 14, borderWidth: 1, paddingHorizontal: 17, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   buttonCompact: { minHeight: 38, borderRadius: 11, paddingHorizontal: 12 },
   buttonText: { fontSize: 14, fontWeight: '700' },
+  selectionStartContainer: { minHeight: 36, alignItems: 'flex-end', justifyContent: 'center', marginBottom: 8 },
+  selectionStartButton: { width: 36, height: 36, borderWidth: 1, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   selectionToolbarContainer: { minHeight: 48, justifyContent: 'center', marginBottom: 12 },
   selectionToolbar: { minHeight: 48, borderWidth: 1, borderRadius: 11, paddingHorizontal: 10, paddingVertical: 5, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   selectionCount: { flex: 1, minWidth: 0, fontSize: 12, fontWeight: '700' },
