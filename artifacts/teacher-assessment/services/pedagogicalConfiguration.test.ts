@@ -6,8 +6,29 @@ import {
   getPrerequisitesForPair,
   migrateSchoolYearConfigurations,
 } from "./pedagogicalConfiguration.ts";
+import { parseObjectiveListFile } from "./objectiveListImport.ts";
 
 const configuration = createDefaultSchoolYearConfiguration("2026-2027");
+assert.deepEqual(
+  parseObjectiveListFile('\uFEFF- Identifier le thème\n2) Repérer les idées principales\n\nConclure'),
+  ['Identifier le thème', 'Repérer les idées principales', 'Conclure'],
+  "Un fichier TXT avec listes numérotées ou à puces importe une ligne par objectif",
+);
+assert.deepEqual(
+  parseObjectiveListFile('Prérequis;Ordre\n"Identifier le thème; général";1\nRepérer les connecteurs;2', 'csv'),
+  ['Identifier le thème; général', 'Repérer les connecteurs'],
+  "Un fichier CSV importe la colonne identifiée en préservant les délimiteurs cités",
+);
+assert.deepEqual(
+  parseObjectiveListFile('1;Distinguer les idées\n2;Repérer les connecteurs', 'csv'),
+  ['Distinguer les idées', 'Repérer les connecteurs'],
+  "Un fichier CSV numéroté sans en-tête importe la colonne de texte",
+);
+assert.deepEqual(
+  parseObjectiveListFile(' \n  ', 'txt'),
+  [],
+  "Un fichier vide ne produit aucun objectif",
+);
 assert.equal(
   configuration.competencies.some(
     (item) => item.name === "Évaluation diagnostique",

@@ -2,6 +2,7 @@ import { Alert } from '@/components/AppDialog';
 import { Feather } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import {
+  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -12,6 +13,7 @@ import { Button, SectionTitle, Surface } from '@/components/AppShell';
 import { useAppData } from '@/context/AppDataContext';
 import { useColors } from '@/hooks/useColors';
 import { normalizeLabel } from '@/services/pedagogicalConfiguration';
+import { parseObjectiveListFile } from '@/services/objectiveListImport';
 
 export default function PedagogicalConfigurationManager() {
   const colors = useColors();
@@ -26,6 +28,8 @@ export default function PedagogicalConfigurationManager() {
   const [selectedLevelId, setSelectedLevelId] = useState('');
   const [selectedCompetencyId, setSelectedCompetencyId] = useState('');
   const [objectiveDraft, setObjectiveDraft] = useState<string[]>([]);
+  const [objectiveImportVisible, setObjectiveImportVisible] = useState(false);
+  const [objectiveImportText, setObjectiveImportText] = useState('');
   const [objectiveListType, setObjectiveListType] = useState<
     'objectives' | 'prerequisites'
   >('objectives');
@@ -379,6 +383,26 @@ export default function PedagogicalConfigurationManager() {
         ? 'La liste des prérequis est enregistrée pour cette année, ce niveau et cette compétence.'
         : 'La liste d’objectifs est enregistrée pour cette année, ce niveau et cette compétence.',
     );
+  };
+
+  const importedObjectiveItems = parseObjectiveListFile(
+    objectiveImportText,
+    /[,;\t]/.test(objectiveImportText.split(/\r?\n/).find((line) => line.trim()) ?? '')
+      ? 'csv'
+      : 'txt',
+  );
+
+  const importObjectiveList = () => {
+    if (importedObjectiveItems.length === 0) {
+      Alert.alert(
+        'Import impossible',
+        'Collez au moins un objectif ou prérequis valide, un élément par ligne.',
+      );
+      return;
+    }
+    setObjectiveDraft(importedObjectiveItems);
+    setObjectiveImportVisible(false);
+    setObjectiveImportText('');
   };
 
   const requestRemoveObjective = (index: number) => {
@@ -1045,6 +1069,13 @@ export default function PedagogicalConfigurationManager() {
                 ? 'Ces critères sont enregistrés séparément et seront copiés dans le test des prérequis de cette compétence.'
                 : 'Ces objectifs sont utilisés par le test habituel de cette compétence.'}
             </Text>
+            <Button
+              label="Importer une liste"
+              icon="upload"
+              compact
+              secondary
+              onPress={() => setObjectiveImportVisible(true)}
+            />
             {objectiveDraft.map((objective, index) => (
               <View
                 key={`${selectedCompetency.id}-${index}`}
@@ -1133,6 +1164,88 @@ export default function PedagogicalConfigurationManager() {
           ) : null}
         </View>
       </Surface>
+      <Modal
+        visible={objectiveImportVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setObjectiveImportVisible(false)}
+      >
+        <View style={styles.importBackdrop}>
+          <View style={[styles.importModal, { backgroundColor: colors.background }]}>
+            <View style={styles.importModalHeader}>
+              <View style={styles.editorCopy}>
+                <Text style={[styles.editorTitle, { color: colors.foreground }]}>
+                  Importer {objectiveListType === 'prerequisites' ? 'les prérequis' : 'les objectifs'}
+                </Text>
+                <Text style={[styles.help, { color: colors.mutedForeground }]}>
+                  Collez une liste, un élément par ligne. Les séparateurs ; et , sont aussi acceptés.
+                </Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Fermer l’import"
+                onPress={() => setObjectiveImportVisible(false)}
+                style={[styles.removeButton, { backgroundColor: colors.secondary }]}
+              >
+                <Feather name="x" size={18} color={colors.foreground} />
+              </Pressable>
+            </View>
+            <TextInput
+              multiline
+              value={objectiveImportText}
+              onChangeText={setObjectiveImportText}
+              placeholder={'Ex. Identifier le thème du texte\nRepérer les idées principales'}
+              placeholderTextColor={colors.mutedForeground}
+              textAlignVertical="top"
+              style={[
+                styles.importInput,
+                {
+                  color: colors.foreground,
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                },
+              ]}
+            />
+            <Text style={[styles.previewTitle, { color: colors.foreground }]}>
+              Aperçu · {importedObjectiveItems.length} élément(s)
+            </Text>
+            <View style={[styles.importPreview, { borderColor: colors.border }]}>
+              {importedObjectiveItems.slice(0, 6).map((item, index) => (
+                <View key={`${index}-${item}`} style={[styles.importPreviewRow, { borderBottomColor: colors.border }]}>
+                  <Text style={[styles.order, { color: colors.primary }]}>
+                    {String(index + 1).padStart(2, '0')}
+                  </Text>
+                  <Text numberOfLines={2} style={[styles.previewItem, { color: colors.foreground }]}>
+                    {item}
+                  </Text>
+                </View>
+              ))}
+              {importedObjectiveItems.length > 6 ? (
+                <Text style={[styles.help, { color: colors.mutedForeground }]}>
+                  + {importedObjectiveItems.length - 6} autre(s)
+                </Text>
+              ) : null}
+              {importedObjectiveItems.length === 0 ? (
+                <Text style={[styles.help, { color: colors.mutedForeground }]}>
+                  Aucune ligne valide détectée.
+                </Text>
+              ) : null}
+            </View>
+            <View style={styles.importActions}>
+              <Button
+                label={`Importer ${importedObjectiveItems.length} élément(s)`}
+                icon="upload"
+                onPress={importObjectiveList}
+              />
+              <Button
+                label="Annuler"
+                secondary
+                onPress={() => setObjectiveImportVisible(false)}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1233,6 +1346,15 @@ const styles = StyleSheet.create({
   objectivesButtonText: { fontSize: 11, fontWeight: '700' },
   objectiveEditor: { borderWidth: 1, borderRadius: 13, padding: 12, gap: 9 },
   editorHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  importBackdrop: { flex: 1, justifyContent: 'center', padding: 18, backgroundColor: 'rgba(0,0,0,0.45)' },
+  importModal: { maxHeight: '90%', borderRadius: 18, padding: 16, gap: 12 },
+  importModalHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  importInput: { minHeight: 150, maxHeight: 240, borderWidth: 1, borderRadius: 12, padding: 12, fontSize: 14, lineHeight: 20 },
+  previewTitle: { fontSize: 13, fontWeight: '800' },
+  importPreview: { maxHeight: 160, borderWidth: 1, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 },
+  importPreviewRow: { minHeight: 38, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: StyleSheet.hairlineWidth },
+  previewItem: { flex: 1, fontSize: 12, lineHeight: 17 },
+  importActions: { gap: 8, marginTop: 2 },
   listTypeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   listTypeButton: {
     minHeight: 38,

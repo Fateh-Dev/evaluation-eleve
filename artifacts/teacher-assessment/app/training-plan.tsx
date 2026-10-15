@@ -5,6 +5,7 @@ import * as Sharing from "expo-sharing";
 import { useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -33,6 +34,7 @@ import {
   validateTrainingPlan,
 } from "@/services/trainingPlan";
 import { createConfigId } from "@/services/pedagogicalConfiguration";
+import { parseObjectiveListFile } from "@/services/objectiveListImport";
 
 const ACTIVITY_LABELS: Record<SequenceActivityType, string> = {
   "mise-en-place": "Mise en place",
@@ -245,6 +247,9 @@ export default function TrainingPlanScreen() {
       : (filieres[0]?.id ?? ""),
   );
   const [planError, setPlanError] = useState("");
+  const [prerequisiteImportStudyObjectId, setPrerequisiteImportStudyObjectId] =
+    useState<string | null>(null);
+  const [prerequisiteImportText, setPrerequisiteImportText] = useState("");
   useEffect(() => {
     if (filieres.some((item) => item.id === selectedFiliereId)) return;
     const preferredFiliereId =
@@ -263,6 +268,14 @@ export default function TrainingPlanScreen() {
     (item) => item.id === selectedFiliereId,
   );
   const plan = data.getTrainingPlanForFiliere(selectedFiliereId);
+  const prerequisiteImportItems = parseObjectiveListFile(
+    prerequisiteImportText,
+    /[,;\t]/.test(
+      prerequisiteImportText.split(/\r?\n/).find((line) => line.trim()) ?? "",
+    )
+      ? "csv"
+      : "txt",
+  );
   const filiereCompetencies = selectedFiliere
     ? classes
         .filter((item) => item.filiereId === selectedFiliere.id)
@@ -346,6 +359,29 @@ export default function TrainingPlanScreen() {
   const savePlan = (next: TrainingPlan) => {
     data.saveTrainingPlan(next);
     setPlanError("");
+  };
+
+  const importStudyObjectPrerequisites = () => {
+    if (!plan || !prerequisiteImportStudyObjectId) return;
+    if (prerequisiteImportItems.length === 0) {
+      Alert.alert(
+        "Import impossible",
+        "Collez au moins un prérequis valide, un élément par ligne.",
+      );
+      return;
+    }
+    savePlan(
+      updateStudyObject(
+        plan,
+        prerequisiteImportStudyObjectId,
+        (studyObject) => ({
+          ...studyObject,
+          prerequisites: prerequisiteImportItems,
+        }),
+      ),
+    );
+    setPrerequisiteImportStudyObjectId(null);
+    setPrerequisiteImportText("");
   };
 
   const exportPlan = async () => {
@@ -1050,6 +1086,18 @@ export default function TrainingPlanScreen() {
                                 )
                               }
                             />
+                            <Button
+                              label="Importer une liste"
+                              icon="upload"
+                              compact
+                              secondary
+                              onPress={() => {
+                                setPrerequisiteImportStudyObjectId(studyObject.id);
+                                setPrerequisiteImportText(
+                                  (studyObject.prerequisites ?? []).join("\n"),
+                                );
+                              }}
+                            />
                             <Text
                               style={[
                                 styles.subheading,
@@ -1351,6 +1399,91 @@ export default function TrainingPlanScreen() {
           </Surface>
         </>
       ) : null}
+      <Modal
+        visible={prerequisiteImportStudyObjectId !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPrerequisiteImportStudyObjectId(null)}
+      >
+        <View style={styles.importBackdrop}>
+          <View style={[styles.importModal, { backgroundColor: colors.background }]}>
+            <View style={styles.headingRow}>
+              <View style={styles.itemCopy}>
+                <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+                  Importer les prérequis du diagnostic
+                </Text>
+                <Text style={[styles.itemDetail, { color: colors.mutedForeground }]}>
+                  Collez un prérequis par ligne. La liste remplacera les prérequis de cet objet d’étude.
+                </Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Fermer l’import des prérequis"
+                onPress={() => setPrerequisiteImportStudyObjectId(null)}
+                hitSlop={8}
+              >
+                <Feather name="x" size={20} color={colors.mutedForeground} />
+              </Pressable>
+            </View>
+            <TextInput
+              multiline
+              value={prerequisiteImportText}
+              onChangeText={setPrerequisiteImportText}
+              placeholder={"Ex. Identifier les caractéristiques du texte\nRepérer les informations essentielles"}
+              placeholderTextColor={colors.mutedForeground}
+              textAlignVertical="top"
+              style={[
+                styles.importInput,
+                {
+                  color: colors.foreground,
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                },
+              ]}
+            />
+            <Text style={[styles.itemTitle, { color: colors.foreground }]}>
+              Aperçu · {prerequisiteImportItems.length} prérequis
+            </Text>
+            <View style={[styles.importPreview, { borderColor: colors.border }]}>
+              {prerequisiteImportItems.slice(0, 6).map((item, index) => (
+                <View
+                  key={`${index}-${item}`}
+                  style={[styles.importPreviewRow, { borderBottomColor: colors.border }]}
+                >
+                  <Text style={[styles.itemDetail, { color: colors.primary }]}>
+                    {String(index + 1).padStart(2, "0")}
+                  </Text>
+                  <Text numberOfLines={2} style={[styles.itemDetail, styles.previewText, { color: colors.foreground }]}>
+                    {item}
+                  </Text>
+                </View>
+              ))}
+              {prerequisiteImportItems.length > 6 ? (
+                <Text style={[styles.itemDetail, { color: colors.mutedForeground }]}>
+                  + {prerequisiteImportItems.length - 6} autre(s)
+                </Text>
+              ) : null}
+              {prerequisiteImportItems.length === 0 ? (
+                <Text style={[styles.itemDetail, { color: colors.mutedForeground }]}>
+                  Aucune ligne valide détectée.
+                </Text>
+              ) : null}
+            </View>
+            <View style={styles.importActions}>
+              <Button
+                label={`Importer ${prerequisiteImportItems.length} prérequis`}
+                icon="upload"
+                onPress={importStudyObjectPrerequisites}
+              />
+              <Button
+                label="Annuler"
+                secondary
+                onPress={() => setPrerequisiteImportStudyObjectId(null)}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
     </Screen>
   );
 }
@@ -1465,4 +1598,11 @@ const styles = StyleSheet.create({
   errorText: { fontSize: 12, lineHeight: 17 },
   validText: { fontSize: 13 },
   emptyText: { fontSize: 14, lineHeight: 20 },
+  importBackdrop: { flex: 1, justifyContent: "center", padding: 18, backgroundColor: "rgba(0,0,0,0.45)" },
+  importModal: { maxHeight: "90%", borderRadius: 18, padding: 16, gap: 12 },
+  importInput: { minHeight: 150, maxHeight: 240, borderWidth: 1, borderRadius: 12, padding: 12, fontSize: 14, lineHeight: 20 },
+  importPreview: { maxHeight: 160, borderWidth: 1, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 },
+  importPreviewRow: { minHeight: 38, flexDirection: "row", alignItems: "center", gap: 10, borderBottomWidth: StyleSheet.hairlineWidth },
+  previewText: { flex: 1 },
+  importActions: { gap: 8 },
 });

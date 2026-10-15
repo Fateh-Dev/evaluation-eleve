@@ -65,7 +65,7 @@ const GUIDE_TOPICS = [
       'Ouvrez Saisie puis Périodes et tests de niveau initial, puis Test de niveau initial.',
       'Choisissez une classe, puis une évaluation habituelle ou un test des prérequis.',
       'Choisissez la compétence et vérifiez les critères proposés.',
-      'Pour préparer les prérequis, ouvrez Plus → Configuration pédagogique, choisissez la compétence et Configurez → Prérequis.',
+      'Pour préparer les prérequis ou les objectifs, ouvrez Plus → Configuration pédagogique, choisissez le niveau et la compétence, puis collez une liste via Importer une liste. Vérifiez l’aperçu avant d’importer dans le brouillon, puis enregistrez la liste.',
       'Ouvrez le test et renseignez les résultats par élève et par critère.',
     ],
     detail: 'Chaque compétence peut avoir une évaluation habituelle et un test des prérequis distincts dans une classe. Configurez au moins un prérequis avant de créer ce test.',
@@ -135,6 +135,7 @@ const GUIDE_TOPICS = [
     steps: [
       'Lors de la création d’une classe, choisissez une filière existante ou créez-en une. Dans Plus → Plan de formation, vous pouvez aussi rattacher les classes existantes.',
       'Ouvrez Plus → Plan de formation, sélectionnez la filière, puis créez ses projets et lancements, ses objets d’étude et diagnostics, et ses séquences.',
+      'Dans chaque objet d’étude, collez ou saisissez les prérequis du diagnostic. Importer une liste ouvre un aperçu; confirmer remplace les critères de cet objet uniquement.',
       'Ajoutez les séances de chaque séquence en choisissant leur type. Les durées ne sont pas demandées.',
       'Depuis Accueil pendant un cours, choisissez la séance pédagogique correspondante.',
       'Après le cours, appuyez sur Marquer réalisée. Le suivi est conservé pour cette date et ce créneau.',
