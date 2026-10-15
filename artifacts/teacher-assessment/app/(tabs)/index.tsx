@@ -1028,7 +1028,7 @@ export default function DashboardScreen() {
   ];
 
   if (!data.hydrated) return null;
-  if (!data.teacherName && !data.school.name && !hasClasses) {
+  if (!data.setupCompleted) {
     return <Redirect href="/onboarding" />;
   }
 

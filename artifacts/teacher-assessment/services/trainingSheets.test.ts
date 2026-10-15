@@ -28,6 +28,7 @@ const session: TrainingPlanSession = {
   type: 'comprehension-ecrite',
   order: 3,
   durationHours: 1,
+  objective: 'Lire le texte et dégager ses informations principales.',
 };
 const diagnostic: TrainingPlanSession = {
   id: 'diagnostic-1',
@@ -35,6 +36,7 @@ const diagnostic: TrainingPlanSession = {
   type: 'diagnostic',
   order: 0,
   durationHours: 1,
+  objective: 'Identifier les prérequis essentiels.',
 };
 const context = {
   filiereName: 'Filière X',
@@ -50,6 +52,7 @@ const teacherHtml = generateTeacherSessionSheetHtml(
 assertContains(teacherHtml, 'Fiche enseignant', 'La fiche séance cible l’enseignant');
 assertContains(teacherHtml, 'Durée de la séance : 1 h', 'La durée de séance est affichée');
 assertContains(teacherHtml, 'Projet A', 'Le projet figure sur la fiche');
+assertContains(teacherHtml, 'Objectif : Lire le texte', 'L’objectif figure sur la fiche enseignant');
 
 const pupilHtml = generateDiagnosticPupilSheetHtml(
   diagnostic,
@@ -60,6 +63,7 @@ const pupilHtml = generateDiagnosticPupilSheetHtml(
 assertContains(pupilHtml, 'Fiche élève · diagnostic', 'Le diagnostic produit une fiche élève');
 assertContains(pupilHtml, 'Khelifi Nadia', 'Le nom de l’élève figure sur la fiche');
 assertContains(pupilHtml, 'Identifier le thème du texte.', 'Les prérequis de l’objet d’étude sont listés');
+assertContains(pupilHtml, 'Objectif : Identifier les prérequis essentiels.', 'L’objectif du diagnostic figure sur la fiche élève');
 assertContains(pupilHtml, 'Remédiations notées par l’enseignant', 'La fiche prévoit la notation des remédiations');
 
 console.log('Tests de fiches PDF réussis.');

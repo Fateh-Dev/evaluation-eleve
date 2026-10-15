@@ -31,6 +31,7 @@ export type TrainingPlanSession = {
   order: number;
   /** Durée de la séance en heures. La durée par activité interne n’est pas définie. */
   durationHours?: number;
+  objective?: string;
   competencyIds?: string[];
 };
 
@@ -61,6 +62,8 @@ export type TrainingSequence = {
   id: string;
   title: string;
   order: number;
+  durationHours?: number;
+  durationNote?: string;
   competencyIds?: string[];
   sessions: TrainingPlanSession[];
 };
@@ -78,6 +81,7 @@ export type TrainingProject = {
   id: string;
   title: string;
   order: number;
+  durationHours?: number;
   launch?: TrainingPlanSession;
   studyObjects: TrainingStudyObject[];
 };
@@ -87,6 +91,7 @@ export type TrainingPlan = {
   filiereId: string;
   schoolYearId: string;
   filiereName: string;
+  sourceNote?: string;
   projects: TrainingProject[];
   gaps?: TrainingPlanGaps;
   /** Present only while reading state saved by the earlier class-scoped version. */
@@ -100,12 +105,16 @@ export function isTrainingPlan(value: unknown): value is TrainingPlan {
     (typeof plan.filiereId === 'string' || typeof plan.classId === 'string') &&
     typeof plan.schoolYearId === 'string' &&
     typeof plan.filiereName === 'string' &&
+    (plan.sourceNote === undefined || typeof plan.sourceNote === 'string') &&
     Array.isArray(plan.projects) && plan.projects.every((project) => {
       if (
         !project ||
         typeof project.id !== 'string' ||
         typeof project.title !== 'string' ||
         !Number.isInteger(project.order) ||
+        (project.durationHours !== undefined &&
+          !(typeof project.durationHours === 'number' &&
+            Number.isFinite(project.durationHours))) ||
         !Array.isArray(project.studyObjects) ||
         (project.launch !== undefined &&
           (!project.launch ||
@@ -135,6 +144,11 @@ export function isTrainingPlan(value: unknown): value is TrainingPlan {
           typeof sequence.id === 'string' &&
           typeof sequence.title === 'string' &&
           Number.isInteger(sequence.order) &&
+          (sequence.durationHours === undefined ||
+            (typeof sequence.durationHours === 'number' &&
+              Number.isFinite(sequence.durationHours))) &&
+          (sequence.durationNote === undefined ||
+            typeof sequence.durationNote === 'string') &&
           (sequence.competencyIds === undefined ||
             (Array.isArray(sequence.competencyIds) &&
               sequence.competencyIds.every((id) => typeof id === 'string'))) &&
@@ -143,6 +157,8 @@ export function isTrainingPlan(value: unknown): value is TrainingPlan {
             Boolean(session) &&
             typeof session.id === 'string' &&
             typeof session.title === 'string' &&
+            (session.objective === undefined ||
+              typeof session.objective === 'string') &&
             (session.type === 'lancement' ||
               session.type === 'diagnostic' ||
               SEQUENCE_ACTIVITY_TYPES.some((type) => type === session.type)) &&

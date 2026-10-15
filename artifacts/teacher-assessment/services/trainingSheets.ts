@@ -5,7 +5,7 @@ import {
   type TrainingPlanSession,
   type TrainingProject,
   type TrainingStudyObject,
-} from '@/services/trainingPlan';
+} from './trainingPlan.ts';
 
 export type TrainingSheetContext = {
   schoolName?: string;
@@ -106,6 +106,7 @@ export function generateTeacherSessionSheetHtml(
       <h1>${escapeHtml(session.title)}</h1>
       ${contextLines(context)}
       <p class="meta">Type : ${escapeHtml(SESSION_TYPE_LABELS[session.type])} · Durée de la séance : ${duration} h</p>
+      ${session.objective ? `<p class="meta">Objectif : ${escapeHtml(session.objective)}</p>` : ''}
       <p class="meta">Projet : ${escapeHtml(location.project.title)}</p>
       ${location.studyObject ? `<p class="meta">Objet d’étude : ${escapeHtml(location.studyObject.title)}</p>` : ''}
       ${location.sequenceTitle ? `<p class="meta">Séquence : ${escapeHtml(location.sequenceTitle)}</p>` : ''}
@@ -148,6 +149,7 @@ export function generateDiagnosticPupilSheetHtml(
         <p class="meta">Élève : ${escapeHtml(name)}${pupil.registrationNumber ? ` · Matricule : ${escapeHtml(pupil.registrationNumber)}` : ''}</p>
         <p class="meta">Objet d’étude : ${escapeHtml(location.studyObject?.title ?? '')}</p>
         <p class="meta">Durée : ${getSessionDurationHours(session)} h · Notation : à compléter</p>
+        ${session.objective ? `<p class="meta">Objectif : ${escapeHtml(session.objective)}</p>` : ''}
         <table>
           <thead><tr><th>Prérequis</th><th class="mark">+</th><th class="mark">±</th><th class="mark">−</th></tr></thead>
           <tbody>${criterionRows}</tbody>

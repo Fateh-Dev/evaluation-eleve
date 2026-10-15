@@ -18,6 +18,7 @@ import { Alert } from "@/components/AppDialog";
 import { useAppData } from "@/context/AppDataContext";
 import { useColors } from "@/hooks/useColors";
 import {
+  getSessionDurationHours,
   getTrainingPlanSessions,
   isTrainingPlan,
   normalizeTrainingPlan,
@@ -494,10 +495,16 @@ export default function TrainingPlanScreen() {
           </Text>
           <Text style={[styles.itemDetail, { color: colors.mutedForeground }]}>
             {label}
+            {` · ${getSessionDurationHours(session)} h`}
             {assignments.length
               ? ` · ${assignments.filter((item) => item.executedAt).length}/${assignments.length} exécutée(s)`
               : ""}
           </Text>
+          {session.objective ? (
+            <Text style={[styles.itemDetail, { color: colors.mutedForeground }]}>
+              Objectif : {session.objective}
+            </Text>
+          ) : null}
         </View>
         <Pressable
           accessibilityRole="button"
@@ -518,6 +525,11 @@ export default function TrainingPlanScreen() {
         Chaque filière possède son plan de formation, partagé par toutes les
         classes qui lui sont rattachées.
       </Text>
+      {plan?.sourceNote ? (
+        <Text style={[styles.intro, { color: colors.mutedForeground }]}>
+          {plan.sourceNote}
+        </Text>
+      ) : null}
       <View style={styles.planFileActions}>
         <Button label="Importer JSON" icon="upload" compact secondary onPress={() => { void importPlan(); }} />
         <Button label="Exporter JSON" icon="download" compact disabled={!plan} onPress={() => { void exportPlan(); }} />
@@ -748,6 +760,9 @@ export default function TrainingPlanScreen() {
                       >
                         {project.studyObjects.length} objet
                         {project.studyObjects.length === 1 ? "" : "s"} d’étude
+                        {project.durationHours !== undefined
+                          ? ` · ${project.durationHours} h officielles`
+                          : ""}
                       </Text>
                     </View>
                     <Feather
@@ -1109,7 +1124,20 @@ export default function TrainingPlanScreen() {
                                         ]}
                                       >
                                         {sequence.sessions.length} séance(s)
+                                        {sequence.durationHours !== undefined
+                                          ? ` · ${sequence.durationHours} h officielles`
+                                          : ""}
                                       </Text>
+                                      {sequence.durationNote ? (
+                                        <Text
+                                          style={[
+                                            styles.itemDetail,
+                                            { color: colors.mutedForeground },
+                                          ]}
+                                        >
+                                          {sequence.durationNote}
+                                        </Text>
+                                      ) : null}
                                     </View>
                                     <Feather
                                       name={

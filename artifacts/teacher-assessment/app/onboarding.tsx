@@ -17,7 +17,7 @@ const STEP_TITLES = [
 export default function OnboardingScreen() {
   const colors = useColors();
   const data = useAppData();
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState(-1);
   const [teacherName, setTeacherName] = useState(data.teacherName);
   const [schoolName, setSchoolName] = useState(data.school.name);
   const [wilaya, setWilaya] = useState(data.school.wilaya);
@@ -72,6 +72,7 @@ export default function OnboardingScreen() {
       );
       return;
     }
+    data.completeOnboarding();
     router.replace('/(tabs)');
   };
 
@@ -89,18 +90,58 @@ export default function OnboardingScreen() {
         </Text>
       </View>
 
-      <View style={styles.progressRow} accessibilityLabel={`Étape ${step + 1} sur ${STEP_TITLES.length}`}>
-        {STEP_TITLES.map((title, index) => (
-          <View
-            key={title}
-            style={[
-              styles.progressSegment,
-              { backgroundColor: index <= step ? colors.primary : colors.muted },
-            ]}
-          />
-        ))}
-      </View>
+      {step >= 0 && (
+        <View style={styles.progressRow} accessibilityLabel={`Étape ${step + 1} sur ${STEP_TITLES.length}`}>
+          {STEP_TITLES.map((title, index) => (
+            <View
+              key={title}
+              style={[
+                styles.progressSegment,
+                { backgroundColor: index <= step ? colors.primary : colors.muted },
+              ]}
+            />
+          ))}
+        </View>
+      )}
 
+      {step === -1 ? (
+        <Surface
+          style={styles.formCard}
+          guideTitle="Préparer votre espace"
+          guideDescription="Choisissez les données proposées pour démarrer rapidement, ou configurez votre espace manuellement."
+        >
+          <Text style={[styles.stepTitle, { color: colors.foreground }]}>Un espace prêt à compléter</Text>
+          <Text style={[styles.help, { color: colors.mutedForeground }]}>
+            Nous pouvons préparer votre espace de suivi avec des informations de départ. Vous pourrez ensuite tout modifier dans les paramètres.
+          </Text>
+          <View style={[styles.summary, { backgroundColor: colors.muted }]}>
+            <Feather name="check-circle" size={16} color={colors.primary} />
+            <Text style={[styles.summaryText, { color: colors.foreground }]}>
+              Mme Chaibeddra · Lycée DOUROUAZ Abdelhamid · Ouledfayet · {data.academicYear}
+              {'\n'}Classes : 2AS LPH 1, 2AS LPH 2, 1AS TCS3 et 1AS TCS5
+              {'\n'}Plans de formation LPH (2AS) et Tronc commun sciences et technologies (1AS, 78 h)
+              {'\n'}Emploi du temps hebdomadaire : 12 créneaux pour ces quatre classes
+              {'\n'}Niveaux et compétences par défaut inclus
+            </Text>
+          </View>
+          <View style={styles.welcomeActions}>
+            <Button
+              label="Utiliser les données proposées"
+              icon="check"
+              onPress={() => {
+                data.applyRecommendedSetup();
+                router.replace('/(tabs)');
+              }}
+            />
+            <Button
+              label="Configurer manuellement"
+              icon="edit-2"
+              secondary
+              onPress={() => setStep(0)}
+            />
+          </View>
+        </Surface>
+      ) : (
       <Surface
         style={styles.formCard}
         guideTitle="Paramétrage initial"
@@ -232,7 +273,7 @@ export default function OnboardingScreen() {
         )}
 
         <View style={styles.actions}>
-          {step > 0 && (
+          {step >= 0 && (
             <Button label="Précédent" icon="arrow-left" compact secondary onPress={() => setStep((current) => current - 1)} />
           )}
           <View style={styles.nextButton}>
@@ -244,6 +285,7 @@ export default function OnboardingScreen() {
           </View>
         </View>
       </Surface>
+      )}
     </Screen>
   );
 }
@@ -269,5 +311,6 @@ const styles = StyleSheet.create({
   summary: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, borderRadius: 12, padding: 11 },
   summaryText: { flex: 1, fontSize: 12, lineHeight: 18, fontWeight: '600' },
   actions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 5 },
+  welcomeActions: { gap: 10, marginTop: 4 },
   nextButton: { flex: 1 },
 });

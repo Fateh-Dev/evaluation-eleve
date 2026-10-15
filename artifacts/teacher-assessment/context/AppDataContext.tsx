@@ -32,6 +32,8 @@ import {
   findScheduleOccurrenceConflict,
   getScheduleOccurrencesForDate,
 } from '@/services/schedule';
+import { createFirstYearScienceTrainingPlan } from '@/services/firstYearScienceTrainingPlan';
+import { createRecommendedSchedule } from '@/services/defaultSchedule';
 import {
   assertTrainingPlanIsValid,
   createDefaultTrainingPlan,
@@ -207,6 +209,7 @@ export type School = {
 };
 
 export type AppState = {
+  setupCompleted: boolean;
   school: School;
   teacherName: string;
   interfaceMode: 'daily' | 'full';
@@ -250,6 +253,7 @@ type DeleteLevelResult = {
 };
 
 export type AppDataContextValue = {
+  setupCompleted: boolean;
   school: School;
   teacherName: string;
   interfaceMode: 'daily' | 'full';
@@ -298,6 +302,8 @@ export type AppDataContextValue = {
 
   // Profile / Settings Actions
   updateTeacherName: (name: string) => void;
+  applyRecommendedSetup: () => void;
+  completeOnboarding: () => void;
   setInterfaceMode: (mode: 'daily' | 'full') => void;
   updateSchool: (school: Partial<School> & { academicYear?: string }) => void;
   setActiveAcademicYear: (year: string) => void;
@@ -860,19 +866,126 @@ function migrateLevelTests(
   return { levelTests: Array.from(byClassYear.values()), assessments };
 }
 
-export function createEmptyState(): AppState {
-  return {
-    school: {
-      name: '',
-      address: '',
-      wilaya: '',
+function getCurrentAcademicYear(): string {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const month = now.getMonth() + 1;
+  return month >= 9 ? `${currentYear}-${currentYear + 1}` : `${currentYear - 1}-${currentYear}`;
+}
+
+function createSeedDefaultClasses(academicYear: string): {
+  configuration: SchoolYearConfiguration;
+  classes: ClassItem[];
+  trainingFilieres: TrainingFiliere[];
+  trainingPlans: TrainingPlan[];
+  scheduleSessions: ScheduleSession[];
+  activeClassId: string;
+} {
+  const filiereName = 'Lettres et philosophie';
+  const filiereId = createConfigId('training-filiere');
+  const scienceFiliereName = 'Tronc commun sciences et technologies';
+  const scienceFiliereId = createConfigId('training-filiere');
+  const configuration = createDefaultSchoolYearConfiguration(academicYear);
+  const getLevelId = (name: string) =>
+    configuration.levels.find((level) => normalizeLabel(level.name) === normalizeLabel(name))?.id ?? '';
+
+  const classes: ClassItem[] = [
+    {
+      id: createConfigId('class'),
+      name: '2AS LPH 1',
+      level: '2AS',
+      levelId: getLevelId('2AS'),
+      academicYear,
+      filiereId,
+      active: true,
     },
+    {
+      id: createConfigId('class'),
+      name: '2AS LPH 2',
+      level: '2AS',
+      levelId: getLevelId('2AS'),
+      academicYear,
+      filiereId,
+      active: true,
+    },
+    {
+      id: createConfigId('class'),
+      name: '1AS TCS3',
+      level: '1AS',
+      levelId: getLevelId('1AS'),
+      academicYear,
+      filiereId: scienceFiliereId,
+      active: true,
+    },
+    {
+      id: createConfigId('class'),
+      name: '1AS TCS5',
+      level: '1AS',
+      levelId: getLevelId('1AS'),
+      academicYear,
+      filiereId: scienceFiliereId,
+      active: true,
+    },
+  ];
+  const trainingFilieres: TrainingFiliere[] = [
+    {
+      id: filiereId,
+      name: filiereName,
+      schoolYearId: academicYear,
+    },
+    {
+      id: scienceFiliereId,
+      name: scienceFiliereName,
+      schoolYearId: academicYear,
+    },
+  ];
+  const trainingPlans: TrainingPlan[] = [
+    createDefaultTrainingPlan(filiereId, filiereName, academicYear, createConfigId),
+    createFirstYearScienceTrainingPlan(
+      scienceFiliereId,
+      academicYear,
+      createConfigId,
+    ),
+  ];
+  const classIdByName = new Map(
+    classes.map((classItem) => [classItem.name, classItem.id]),
+  );
+  const getSeedClassId = (name: string) => {
+    const id = classIdByName.get(name);
+    if (!id) throw new Error(`La classe recommandée « ${name} » est introuvable.`);
+    return id;
+  };
+  const scheduleSessions = createRecommendedSchedule(
+    {
+      lph1: getSeedClassId('2AS LPH 1'),
+      lph2: getSeedClassId('2AS LPH 2'),
+      tcs3: getSeedClassId('1AS TCS3'),
+      tcs5: getSeedClassId('1AS TCS5'),
+    },
+    createConfigId,
+  );
+
+  return {
+    configuration,
+    classes,
+    trainingFilieres,
+    trainingPlans,
+    scheduleSessions,
+    activeClassId: classes[0]?.id ?? '',
+  };
+}
+
+export function createEmptyState(): AppState {
+  const academicYear = getCurrentAcademicYear();
+  return {
+    setupCompleted: false,
+    school: { name: '', address: '', wilaya: '' },
     teacherName: '',
     interfaceMode: 'daily',
-    academicYear: '2026-2027',
+    academicYear,
     archivedAcademicYears: [],
     schoolYearConfigurations: [
-      createDefaultSchoolYearConfiguration('2026-2027'),
+      createDefaultSchoolYearConfiguration(academicYear),
     ],
     classes: [],
     trainingFilieres: [],
@@ -882,7 +995,7 @@ export function createEmptyState(): AppState {
     scheduleOccurrenceOverrides: [],
     attendanceRecords: [],
     continuousEvaluations: [],
-    continuousEvaluationPeriods: createDefaultContinuousEvaluationPeriods('2026-2027'),
+    continuousEvaluationPeriods: createDefaultContinuousEvaluationPeriods(academicYear),
     activeContinuousEvaluationPeriodByYear: {},
     disciplineEvents: [],
     continuousEvaluationSettings: {
@@ -916,7 +1029,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         if (stored) {
           try {
             const parsed = JSON.parse(stored) as Partial<AppState>;
-            const academicYear = parsed.academicYear ?? '2026-2027';
+            const academicYear = parsed.academicYear ?? getCurrentAcademicYear();
             const rawClasses = Array.isArray(parsed.classes) ? parsed.classes : [];
             const trainingStructure = migrateTrainingStructure(
               rawClasses,
@@ -935,6 +1048,23 @@ export function AppDataProvider({ children }: PropsWithChildren) {
             const assessments = migratedLevelTests.assessments;
             const objectives = parsed.objectives ?? {};
             const pupils = Array.isArray(parsed.pupils) ? parsed.pupils : [];
+            const suggestedClassNames = new Set([
+              '2as lph 1',
+              '2as lph 2',
+              '2as lph1',
+              '2as lph2',
+              '1as tcs3',
+              '1as tcs5',
+              '1as',
+              '2as',
+            ]);
+            const hasCustomSetupData =
+              pupils.length > 0 ||
+              assessments.length > 0 ||
+              classes.some((item) => !suggestedClassNames.has(normalizeLabel(item.name))) ||
+              Boolean(parsed.teacherName?.trim() && parsed.teacherName !== 'Mme Chaibeddra') ||
+              Boolean(parsed.school?.name?.trim() && parsed.school.name !== 'Lycée DOUROUAZ Abdelhamid') ||
+              Boolean(parsed.school?.wilaya?.trim() && parsed.school.wilaya !== 'Ouledfayet');
             const continuousEvaluationPeriods = initializeContinuousEvaluationPeriods(
               [...new Set([academicYear, ...classes.map((item) => item.academicYear)])],
               parsed.continuousEvaluationPeriods,
@@ -1019,6 +1149,9 @@ export function AppDataProvider({ children }: PropsWithChildren) {
             setState((prev) => ({
               ...prev,
               ...parsed,
+              setupCompleted: typeof parsed.setupCompleted === 'boolean'
+                ? parsed.setupCompleted
+                : hasCustomSetupData,
               school: parsed.school ?? prev.school,
               teacherName: parsed.teacherName ?? prev.teacherName,
               interfaceMode: parsed.interfaceMode === 'daily' ? 'daily' : 'full',
@@ -1704,6 +1837,44 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       ...prev,
       teacherName: name.trim(),
     }));
+  };
+
+  const applyRecommendedSetup = () => {
+    const academicYear = getCurrentAcademicYear();
+    const seed = createSeedDefaultClasses(academicYear);
+    setState((prev) => ({
+      ...prev,
+      setupCompleted: true,
+      teacherName: 'Mme Chaibeddra',
+      school: {
+        name: 'Lycée DOUROUAZ Abdelhamid',
+        address: '',
+        wilaya: 'Ouledfayet',
+      },
+      academicYear,
+      schoolYearConfigurations: [
+        ...prev.schoolYearConfigurations.filter(
+          (item) => normalizeLabel(item.year) !== normalizeLabel(academicYear),
+        ),
+        seed.configuration,
+      ],
+      classes: seed.classes,
+      trainingFilieres: seed.trainingFilieres,
+      trainingPlans: seed.trainingPlans,
+      scheduleSessions: seed.scheduleSessions,
+      continuousEvaluationPeriods: [
+        ...prev.continuousEvaluationPeriods.filter(
+          (period) => period.schoolYearId !== academicYear,
+        ),
+        ...createDefaultContinuousEvaluationPeriods(academicYear),
+      ],
+      activeClassId: seed.activeClassId,
+      activeAssessmentId: '',
+    }));
+  };
+
+  const completeOnboarding = () => {
+    setState((prev) => ({ ...prev, setupCompleted: true }));
   };
 
   const setInterfaceMode = (mode: 'daily' | 'full') => {
@@ -2604,6 +2775,27 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     const restored: AppState = {
       ...createEmptyState(),
       ...candidate,
+      setupCompleted: typeof candidate.setupCompleted === 'boolean'
+        ? candidate.setupCompleted
+        : restoredPupils.length > 0 ||
+          migratedLevelTests.assessments.length > 0 ||
+          restoredClasses.some(
+            (item) =>
+              ![
+                '2as lph 1',
+                '2as lph 2',
+                '2as lph1',
+                '2as lph2',
+                '1as tcs3',
+                '1as tcs5',
+                '1as',
+                '2as',
+              ]
+                .includes(normalizeLabel(item.name)),
+          ) ||
+          Boolean(candidate.teacherName?.trim() && candidate.teacherName !== 'Mme Chaibeddra') ||
+          Boolean(candidate.school?.name?.trim() && candidate.school.name !== 'Lycée DOUROUAZ Abdelhamid') ||
+          Boolean(candidate.school?.wilaya?.trim() && candidate.school.wilaya !== 'Ouledfayet'),
       school: { ...createEmptyState().school, ...candidate.school },
       teacherName: typeof candidate.teacherName === 'string' ? candidate.teacherName : '',
       interfaceMode: candidate.interfaceMode === 'daily' ? 'daily' : 'full',
@@ -3857,6 +4049,8 @@ export function AppDataProvider({ children }: PropsWithChildren) {
 
       // Profile / Settings
       updateTeacherName,
+      applyRecommendedSetup,
+      completeOnboarding,
       setInterfaceMode,
       updateSchool,
       setActiveAcademicYear,

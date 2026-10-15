@@ -13,6 +13,7 @@ import {
   type TrainingPlanSession,
   type TrainingSequence,
 } from './trainingPlan.ts';
+import { createFirstYearScienceTrainingPlan } from './firstYearScienceTrainingPlan.ts';
 
 function assertEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -261,6 +262,51 @@ function runTrainingPlanTests() {
       `${filiereName} reçoit les activités et volumes indiqués`,
     );
   }
+  const firstYearPlan = createFirstYearScienceTrainingPlan(
+    'filiere-tcs',
+    '2026-2027',
+    createId,
+  );
+  const firstYearStudyObjects = firstYearPlan.projects.flatMap(
+    (project) => project.studyObjects,
+  );
+  const firstYearSequences = firstYearStudyObjects.flatMap(
+    (studyObject) => studyObject.sequences,
+  );
+  assertEqual(isTrainingPlan(firstYearPlan), true, 'Le plan TCS est valide au format');
+  assertEqual(firstYearPlan.projects.length, 3, 'Le plan TCS comprend 3 projets');
+  assertEqual(
+    firstYearPlan.sourceNote?.includes('26 semaines × 3 h'),
+    true,
+    'La source et le volume annuel sont conservés',
+  );
+  assertEqual(firstYearStudyObjects.length, 4, 'Le plan TCS comprend 4 objets d’étude');
+  assertEqual(firstYearSequences.length, 5, 'Le plan TCS comprend 5 séquences');
+  assertEqual(
+    firstYearPlan.projects.reduce((total, project) => total + (project.durationHours ?? 0), 0),
+    78,
+    'Le plan TCS totalise 78 heures officielles',
+  );
+  assertEqual(
+    firstYearSequences.every((sequence) => sequence.sessions.length === 9),
+    true,
+    'Chaque séquence TCS comprend les 9 séances prévues',
+  );
+  assertEqual(
+    validateTrainingPlan(firstYearPlan).length,
+    0,
+    'Le plan TCS respecte les règles de structure de séquence',
+  );
+  assertEqual(
+    firstYearSequences[0].durationNote?.includes('totalisent 15 h'),
+    true,
+    'Le décalage de durée de la première séquence est explicité',
+  );
+  assertEqual(
+    firstYearSequences[0].sessions[3].objective?.startsWith('Lire un texte de vulgarisation'),
+    true,
+    'Les objectifs détaillés sont conservés dans les séances',
+  );
   assertEqual(
     createDefaultTrainingPlan('filiere-custom', 'Autre filière', '2026-2027', createId).projects.length,
     0,
