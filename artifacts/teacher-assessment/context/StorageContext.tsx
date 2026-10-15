@@ -13,15 +13,19 @@ import {
   hasWebPdf,
   saveWebPdf,
 } from '@/services/webPdfStorage';
+import { getDocumentMimeType, isSupportedDocument } from '@/services/documentMedia';
 
-export type StoredPdf = {
+export type StoredDocument = {
   id: string;
   name: string;
   uri: string;
+  mimeType?: string;
   folderId?: string | null;
   size?: number;
   createdAt: string;
 };
+
+export type StoredPdf = StoredDocument;
 
 export type StorageFolder = {
   id: string;
@@ -30,34 +34,38 @@ export type StorageFolder = {
   createdAt: string;
 };
 
-type DeletedPdf = StoredPdf & { deletedAt: string };
+type DeletedDocument = StoredDocument & { deletedAt: string };
+type DeletedPdf = DeletedDocument;
 
-type BackupPdf = (StoredPdf | DeletedPdf) & { contentBase64: string };
+type BackupDocument = (StoredDocument | DeletedDocument) & { contentBase64: string };
+type BackupPdf = BackupDocument;
 
-export type PdfLibraryBackup = {
+export type DocumentLibraryBackup = {
   version: 1;
   folders: StorageFolder[];
-  files: BackupPdf[];
-  trash: BackupPdf[];
+  files: BackupDocument[];
+  trash: BackupDocument[];
 };
 
+export type PdfLibraryBackup = DocumentLibraryBackup;
+
 type StorageContextValue = {
-  files: StoredPdf[];
+  files: StoredDocument[];
   folders: StorageFolder[];
-  trash: DeletedPdf[];
+  trash: DeletedDocument[];
   hydrated: boolean;
   usageBytes: number;
   availableBytes: number | null;
   lowSpace: boolean;
-  uploadPdf: (folderId?: string | null) => Promise<void>;
+  uploadDocuments: (folderId?: string | null) => Promise<void>;
   createFolder: (name: string, parentId: string | null) => Promise<void>;
   deleteFolder: (folderId: string) => Promise<void>;
-  movePdfToFolder: (fileId: string, folderId: string | null) => Promise<void>;
-  openPdf: (file: StoredPdf) => Promise<void>;
-  deletePdf: (file: StoredPdf) => Promise<void>;
-  restorePdf: (file: DeletedPdf) => Promise<void>;
+  moveDocumentToFolder: (fileId: string, folderId: string | null) => Promise<void>;
+  openDocument: (file: StoredDocument) => Promise<void>;
+  deleteDocument: (file: StoredDocument) => Promise<void>;
+  restoreDocument: (file: DeletedDocument) => Promise<void>;
   emptyTrash: () => Promise<void>;
-  renamePdf: (file: StoredPdf, name: string) => Promise<void>;
+  renameDocument: (file: StoredDocument, name: string) => Promise<void>;
   refreshStorage: () => Promise<void>;
   getBackupData: () => Promise<PdfLibraryBackup>;
   validateBackupData: (backup: unknown) => void;
@@ -68,42 +76,42 @@ const STORAGE_KEY = 'teacher-assessment-pdf-library-v1';
 const FOLDERS_KEY = 'teacher-assessment-pdf-folders-v1';
 const TRASH_KEY = 'teacher-assessment-pdf-trash-v1';
 const DIRECTORY_NAME = 'teacher-storage';
-const MAX_PDF_SIZE = 50 * 1024 * 1024;
+const MAX_DOCUMENT_SIZE = 200 * 1024 * 1024;
 const LOW_SPACE_LIMIT = 100 * 1024 * 1024;
 const StorageContext = createContext<StorageContextValue | null>(null);
 
-function cleanPdfName(name: string, fallback: string) {
+function cleanDocumentName(name: string, fallback: string) {
   const normalized = name.trim().replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_');
-  if (!normalized) return fallback;
-  return normalized.toLowerCase().endsWith('.pdf') ? normalized : `${normalized}.pdf`;
+  return normalized || fallback;
 }
 
-function blobToBase64(blob: Blob): Promise<string> {
+function blobToBase64(blob: Blob, name: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result !== 'string') {
-        reject(new Error('Le contenu du PDF ne peut pas être encodé pour la sauvegarde.'));
+        reject(new Error(`Le contenu de « ${name} » ne peut pas être encodé pour la sauvegarde.`));
         return;
       }
       const separator = reader.result.indexOf(',');
       if (separator < 0) {
-        reject(new Error('Le contenu du PDF ne peut pas être encodé pour la sauvegarde.'));
+        reject(new Error(`Le contenu de « ${name} » ne peut pas être encodé pour la sauvegarde.`));
         return;
       }
       resolve(reader.result.slice(separator + 1));
     };
-    reader.onerror = () => reject(reader.error ?? new Error('Impossible de lire le PDF pour la sauvegarde.'));
+    reader.onerror = () => reject(reader.error ?? new Error(`Impossible de lire « ${name} » pour la sauvegarde.`));
     reader.readAsDataURL(blob);
   });
 }
 
-function isBackupPdf(value: unknown, requireDeletedAt: boolean): value is BackupPdf {
+function isBackupDocument(value: unknown, requireDeletedAt: boolean): value is BackupDocument {
   if (!value || typeof value !== 'object') return false;
   const file = value as Partial<BackupPdf>;
   return typeof file.id === 'string' &&
     typeof file.name === 'string' &&
     typeof file.uri === 'string' &&
+    (file.mimeType === undefined || (typeof file.mimeType === 'string' && isSupportedDocument(file.name, file.mimeType))) &&
     (file.folderId === undefined || file.folderId === null || typeof file.folderId === 'string') &&
     (file.size === undefined || (typeof file.size === 'number' && Number.isFinite(file.size) && file.size >= 0)) &&
     typeof file.createdAt === 'string' &&
@@ -111,12 +119,12 @@ function isBackupPdf(value: unknown, requireDeletedAt: boolean): value is Backup
     typeof file.contentBase64 === 'string' &&
     /^[A-Za-z0-9+/]*={0,2}$/.test(file.contentBase64) &&
     file.contentBase64.length % 4 !== 1 &&
-    file.contentBase64.length <= Math.ceil(MAX_PDF_SIZE / 3) * 4 + 4;
+    file.contentBase64.length <= Math.ceil(MAX_DOCUMENT_SIZE / 3) * 4 + 4;
 }
 
-function validatePdfLibraryBackup(backup: unknown): asserts backup is PdfLibraryBackup {
-  if (!backup || typeof backup !== 'object') throw new Error('La bibliothèque PDF de la sauvegarde est invalide.');
-  const candidate = backup as Partial<PdfLibraryBackup>;
+function validateDocumentLibraryBackup(backup: unknown): asserts backup is DocumentLibraryBackup {
+  if (!backup || typeof backup !== 'object') throw new Error('La bibliothèque de documents de la sauvegarde est invalide.');
+  const candidate = backup as Partial<DocumentLibraryBackup>;
   if (
     candidate.version !== 1 ||
     !Array.isArray(candidate.folders) ||
@@ -128,11 +136,11 @@ function validatePdfLibraryBackup(backup: unknown): asserts backup is PdfLibrary
       typeof folder.createdAt === 'string',
     ) ||
     !Array.isArray(candidate.files) ||
-    !candidate.files.every((file) => isBackupPdf(file, false)) ||
+    !candidate.files.every((file) => isBackupDocument(file, false)) ||
     !Array.isArray(candidate.trash) ||
-    !candidate.trash.every((file) => isBackupPdf(file, true))
+    !candidate.trash.every((file) => isBackupDocument(file, true))
   ) {
-    throw new Error('La bibliothèque PDF de la sauvegarde est incomplète ou invalide.');
+    throw new Error('La bibliothèque de documents de la sauvegarde est incomplète ou invalide.');
   }
   const folderIds = new Set(candidate.folders.map((folder) => folder.id));
   if (folderIds.size !== candidate.folders.length) {
@@ -152,22 +160,22 @@ function validatePdfLibraryBackup(backup: unknown): asserts backup is PdfLibrary
     }
   }
   if ([...candidate.files, ...candidate.trash].some((file) => file.folderId && !folderIds.has(file.folderId))) {
-    throw new Error('La sauvegarde contient un PDF rattaché à un dossier introuvable.');
+    throw new Error('La sauvegarde contient un document rattaché à un dossier introuvable.');
   }
-  const pdfIds = [...candidate.files, ...candidate.trash].map((file) => file.id);
-  if (new Set(pdfIds).size !== pdfIds.length) {
-    throw new Error('La sauvegarde contient des identifiants de PDF en double.');
+  const documentIds = [...candidate.files, ...candidate.trash].map((file) => file.id);
+  if (new Set(documentIds).size !== documentIds.length) {
+    throw new Error('La sauvegarde contient des identifiants de document en double.');
   }
 }
 
-function newPdfId() {
-  return `pdf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+function newDocumentId() {
+  return `document-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export function StorageProvider({ children }: PropsWithChildren) {
-  const [files, setFiles] = useState<StoredPdf[]>([]);
+  const [files, setFiles] = useState<StoredDocument[]>([]);
   const [folders, setFolders] = useState<StorageFolder[]>([]);
-  const [trash, setTrash] = useState<DeletedPdf[]>([]);
+  const [trash, setTrash] = useState<DeletedDocument[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const [availableBytes, setAvailableBytes] = useState<number | null>(null);
 
@@ -230,37 +238,40 @@ export function StorageProvider({ children }: PropsWithChildren) {
     usageBytes,
     availableBytes,
     lowSpace,
-    uploadPdf: async (folderId = null) => {
+    uploadDocuments: async (folderId = null) => {
       if (folderId && !folders.some((folder) => folder.id === folderId)) {
         throw new Error('Le dossier sélectionné est introuvable.');
       }
       await refreshStorage();
-      if (availableBytes !== null && availableBytes < LOW_SPACE_LIMIT) throw new Error('Espace disponible insuffisant. Libérez de l’espace avant d’ajouter un PDF.');
+      if (availableBytes !== null && availableBytes < LOW_SPACE_LIMIT) throw new Error('Espace disponible insuffisant. Libérez de l’espace avant d’ajouter des documents.');
       const result = await DocumentPicker.getDocumentAsync({
-        type: 'application/pdf',
+        type: ['application/pdf', 'image/*', 'video/*'],
         copyToCacheDirectory: Platform.OS !== 'android',
         multiple: true,
       });
       if (result.canceled || !result.assets?.length) return;
       for (const picked of result.assets) {
-        if (picked.mimeType && picked.mimeType !== 'application/pdf') {
-          throw new Error(`« ${picked.name} » n’est pas un fichier PDF.`);
+        const mimeType = getDocumentMimeType(picked.name, picked.mimeType);
+        if (!isSupportedDocument(picked.name, mimeType)) {
+          throw new Error(`« ${picked.name} » n’est pas un type de document pris en charge. Choisissez un PDF, une image ou une vidéo.`);
         }
-        if (picked.size && picked.size > MAX_PDF_SIZE) {
-          throw new Error(`« ${picked.name} » dépasse la taille maximale autorisée de 50 Mo.`);
+        const pickedSize = picked.size ?? picked.file?.size;
+        if (pickedSize && pickedSize > MAX_DOCUMENT_SIZE) {
+          throw new Error(`« ${picked.name} » dépasse la taille maximale autorisée de 200 Mo.`);
         }
         if (Platform.OS === 'web' && !picked.file) {
           throw new Error(`Le navigateur n’a pas fourni le contenu du fichier « ${picked.name} ».`);
         }
       }
 
-      const imported: StoredPdf[] = [];
+      const imported: StoredDocument[] = [];
       const createdWebPdfIds: string[] = [];
       const createdNativeFiles: File[] = [];
       try {
         for (const picked of result.assets) {
-          const id = newPdfId();
-          const originalName = cleanPdfName(picked.name, `${id}.pdf`);
+          const id = newDocumentId();
+          const originalName = cleanDocumentName(picked.name, `document-${id}`);
+          const mimeType = getDocumentMimeType(picked.name, picked.mimeType);
           if (Platform.OS === 'web') {
             if (!picked.file) {
               throw new Error(`Le navigateur n’a pas fourni le contenu du fichier « ${picked.name} ».`);
@@ -271,6 +282,7 @@ export function StorageProvider({ children }: PropsWithChildren) {
               id,
               name: originalName,
               uri: getWebPdfUri(id),
+              mimeType,
               folderId,
               size: picked.size ?? picked.file.size,
               createdAt: new Date().toISOString(),
@@ -285,10 +297,14 @@ export function StorageProvider({ children }: PropsWithChildren) {
           if (!destination.exists || destination.size <= 0) {
             throw new Error(`La copie de « ${picked.name} » dans le stockage de l’application a échoué.`);
           }
+          if (destination.size > MAX_DOCUMENT_SIZE) {
+            throw new Error(`« ${picked.name} » dépasse la taille maximale autorisée de 200 Mo.`);
+          }
           imported.push({
             id,
             name: originalName,
             uri: destination.uri,
+            mimeType,
             folderId,
             size: destination.size,
             createdAt: new Date().toISOString(),
@@ -332,28 +348,28 @@ export function StorageProvider({ children }: PropsWithChildren) {
         files.some((file) => file.folderId === folderId) ||
         trash.some((file) => file.folderId === folderId)
       ) {
-        throw new Error('Ce dossier n’est pas vide. Déplacez son contenu ou restaurez/supprimez définitivement les PDF de la corbeille.');
+        throw new Error('Ce dossier n’est pas vide. Déplacez son contenu ou restaurez/supprimez définitivement les documents de la corbeille.');
       }
       setFolders((current) => current.filter((item) => item.id !== folderId));
     },
-    movePdfToFolder: async (fileId, folderId) => {
-      if (!files.some((file) => file.id === fileId)) throw new Error('Le document PDF est introuvable.');
+    moveDocumentToFolder: async (fileId, folderId) => {
+      if (!files.some((file) => file.id === fileId)) throw new Error('Le document est introuvable.');
       if (folderId && !folders.some((folder) => folder.id === folderId)) {
         throw new Error('Le dossier de destination est introuvable.');
       }
       setFiles((current) => current.map((file) => file.id === fileId ? { ...file, folderId } : file));
     },
-    openPdf: async (file) => {
+    openDocument: async (file) => {
       const stored = new File(file.uri);
-      if (!stored.exists || !stored.size) throw new Error('Ce fichier PDF est introuvable ou semble endommagé.');
-      if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(file.uri, { mimeType: 'application/pdf', dialogTitle: file.name });
+      if (!stored.exists || !stored.size) throw new Error('Ce document est introuvable ou semble endommagé.');
+      if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(file.uri, { mimeType: getDocumentMimeType(file.name, file.mimeType), dialogTitle: file.name });
       else await Linking.openURL(file.uri);
     },
-    deletePdf: async (file) => {
+    deleteDocument: async (file) => {
       setFiles((current) => current.filter((item) => item.id !== file.id));
       setTrash((current) => [{ ...file, deletedAt: new Date().toISOString() }, ...current.filter((item) => item.id !== file.id)]);
     },
-    restorePdf: async (file) => {
+    restoreDocument: async (file) => {
       const available = Platform.OS === 'web'
         ? await hasWebPdf(file.id)
         : new File(file.uri).exists;
@@ -385,25 +401,25 @@ export function StorageProvider({ children }: PropsWithChildren) {
         );
       }
     },
-    renamePdf: async (file, name) => {
-      const nextName = cleanPdfName(name, file.name);
+    renameDocument: async (file, name) => {
+      const nextName = cleanDocumentName(name, file.name);
       if (Platform.OS === 'web') {
-        if (!(await hasWebPdf(file.id))) throw new Error('Ce fichier PDF est introuvable.');
+        if (!(await hasWebPdf(file.id))) throw new Error('Ce document est introuvable.');
         setFiles((current) => current.map((item) => item.id === file.id ? { ...item, name: nextName } : item));
         return;
       }
       const currentFile = new File(file.uri);
-      if (!currentFile.exists) throw new Error('Ce fichier PDF est introuvable.');
+      if (!currentFile.exists) throw new Error('Ce document est introuvable.');
       currentFile.rename(nextName);
       setFiles((current) => current.map((item) => item.id === file.id ? { ...item, name: nextName, uri: currentFile.uri.replace(/[^/]+$/, nextName) } : item));
     },
     refreshStorage,
     getBackupData: async () => {
-      const encodeFile = async (file: StoredPdf | DeletedPdf): Promise<BackupPdf> => {
+      const encodeFile = async (file: StoredDocument | DeletedDocument): Promise<BackupDocument> => {
         const contentBase64 = Platform.OS === 'web'
-          ? await blobToBase64(await getWebPdf(getWebPdfId(file.uri)))
+          ? await blobToBase64(await getWebPdf(getWebPdfId(file.uri)), file.name)
           : await LegacyFS.readAsStringAsync(file.uri, { encoding: LegacyFS.EncodingType.Base64 });
-        if (!contentBase64) throw new Error(`Le PDF « ${file.name} » est vide ou illisible.`);
+        if (!contentBase64) throw new Error(`Le document « ${file.name} » est vide ou illisible.`);
         return { ...file, contentBase64 };
       };
       const [backupFiles, backupTrash] = await Promise.all([
@@ -413,38 +429,39 @@ export function StorageProvider({ children }: PropsWithChildren) {
       return { version: 1, folders, files: backupFiles, trash: backupTrash };
     },
     validateBackupData: (backup) => {
-      validatePdfLibraryBackup(backup);
+      validateDocumentLibraryBackup(backup);
     },
     restoreBackupData: async (backup) => {
-      validatePdfLibraryBackup(backup);
+      validateDocumentLibraryBackup(backup);
       const candidate = backup;
       const created: Array<{ id: string; uri: string }> = [];
-      const restoreFile = async (file: BackupPdf, deleted: boolean): Promise<StoredPdf | DeletedPdf> => {
-        const id = newPdfId();
+      const restoreFile = async (file: BackupDocument, deleted: boolean): Promise<StoredDocument | DeletedDocument> => {
+        const id = newDocumentId();
+        const mimeType = getDocumentMimeType(file.name, file.mimeType);
         const { contentBase64: _contentBase64, ...metadata } = file;
         if (Platform.OS === 'web') {
           const binary = atob(file.contentBase64);
           const bytes = new Uint8Array(binary.length);
           for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-          await saveWebPdf(id, new Blob([bytes], { type: 'application/pdf' }));
+          await saveWebPdf(id, new Blob([bytes], { type: mimeType }));
           const uri = getWebPdfUri(id);
           created.push({ id, uri });
-          return { ...metadata, id, uri, size: file.size ?? bytes.byteLength } as StoredPdf | DeletedPdf;
+          return { ...metadata, id, uri, mimeType, size: file.size ?? bytes.byteLength } as StoredDocument | DeletedDocument;
         }
         const directory = new Directory(Paths.document, DIRECTORY_NAME, id);
         directory.create({ intermediates: true, idempotent: true });
-        const restoredFile = new File(directory, cleanPdfName(file.name, `${id}.pdf`));
+        const restoredFile = new File(directory, cleanDocumentName(file.name, `document-${id}`));
         created.push({ id, uri: restoredFile.uri });
         await LegacyFS.writeAsStringAsync(restoredFile.uri, file.contentBase64, {
           encoding: LegacyFS.EncodingType.Base64,
         });
         if (!restoredFile.exists || restoredFile.size <= 0) {
-          throw new Error(`Le PDF « ${file.name} » n’a pas pu être restauré.`);
+          throw new Error(`Le document « ${file.name} » n’a pas pu être restauré.`);
         }
         const restoredMetadata = { ...metadata, id, uri: restoredFile.uri, size: restoredFile.size };
         return deleted
           ? restoredMetadata as DeletedPdf
-          : restoredMetadata as StoredPdf;
+          : restoredMetadata as StoredDocument;
       };
       try {
         const restoredFiles = await Promise.all(candidate.files.map((file) => restoreFile(file, false)));
@@ -456,7 +473,7 @@ export function StorageProvider({ children }: PropsWithChildren) {
         if (Platform.OS === 'web') {
           const deletions = await Promise.allSettled(oldFiles.map((file) => deleteWebPdf(getWebPdfId(file.uri))));
           deletions.filter((result) => result.status === 'rejected').forEach((result) => {
-            console.warn('Impossible de nettoyer un ancien PDF après restauration.', result.reason);
+            console.warn('Impossible de nettoyer un ancien document après restauration.', result.reason);
           });
         } else {
           const deletions = oldFiles.map((file) => {
@@ -465,7 +482,7 @@ export function StorageProvider({ children }: PropsWithChildren) {
           });
           const results = await Promise.allSettled(deletions);
           results.filter((result) => result.status === 'rejected').forEach((result) => {
-            console.warn('Impossible de nettoyer un ancien PDF après restauration.', result.reason);
+            console.warn('Impossible de nettoyer un ancien document après restauration.', result.reason);
           });
           await refreshStorage();
         }

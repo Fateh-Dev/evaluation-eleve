@@ -46,7 +46,6 @@ export default function ClassDetailScreen() {
   const currentClass = useMemo(() => {
     return data.classes.find((c) => c.id === currentClassId) ?? data.activeClass;
   }, [data.classes, currentClassId, data.activeClass]);
-  const continuousPeriods = data.getContinuousEvaluationPeriods(currentClass.academicYear);
   const activeEvaluationPeriod = data.getActiveContinuousEvaluationPeriod(currentClass.academicYear);
 
   const classPupils = useMemo(() => {
@@ -625,39 +624,6 @@ export default function ClassDetailScreen() {
             compact
             onAction={openAddPupilModal}
           />
-          <View style={styles.periodSelector}>
-            {continuousPeriods.map((period) => (
-              <Pressable
-                key={period.id}
-                accessibilityRole="button"
-                accessibilityState={{ selected: period.id === activeEvaluationPeriod?.id }}
-                onPress={() => {
-                  setScoreDrafts({});
-                  data.setActiveContinuousEvaluationPeriod(currentClass.academicYear, period.id);
-                }}
-                style={[
-                  styles.filterChip,
-                  {
-                    backgroundColor: period.id === activeEvaluationPeriod?.id ? colors.primary : colors.card,
-                    borderColor: period.id === activeEvaluationPeriod?.id ? colors.primary : colors.border,
-                  },
-                ]}
-              >
-                <Text style={[styles.filterChipText, {
-                  color: period.id === activeEvaluationPeriod?.id ? colors.primaryForeground : colors.foreground,
-                }]}>
-                  {period.name}
-                </Text>
-              </Pressable>
-            ))}
-            <Button
-              label="Périodes"
-              icon="calendar"
-              secondary
-              compact
-              onPress={() => router.push('/continuous')}
-            />
-          </View>
           <Text style={[styles.periodCaption, { color: colors.mutedForeground }]}>
             {activeEvaluationPeriod
               ? `${activeEvaluationPeriod.startDate} – ${activeEvaluationPeriod.endDate}`
@@ -688,7 +654,7 @@ export default function ClassDetailScreen() {
                       ? 'Filtre : à compléter · appel · exports · recherche'
                       : evaluationFilter === 'complete'
                         ? 'Filtre : terminés · appel · exports · recherche'
-                        : 'Appel · exports PDF/Excel · recherche et filtres'}
+                        : 'Appel · aperçu/Excel · recherche et filtres'}
                   </Text>
                 ) : null}
               </View>
@@ -702,8 +668,8 @@ export default function ClassDetailScreen() {
               <View style={[styles.toolsContent, { borderTopColor: colors.border }]}>
                 <View style={styles.continuousExportActions}>
                   <Button
-                    label={exportingContinuousFormat === 'pdf' ? 'Préparation PDF…' : 'PDF'}
-                    icon="file-text"
+                    label={exportingContinuousFormat === 'pdf' ? 'Préparation…' : 'Aperçu'}
+                    icon="eye"
                     secondary
                     compact
                     disabled={exportingContinuousFormat !== null}
@@ -1252,7 +1218,6 @@ const styles = StyleSheet.create({
   evaluationTotalGroup: { alignItems: 'flex-end', gap: 2 },
   evaluationHint: { fontSize: 12, lineHeight: 18, marginTop: -7 },
   progressSummary: { fontSize: 11, lineHeight: 15, marginTop: -8 },
-  periodSelector: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 7, marginTop: 2 },
   periodCaption: { fontSize: 11, marginTop: -3 },
   toolsCard: { padding: 9, gap: 8 },
   toolsHeader: { minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: 9 },

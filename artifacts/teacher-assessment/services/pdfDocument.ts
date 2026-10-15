@@ -6,9 +6,14 @@ import { Linking } from 'react-native';
 import { Platform } from 'react-native';
 import { getWebPdf, getWebPdfId, isWebPdfUri } from '@/services/webPdfStorage';
 
-function safeFilename(value: string) {
+function safePdfFilename(value: string) {
   const base = value.replace(/\.pdf$/i, '').replace(/[^\p{L}\p{N}-]+/gu, '_');
   return `${base || 'document'}.pdf`;
+}
+
+function safeDocumentFilename(value: string) {
+  const name = value.trim().replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_');
+  return name || 'document';
 }
 
 export async function savePdfFromHtml(
@@ -16,7 +21,7 @@ export async function savePdfFromHtml(
   filename: string,
   title: string,
 ): Promise<void> {
-  const normalizedFilename = safeFilename(filename);
+  const normalizedFilename = safePdfFilename(filename);
   if (Platform.OS === 'web') {
     await Print.printAsync({ html });
     return;
@@ -44,14 +49,18 @@ export async function savePdfFromHtml(
   });
 }
 
-export async function saveExistingPdf(uri: string, title: string): Promise<void> {
+export async function saveExistingDocument(
+  uri: string,
+  title: string,
+  mimeType = 'application/pdf',
+): Promise<void> {
   if (Platform.OS === 'web') {
     if (isWebPdfUri(uri)) {
       const file = await getWebPdf(getWebPdfId(uri));
       const objectUrl = URL.createObjectURL(file);
       const link = document.createElement('a');
       link.href = objectUrl;
-      link.download = safeFilename(title);
+      link.download = safeDocumentFilename(title);
       link.click();
       setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
       return;
@@ -60,11 +69,11 @@ export async function saveExistingPdf(uri: string, title: string): Promise<void>
     return;
   }
   if (!(await Sharing.isAvailableAsync())) {
-    throw new Error('Le partage de fichiers PDF n’est pas disponible sur cet appareil.');
+    throw new Error('Le partage de fichiers n’est pas disponible sur cet appareil.');
   }
   await Sharing.shareAsync(uri, {
-    mimeType: 'application/pdf',
+    mimeType,
     dialogTitle: `Enregistrer ou partager — ${title}`,
-    UTI: 'com.adobe.pdf',
+    UTI: mimeType === 'application/pdf' ? 'com.adobe.pdf' : undefined,
   });
 }

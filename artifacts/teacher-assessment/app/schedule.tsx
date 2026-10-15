@@ -345,10 +345,10 @@ export default function ScheduleScreen() {
       <View style={styles.scheduleActionsRow}>
         <View style={styles.exportAction}>
           <Button
-            label={isExporting ? 'Préparation du PDF…' : 'Exporter PDF'}
+            label={isExporting ? 'Préparation…' : 'Aperçu'}
             secondary
             compact
-            icon="printer"
+            icon="eye"
             disabled={isExporting}
             onPress={handleExportPdf}
           />

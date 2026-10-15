@@ -296,8 +296,8 @@ export default function ClassAttendanceScreen() {
           </View>
           <View style={styles.attendanceActionButton}>
             <Button
-              label={isExporting ? 'Préparation…' : 'Exporter PDF'}
-              icon="download"
+              label={isExporting ? 'Préparation…' : 'Aperçu'}
+              icon="eye"
               compact
               secondary
               disabled={isExporting}

@@ -9,14 +9,14 @@ function openDatabase(): Promise<IDBDatabase> {
       request.result.createObjectStore(STORE_NAME);
     };
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error('Impossible d’ouvrir le stockage PDF du navigateur.'));
+    request.onerror = () => reject(request.error ?? new Error('Impossible d’ouvrir le stockage de documents du navigateur.'));
   });
 }
 
 function requestResult<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error('Impossible d’accéder au PDF enregistré.'));
+    request.onerror = () => reject(request.error ?? new Error('Impossible d’accéder au document enregistré.'));
   });
 }
 
@@ -39,8 +39,8 @@ export async function saveWebPdf(id: string, file: Blob): Promise<void> {
     await requestResult(transaction.objectStore(STORE_NAME).put(file, id));
     await new Promise<void>((resolve, reject) => {
       transaction.oncomplete = () => resolve();
-      transaction.onerror = () => reject(transaction.error ?? new Error('Impossible d’enregistrer le PDF dans le navigateur.'));
-      transaction.onabort = () => reject(transaction.error ?? new Error('L’enregistrement du PDF a été interrompu.'));
+      transaction.onerror = () => reject(transaction.error ?? new Error('Impossible d’enregistrer le document dans le navigateur.'));
+      transaction.onabort = () => reject(transaction.error ?? new Error('L’enregistrement du document a été interrompu.'));
     });
   } finally {
     database.close();
@@ -51,7 +51,7 @@ export async function getWebPdf(id: string): Promise<Blob> {
   const database = await openDatabase();
   try {
     const file = await requestResult(database.transaction(STORE_NAME).objectStore(STORE_NAME).get(id)) as Blob | undefined;
-    if (!file) throw new Error('Ce PDF est introuvable dans le stockage du navigateur.');
+    if (!file) throw new Error('Ce document est introuvable dans le stockage du navigateur.');
     return file;
   } finally {
     database.close();
@@ -75,8 +75,8 @@ export async function deleteWebPdf(id: string): Promise<void> {
     transaction.objectStore(STORE_NAME).delete(id);
     await new Promise<void>((resolve, reject) => {
       transaction.oncomplete = () => resolve();
-      transaction.onerror = () => reject(transaction.error ?? new Error('Impossible de supprimer le PDF du navigateur.'));
-      transaction.onabort = () => reject(transaction.error ?? new Error('La suppression du PDF a été interrompue.'));
+      transaction.onerror = () => reject(transaction.error ?? new Error('Impossible de supprimer le document du navigateur.'));
+      transaction.onabort = () => reject(transaction.error ?? new Error('La suppression du document a été interrompue.'));
     });
   } finally {
     database.close();

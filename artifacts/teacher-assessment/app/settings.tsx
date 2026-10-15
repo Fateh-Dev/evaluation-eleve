@@ -38,6 +38,9 @@ export default function SettingsScreen() {
   const storage = useStorage();
   const reminders = useReminders();
   const security = useSecurity();
+  const activePeriodYear = data.activeClass.academicYear || data.academicYear;
+  const activePeriodOptions = data.getContinuousEvaluationPeriods(activePeriodYear);
+  const activePeriod = data.getActiveContinuousEvaluationPeriod(activePeriodYear);
   const [pinInput, setPinInput] = useState('');
   const [pinConfirmation, setPinConfirmation] = useState('');
   const [editingPin, setEditingPin] = useState(false);
@@ -177,7 +180,7 @@ export default function SettingsScreen() {
             void (async () => {
               await data.restoreBackupState(backup);
               if (pdfLibrary !== undefined) await storage.restoreBackupData(pdfLibrary);
-              Alert.alert('Restauration terminée', 'Les données de l’application, le profil enseignant, les plans de formation et la bibliothèque PDF ont été restaurés.');
+              Alert.alert('Restauration terminée', 'Les données de l’application, le profil enseignant, les plans de formation et les documents importés ont été restaurés.');
             })().catch((error: unknown) => {
               Alert.alert('Erreur', error instanceof Error ? error.message : 'La sauvegarde n’a pas pu être restaurée.');
             });
@@ -663,6 +666,65 @@ export default function SettingsScreen() {
         </View>
       </Surface>
 
+      <SectionTitle title="Trimestre en cours" />
+      <Surface style={styles.card}>
+        <Text style={[styles.help, { color: colors.mutedForeground }]}>
+          Choisissez ici le trimestre utilisé par défaut dans l’application pour {activePeriodYear}.
+        </Text>
+        {activePeriodOptions.length ? (
+          <View style={styles.reminderOptions}>
+            {activePeriodOptions.map((period) => {
+              const selected = period.id === activePeriod?.id;
+              return (
+                <Pressable
+                  key={period.id}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  onPress={() =>
+                    data.setActiveContinuousEvaluationPeriod(
+                      activePeriodYear,
+                      period.id,
+                    )
+                  }
+                  style={[
+                    styles.reminderOption,
+                    {
+                      backgroundColor: selected ? colors.primary : colors.card,
+                      borderColor: selected ? colors.primary : colors.border,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.help,
+                      {
+                        color: selected
+                          ? colors.primaryForeground
+                          : colors.foreground,
+                        fontWeight: '700',
+                      },
+                    ]}
+                  >
+                    {period.name}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : (
+          <Text style={[styles.help, { color: colors.mutedForeground }]}>
+            Aucun trimestre n’est configuré pour cette année.
+          </Text>
+        )}
+        <Button
+          label="Gérer les périodes"
+          icon="calendar"
+          secondary
+          compact
+          onPress={() => router.push('/continuous')}
+        />
+      </Surface>
+
       <SectionTitle title="Palette de couleurs" />
       <Pressable
         accessibilityRole="button"
@@ -736,7 +798,7 @@ export default function SettingsScreen() {
           <View style={[styles.settingIcon, { backgroundColor: colors.accent }]}><Feather name="archive" size={18} color={colors.primary} /></View>
           <View style={styles.settingCopy}>
             <Text style={[styles.value, { color: colors.foreground }]}>Sauvegarde complète</Text>
-            <Text style={[styles.help, { color: colors.mutedForeground }]}>Enregistrez toutes les données, y compris le profil enseignant, les plans de formation et les PDF importés, dans un fichier JSON restaurable.</Text>
+            <Text style={[styles.help, { color: colors.mutedForeground }]}>Enregistrez toutes les données, y compris le profil enseignant, les plans de formation et les documents importés, dans un fichier JSON restaurable.</Text>
           </View>
         </View>
         <View style={styles.buttonRow}>

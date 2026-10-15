@@ -227,7 +227,7 @@ export default function AssessmentDocumentScreen() {
       <GuideAnchor
         id="document-export-actions"
         title="Exporter ou partager"
-        description="Choisissez Excel, Word ou PDF, ou partagez le rapport généré."
+        description="Choisissez Excel, Word ou l’aperçu du rapport, ou partagez le rapport généré."
       >
       <View style={[styles.actionsBar, { borderColor: colors.border, backgroundColor: colors.card }]}>
         <Pressable
@@ -264,7 +264,7 @@ export default function AssessmentDocumentScreen() {
           onPress={printReport}
           disabled={exportingFormat !== null}
           accessibilityRole="button"
-          accessibilityLabel="Aperçu ou export PDF"
+          accessibilityLabel="Aperçu du rapport"
           accessibilityHint="Ouvre l’aperçu du document PDF avant de l’enregistrer ou l’imprimer"
           style={({ pressed }) => [
             styles.actionIconButton,
@@ -273,7 +273,7 @@ export default function AssessmentDocumentScreen() {
         >
           {exportingFormat === 'pdf'
             ? <ActivityIndicator size="small" color="#D32F2F" />
-            : <MaterialCommunityIcons name="file-pdf-box" size={27} color="#D32F2F" />}
+            : <Feather name="eye" size={22} color="#D32F2F" />}
         </Pressable>
         <Pressable
           onPress={() => { void shareReport(); }}

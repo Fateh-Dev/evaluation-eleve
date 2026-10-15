@@ -2,8 +2,9 @@ import { Feather } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useColors } from '@/hooks/useColors';
-import { PdfDocumentFrame } from '@/components/PdfDocumentFrame';
-import { saveExistingPdf, savePdfFromHtml } from '@/services/pdfDocument';
+import { DocumentPreviewFrame } from '@/components/DocumentPreviewFrame';
+import { saveExistingDocument, savePdfFromHtml } from '@/services/pdfDocument';
+import { getDocumentMediaType } from '@/services/documentMedia';
 import { Alert } from '@/components/AppDialog';
 
 export function PdfPreviewModal({
@@ -11,6 +12,7 @@ export function PdfPreviewModal({
   title,
   html,
   uri,
+  mimeType,
   filename,
   onClose,
 }: {
@@ -18,22 +20,24 @@ export function PdfPreviewModal({
   title: string;
   html?: string;
   uri?: string;
+  mimeType?: string;
   filename: string;
   onClose: () => void;
 }) {
   const colors = useColors();
   const [saving, setSaving] = useState(false);
+  const mediaType = getDocumentMediaType(filename, mimeType);
 
-  const savePdf = async () => {
+  const saveDocument = async () => {
     if ((!html && !uri) || saving) return;
     setSaving(true);
     try {
-      if (uri) await saveExistingPdf(uri, title);
+      if (uri) await saveExistingDocument(uri, title, mimeType);
       else await savePdfFromHtml(html ?? '', filename, title);
     } catch (error) {
       Alert.alert(
-        'PDF indisponible',
-        error instanceof Error ? error.message : 'Le PDF n’a pas pu être enregistré.',
+        'Document indisponible',
+        error instanceof Error ? error.message : 'Le document n’a pas pu être enregistré.',
       );
     } finally {
       setSaving(false);
@@ -62,21 +66,21 @@ export function PdfPreviewModal({
               {title}
             </Text>
             <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-              Aperçu du document PDF
+              Aperçu · {mediaType === 'pdf' ? 'PDF' : mediaType === 'image' ? 'Image' : 'Vidéo'}
             </Text>
           </View>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Télécharger ou imprimer le PDF"
+            accessibilityLabel="Télécharger ou partager le document"
             disabled={saving}
-            onPress={() => { void savePdf(); }}
+            onPress={() => { void saveDocument(); }}
             style={[styles.saveButton, { backgroundColor: colors.primary, opacity: saving ? 0.55 : 1 }]}
           >
             <Feather name="download" size={17} color={colors.primaryForeground} />
           </Pressable>
         </View>
         <View style={styles.preview}>
-          <PdfDocumentFrame html={html} uri={uri} />
+          <DocumentPreviewFrame html={html} uri={uri} mediaType={mediaType} />
         </View>
       </View>
     </Modal>

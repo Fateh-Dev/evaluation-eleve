@@ -37,8 +37,8 @@ La barre de navigation principale donne accès à :
 - **Accueil** : classe active, aperçu du suivi et raccourcis liés à la journée.
 - **Classes** : créer et consulter les classes, leurs élèves et leurs données.
 - **Saisie** : choisir une classe puis faire l’appel, saisir le suivi continu ou créer une évaluation.
-- **Bilans** : consulter et imprimer les bilans trimestriels ou explorer les statistiques.
-- **Plus** : guide d’utilisation, emploi du temps, fin d’année scolaire, recherche d’élèves et de classes, périodes d’évaluation, documents pédagogiques et paramètres.
+- **Documents** : prévisualiser et partager les PDF, images et vidéos pédagogiques enregistrés sur l’appareil.
+- **Plus** : guide d’utilisation, emploi du temps, bilans et statistiques, fin d’année scolaire, recherche d’élèves et de classes, périodes d’évaluation et paramètres.
 
 Dans **Plus**, utilisez la recherche pour retrouver rapidement une classe par son nom ou un élève par son nom ou son matricule.
 
@@ -46,7 +46,7 @@ Pour obtenir les étapes d’une action directement dans l’application, ouvrez
 
 ## Mode quotidien
 
-Le mode quotidien est sélectionné par défaut lors d’une nouvelle installation. La section **Programme** affiche les séances du jour dans l’ordre, avec la classe en cours et la suivante ; utilisez **Consulter** pour ouvrir l’emploi du temps complet ou touchez une séance pour ouvrir sa classe. La **classe choisie** reste indépendante du programme : pendant une séance, l’appel et l’évaluation continue ciblent la classe en cours ; hors séance, ils utilisent la classe choisie. Si aucun cours n’est prévu aujourd’hui pour cette classe, le raccourci d’appel propose d’ouvrir l’emploi du temps. La section **États de sortie** imprime en PDF les présences et absences avec leurs dates pour la période active, les résultats continus de cette période, ou l’emploi du temps hebdomadaire de l’année active. Appuyez sur **Mode complet** sur l’accueil, ou désactivez le commutateur dans les paramètres, pour revenir au tableau de bord détaillé. Le choix est mémorisé sur l’appareil.
+Le mode quotidien est sélectionné par défaut lors d’une nouvelle installation. La section **Programme** affiche les séances du jour dans l’ordre, avec la classe en cours et la suivante ; utilisez **Consulter** pour ouvrir l’emploi du temps complet ou touchez une séance pour ouvrir sa classe. La **classe choisie** reste indépendante du programme : pendant une séance, l’appel et l’évaluation continue ciblent la classe en cours ; hors séance, ils utilisent la classe choisie. Si aucun cours n’est prévu aujourd’hui pour cette classe, le raccourci d’appel propose d’ouvrir l’emploi du temps. La section **Aperçus** ouvre les aperçus des présences et absences datées, des résultats continus pour le trimestre actif, ou de l’emploi du temps hebdomadaire de l’année active. Les bilans et statistiques sont accessibles depuis le tableau de bord et **Plus → Bilans**. Appuyez sur **Mode complet** sur l’accueil, ou désactivez le commutateur dans les paramètres, pour revenir au tableau de bord détaillé. Le choix est mémorisé sur l’appareil.
 
 ## Créer une classe et ajouter des élèves
 
@@ -79,10 +79,12 @@ Le test initial sert à repérer les acquis de départ. Les compétences disponi
 
 ## Suivre les évaluations par trimestre
 
-Dans **Saisie**, ouvrez **Périodes et tests de niveau initial**, choisissez l’année scolaire, puis la période à consulter. Les résultats sont conservés séparément pour chaque période.
+Le trimestre utilisé par défaut se choisit à un seul endroit : ouvrez **Plus → Paramètres de l’application → Trimestre en cours**, pour l’année de la classe active. Ce choix s’applique aux écrans de suivi et au tableau de bord.
+
+Pour gérer les périodes, ouvrez **Saisie → Périodes et tests de niveau initial**, puis choisissez l’année scolaire.
 
 - Utilisez **Ajouter une période** pour créer un trimestre avec son nom, sa date de début et sa date de fin.
-- Sélectionnez une période pour la rendre active.
+- Modifiez ou supprimez les périodes depuis cette page; le trimestre actif se change dans les paramètres.
 - Ouvrez la classe concernée et utilisez les champs de suivi continu pour saisir les notes de cahier et de participation.
 - Les données de discipline et d’absence alimentent aussi le suivi et les statistiques.
 
@@ -95,7 +97,7 @@ Deux raccourcis sont disponibles :
 - Depuis **Accueil**, ouvrir l’action d’appel de la séance en cours lorsqu’elle est affichée.
 - Ouvrir **Classes**, choisir la classe, puis **Présences / Appel**.
 
-Choisissez la date et la séance programmée. Indiquez **présent** ou **absent** pour chaque élève, puis enregistrez l’appel. Un appel incomplet ou une date future ne peut pas être enregistré. La page d’appel permet également d’exporter un PDF.
+Choisissez la date et la séance programmée. Indiquez **présent** ou **absent** pour chaque élève, puis enregistrez l’appel. Un appel incomplet ou une date future ne peut pas être enregistré. Le bouton **Aperçu** ouvre le document avant son enregistrement ou son impression.
 
 ## Gérer l’emploi du temps
 
@@ -104,7 +106,7 @@ Choisissez la date et la séance programmée. Indiquez **présent** ou **absent*
 3. Ajouter ou modifier une séance récurrente en choisissant le jour, les heures et la classe.
 4. Ouvrir une occurrence pour l’annuler avec un motif, ou la reporter à une autre date, heure ou classe.
 5. Utiliser l’action de séance ponctuelle pour ajouter un cours exceptionnel.
-6. Appuyer sur **Exporter PDF** pour partager ou imprimer le planning.
+6. Appuyer sur **Aperçu** pour vérifier le planning, puis l’enregistrer ou l’imprimer.
 
 Une séance récurrente décrit le créneau habituel; une annulation ou un report modifie uniquement l’occurrence concernée, pas les semaines suivantes.
 
@@ -127,7 +129,7 @@ Le plan et le suivi sont conservés localement avec les sauvegardes de l’appli
 
 ## Consulter les statistiques et exporter
 
-1. Ouvrir **Bilans → Statistiques**.
+1. Ouvrir **Plus → Bilans → Statistiques**, ou utiliser le raccourci du tableau de bord.
 2. Choisir une classe, une période, un élève, un critère/compétence et un type d’évaluation.
 3. Replier ou déplier la zone des critères si nécessaire.
 4. Lire les résultats filtrés, puis appuyer sur **Exporter les résultats (CSV)** pour les exploiter dans un tableur.
@@ -136,7 +138,7 @@ Pour obtenir un document lié à une évaluation précise, ouvrez cette évaluat
 
 ### Imprimer un bilan trimestriel
 
-1. Ouvrir **Bilans → Bilans trimestriels**.
+1. Ouvrir **Plus → Bilans → Bilans trimestriels**, ou utiliser le raccourci du tableau de bord.
 2. Choisir la classe et le trimestre.
 3. Choisir **Toute la classe** pour produire un document avec un bilan par élève, ou sélectionner un élève pour son bilan individuel.
 4. Appuyer sur **Aperçu du bilan** pour vérifier le document, puis utiliser l’action de téléchargement/impression dans l’aperçu.
@@ -154,9 +156,11 @@ Une seule année est active à la fois. L’année source et ses résultats sont
 
 ## Gérer les documents pédagogiques
 
-Ouvrir **Plus → Documents pédagogiques** pour consulter la bibliothèque de PDF de l’application. Touchez un document pour le prévisualiser dans l’application; l’action de téléchargement/partage permet de l’enregistrer ailleurs ou de le transmettre. Depuis l’espace de stockage, il est aussi possible d’ajouter un PDF, de le rechercher, de le renommer, de le supprimer ou de le restaurer depuis la corbeille.
+Ouvrir **Documents** dans la barre de navigation (également disponible dans **Plus → Documents pédagogiques**) pour consulter la bibliothèque de documents de l’application. **Ajouter des documents** permet d’importer un ou plusieurs PDF, images ou vidéos (jusqu’à 200 Mo par fichier). Touchez un document pour le prévisualiser dans l’application. Son action de partage propose les options du téléphone (Bluetooth, Quick Share, AirDrop ou autres options disponibles) et un **QR code Wi-Fi** pour un transfert local sans Internet.
 
-Cette bibliothèque est actuellement personnelle et stockée sur l’appareil; elle n’est pas synchronisée avec les autres utilisateurs.
+Pour le transfert par QR, les deux téléphones doivent être connectés au même réseau Wi-Fi de confiance et le téléphone émetteur doit garder l’écran de partage ouvert. Toute personne qui scanne le QR peut télécharger le document. Le fichier est servi temporairement depuis l’appareil, le QR expire après 10 minutes et la fermeture de l’écran arrête immédiatement le partage. Aucun fichier n’est envoyé sur Internet. Le transfert QR est disponible dans les versions Android et iOS de l’application, après recompilation native; la version Web conserve le partage du navigateur mais ne peut pas héberger ce serveur local.
+
+La bibliothèque reste stockée sur l’appareil et n’est pas synchronisée automatiquement avec les autres utilisateurs.
 
 ## Configurer, sauvegarder et protéger les données
 
@@ -182,4 +186,4 @@ N’utilisez pas ces actions sur vos données réelles sans avoir vérifié la c
 
 ## Fonctionnalités qui ne sont pas encore disponibles
 
-La bibliothèque de documents pédagogiques reste personnelle et stockée sur l’appareil; elle n’est pas synchronisée ni partagée entre utilisateurs. L’application ne dispose pas non plus de comptes enseignants et de synchronisation cloud.
+La bibliothèque de documents pédagogiques reste stockée sur l’appareil et n’est pas synchronisée automatiquement avec les autres utilisateurs. Le transfert manuel par Bluetooth/partage système ou QR Wi-Fi est disponible. L’application ne dispose pas de comptes enseignants ni de synchronisation cloud.

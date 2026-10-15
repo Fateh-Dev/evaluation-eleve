@@ -24,9 +24,6 @@ export default function PupilDetailScreen() {
   const pupilClass = data.classes.find(
     (classItem) => classItem.id === pupil?.classId,
   );
-  const continuousPeriods = pupilClass
-    ? data.getContinuousEvaluationPeriods(pupilClass.academicYear)
-    : [];
   const activeEvaluationPeriod = pupilClass
     ? data.getActiveContinuousEvaluationPeriod(pupilClass.academicYear)
     : undefined;
@@ -227,34 +224,9 @@ export default function PupilDetailScreen() {
       </Surface>
       <SectionTitle
         title={`Évaluation continue${activeEvaluationPeriod ? ` · ${activeEvaluationPeriod.name}` : ''}`}
-        action="Périodes"
-        onAction={() => router.push('/continuous')}
+        action="Paramètres"
+        onAction={() => router.push('/settings')}
       />
-      <View style={styles.periodSelector}>
-        {continuousPeriods.map((period) => (
-          <Pressable
-            key={period.id}
-            accessibilityRole="button"
-            accessibilityState={{ selected: period.id === activeEvaluationPeriod?.id }}
-            onPress={() => pupilClass && data.setActiveContinuousEvaluationPeriod(pupilClass.academicYear, period.id)}
-            style={[
-              styles.periodChip,
-              {
-                backgroundColor: period.id === activeEvaluationPeriod?.id ? colors.primary : colors.card,
-                borderColor: period.id === activeEvaluationPeriod?.id ? colors.primary : colors.border,
-              },
-            ]}
-          >
-            <Text style={{
-              color: period.id === activeEvaluationPeriod?.id ? colors.primaryForeground : colors.foreground,
-              fontSize: 12,
-              fontWeight: '700',
-            }}>
-              {period.name}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
       <Surface style={[styles.continuousCard, { borderColor: colors.border }]}>
         <View style={styles.scoreRow}>
           <Text style={[styles.scoreLabel, { color: colors.foreground }]}>Cahier</Text>
@@ -471,7 +443,6 @@ export default function PupilDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  periodSelector: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginTop: -6, marginBottom: 8 },
   periodChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
   profile: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, marginBottom: 4 },
   profileCopy: { flex: 1, minWidth: 0 },

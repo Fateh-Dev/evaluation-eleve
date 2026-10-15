@@ -544,6 +544,46 @@ function DiagnosticPrerequisiteTasks({
   );
 }
 
+function DashboardReportsShortcuts() {
+  const colors = useColors();
+  const destinations = [
+    {
+      title: "Bilans trimestriels",
+      icon: "file-text" as const,
+      route: "/student-reports" as const,
+    },
+    {
+      title: "Statistiques",
+      icon: "bar-chart-2" as const,
+      route: "/statistics" as const,
+    },
+  ];
+
+  return (
+    <>
+      <SectionTitle title="Bilans et statistiques" />
+      <View style={styles.quickGrid}>
+        {destinations.map((destination) => (
+          <Pressable
+            key={destination.route}
+            accessibilityRole="button"
+            onPress={() => router.push(destination.route)}
+            style={[
+              styles.quickCard,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
+          >
+            <Feather name={destination.icon} size={22} color={colors.primary} />
+            <Text style={[styles.quickTitle, { color: colors.foreground }]}>
+              {destination.title}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+    </>
+  );
+}
+
 export default function DashboardScreen() {
   const colors = useColors();
   const data = useAppData();
@@ -969,21 +1009,21 @@ export default function DashboardScreen() {
   const dailyOutputActions = [
     {
       kind: "absences" as const,
-      title: "Absences",
-      accessibilityLabel: `Imprimer les absences · ${dailyPeriod?.name ?? "année"}`,
-      icon: "user-x" as const,
+      title: "Aperçu des absences",
+      accessibilityLabel: `Prévisualiser les absences · ${dailyPeriod?.name ?? "année"}`,
+      icon: "eye" as const,
     },
     {
       kind: "continuous" as const,
-      title: "Évaluations",
-      accessibilityLabel: "Imprimer les résultats d’évaluation continue",
-      icon: "check-square" as const,
+      title: "Aperçu des évaluations",
+      accessibilityLabel: "Prévisualiser les résultats d’évaluation continue",
+      icon: "eye" as const,
     },
     {
       kind: "schedule" as const,
-      title: "Planning",
-      accessibilityLabel: "Imprimer l’emploi du temps",
-      icon: "calendar" as const,
+      title: "Aperçu du planning",
+      accessibilityLabel: "Prévisualiser l’emploi du temps",
+      icon: "eye" as const,
     },
   ];
 
@@ -1039,72 +1079,6 @@ export default function DashboardScreen() {
                 {activeClass.name}.
               </Text>
             ) : null}
-            <View style={styles.periodBar}>
-              <ScrollView
-                style={styles.periodScroll}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.periodChoices}
-              >
-                {dailyClass &&
-                  data
-                    .getContinuousEvaluationPeriods(dailyClass.academicYear)
-                    .map((period) => {
-                      const selected = period.id === dailyPeriod?.id;
-                      return (
-                        <Pressable
-                          key={period.id}
-                          accessibilityRole="button"
-                          accessibilityState={{ selected }}
-                          onPress={() =>
-                            data.setActiveContinuousEvaluationPeriod(
-                              dailyClass.academicYear,
-                              period.id,
-                            )
-                          }
-                          style={[
-                            styles.periodChip,
-                            {
-                              backgroundColor: selected
-                                ? colors.primary
-                                : colors.card,
-                              borderColor: selected
-                                ? colors.primary
-                                : colors.border,
-                            },
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.periodChipText,
-                              {
-                                color: selected
-                                  ? colors.primaryForeground
-                                  : colors.foreground,
-                              },
-                            ]}
-                          >
-                            {period.name}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => router.push("/continuous")}
-                  style={[
-                    styles.managePeriodsChip,
-                    { borderColor: colors.border },
-                  ]}
-                >
-                  <Feather
-                    name="settings"
-                    size={14}
-                    color={colors.mutedForeground}
-                  />
-                </Pressable>
-              </ScrollView>
-            </View>
             <SectionTitle title="Actions rapides" />
             <Surface style={styles.dailyCard}>
               <Pressable
@@ -1198,7 +1172,7 @@ export default function DashboardScreen() {
                 />
               </Pressable>
             </Surface>
-            <SectionTitle title="États de sortie" />
+            <SectionTitle title="Aperçus" />
             <View style={styles.outputGrid}>
               {dailyOutputActions.map((action) => {
                 const isExporting = exportingDailyOutput === action.kind;
@@ -1457,6 +1431,7 @@ export default function DashboardScreen() {
             />
           </Surface>
         )}
+        <DashboardReportsShortcuts />
         <View style={styles.dailyFooter}>
           <Button
             label="Mode complet"
@@ -1509,71 +1484,6 @@ export default function DashboardScreen() {
               color={colors.mutedForeground}
             />
           </Pressable>
-          <View style={styles.periodBar}>
-            <ScrollView
-              style={styles.periodScroll}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.periodChoices}
-            >
-              {data
-                .getContinuousEvaluationPeriods(activeClass!.academicYear)
-                .map((period) => {
-                  const selected = period.id === activeEvaluationPeriod?.id;
-                  return (
-                    <Pressable
-                      key={period.id}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected }}
-                      onPress={() =>
-                        data.setActiveContinuousEvaluationPeriod(
-                          activeClass!.academicYear,
-                          period.id,
-                        )
-                      }
-                      style={[
-                        styles.periodChip,
-                        {
-                          backgroundColor: selected
-                            ? colors.primary
-                            : colors.card,
-                          borderColor: selected
-                            ? colors.primary
-                            : colors.border,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.periodChipText,
-                          {
-                            color: selected
-                              ? colors.primaryForeground
-                              : colors.foreground,
-                          },
-                        ]}
-                      >
-                        {period.name}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => router.push("/continuous")}
-                style={[
-                  styles.managePeriodsChip,
-                  { borderColor: colors.border },
-                ]}
-              >
-                <Feather
-                  name="settings"
-                  size={14}
-                  color={colors.mutedForeground}
-                />
-              </Pressable>
-            </ScrollView>
-          </View>
         </>
       ) : null}
       {hasClasses ? (
@@ -2087,6 +1997,7 @@ export default function DashboardScreen() {
           </Text>
         </Pressable>
       </View>
+      <DashboardReportsShortcuts />
       <Modal
         visible={classPickerVisible}
         transparent
@@ -2223,8 +2134,6 @@ const styles = StyleSheet.create({
   },
   contextTitle: { flexShrink: 1, minWidth: 0, fontSize: 14, fontWeight: "800" },
   contextMeta: { flexShrink: 0, fontSize: 10, lineHeight: 14 },
-  periodBar: { flexDirection: "row", alignItems: "center", marginTop: 6 },
-  periodScroll: { flex: 1, minWidth: 0 },
   dailyCard: { gap: 10, padding: 14 },
   outputGrid: {
     flexDirection: "row",
@@ -2310,23 +2219,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   dailyFooter: { marginTop: 18, marginBottom: 12 },
-  periodChoices: { alignItems: "center", gap: 5, paddingRight: 4 },
-  periodChip: {
-    minHeight: 30,
-    borderWidth: 1,
-    borderRadius: 999,
-    justifyContent: "center",
-    paddingHorizontal: 9,
-  },
-  periodChipText: { fontSize: 10, fontWeight: "700" },
-  managePeriodsChip: {
-    width: 30,
-    height: 30,
-    borderWidth: 1,
-    borderRadius: 999,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   pickerBackdrop: {
     flex: 1,
     justifyContent: "center",

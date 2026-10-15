@@ -29,9 +29,9 @@ function NativeTabLayout() {
         <NativeTabs.Trigger.Icon sf={{ default: 'square.and.pencil', selected: 'square.and.pencil' }} />
         <NativeTabs.Trigger.Label>Saisie</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="reports">
-        <NativeTabs.Trigger.Icon sf={{ default: 'chart.bar', selected: 'chart.bar.fill' }} />
-        <NativeTabs.Trigger.Label>Bilans</NativeTabs.Trigger.Label>
+      <NativeTabs.Trigger name="storage">
+        <NativeTabs.Trigger.Icon sf={{ default: 'doc.text', selected: 'doc.text.fill' }} />
+        <NativeTabs.Trigger.Label>Documents</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="more">
         <NativeTabs.Trigger.Icon sf={{ default: 'ellipsis', selected: 'ellipsis' }} />
@@ -40,7 +40,7 @@ function NativeTabLayout() {
       <NativeTabs.Trigger name="continuous" hidden />
       <NativeTabs.Trigger name="pupils" hidden />
       <NativeTabs.Trigger name="assessments" hidden />
-      <NativeTabs.Trigger name="storage" hidden />
+      <NativeTabs.Trigger name="reports" hidden />
       <NativeTabs.Trigger name="settings" hidden />
     </NativeTabs>
   );
@@ -105,8 +105,8 @@ function ClassicTabLayout() {
         options={{ title: 'Saisie', tabBarIcon: ({ color }) => <Feather name="edit-3" size={22} color={color} /> }}
       />
       <Tabs.Screen
-        name="reports"
-        options={{ title: 'Bilans', tabBarIcon: ({ color }) => <Feather name="bar-chart-2" size={22} color={color} /> }}
+        name="storage"
+        options={{ title: 'Documents', tabBarIcon: ({ color }) => <Feather name="file-text" size={22} color={color} /> }}
       />
       <Tabs.Screen
         name="more"
@@ -125,7 +125,7 @@ function ClassicTabLayout() {
         options={{ href: null }}
       />
       <Tabs.Screen
-        name="storage"
+        name="reports"
         options={{ href: null }}
       />
       <Tabs.Screen

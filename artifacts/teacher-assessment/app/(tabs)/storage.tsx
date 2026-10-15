@@ -2,8 +2,10 @@ import { Alert } from "@/components/AppDialog";
 import { Feather } from "@expo/vector-icons";
 import React, { useMemo, useState } from "react";
 import { PdfPreviewModal } from "@/components/PdfPreviewModal";
+import { LocalDocumentShareModal } from "@/components/LocalDocumentShareModal";
 import {
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -19,7 +21,8 @@ import {
   Surface,
 } from "@/components/AppShell";
 import { useColors } from "@/hooks/useColors";
-import { useStorage, type StorageFolder, type StoredPdf } from "@/context/StorageContext";
+import { useStorage, type StorageFolder, type StoredDocument } from "@/context/StorageContext";
+import { getDocumentMediaType } from "@/services/documentMedia";
 import { useListSelection } from "@/hooks/useListSelection";
 
 function formatSize(size?: number) {
@@ -43,12 +46,13 @@ export default function StorageScreen() {
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [folderModalVisible, setFolderModalVisible] = useState(false);
   const [folderName, setFolderName] = useState("");
-  const [moveTarget, setMoveTarget] = useState<StoredPdf | null>(null);
+  const [moveTarget, setMoveTarget] = useState<StoredDocument | null>(null);
   const [moveFolderId, setMoveFolderId] = useState<string | null>(null);
   const [renameTarget, setRenameTarget] = useState<string | null>(null);
   const [renameInput, setRenameInput] = useState("");
   const [emptyingTrash, setEmptyingTrash] = useState(false);
-  const [previewFile, setPreviewFile] = useState<StoredPdf | null>(null);
+  const [previewFile, setPreviewFile] = useState<StoredDocument | null>(null);
+  const [qrShareFile, setQrShareFile] = useState<StoredDocument | null>(null);
   const visibleFolders = useMemo(
     () => storage.folders.filter((folder) => folder.parentId === currentFolderId),
     [currentFolderId, storage.folders],
@@ -104,15 +108,39 @@ export default function StorageScreen() {
 
   const handleUpload = async () => {
     try {
-      await storage.uploadPdf(currentFolderId);
+      await storage.uploadDocuments(currentFolderId);
     } catch (error) {
       Alert.alert(
         "Import impossible",
         error instanceof Error
           ? error.message
-          : "Le fichier PDF n’a pas pu être ajouté au stockage.",
+          : "Le document n’a pas pu être ajouté au stockage.",
       );
     }
+  };
+  const handleShare = (file: StoredDocument) => {
+    const buttons = [
+      {
+        text: "Partage du téléphone (Bluetooth / Quick Share / AirDrop)",
+        onPress: () => {
+          void storage.openDocument(file).catch((error) => {
+            Alert.alert(
+              "Partage impossible",
+              error instanceof Error ? error.message : "Le document n’a pas pu être partagé.",
+            );
+          });
+        },
+      },
+      ...(Platform.OS === "web"
+        ? []
+        : [{ text: "QR code (même Wi-Fi)", onPress: () => setQrShareFile(file) }]),
+      { text: "Annuler", style: "cancel" as const },
+    ];
+    Alert.alert(
+      "Partager le document",
+      "Choisissez le partage du téléphone ou un transfert local par QR code.",
+      buttons,
+    );
   };
   const saveFolder = async () => {
     try {
@@ -130,7 +158,7 @@ export default function StorageScreen() {
     if (hasFiles || hasFolders || hasTrashedFiles) {
       Alert.alert(
         "Dossier non vide",
-        "Déplacez les PDF et sous-dossiers qu’il contient. Restaurez ou supprimez définitivement les PDF qui se trouvent dans la corbeille.",
+        "Déplacez les documents et sous-dossiers qu’il contient. Restaurez ou supprimez définitivement les éléments qui se trouvent dans la corbeille.",
       );
       return;
     }
@@ -157,17 +185,17 @@ export default function StorageScreen() {
   const saveMove = async () => {
     if (!moveTarget) return;
     try {
-      await storage.movePdfToFolder(moveTarget.id, moveFolderId);
+      await storage.moveDocumentToFolder(moveTarget.id, moveFolderId);
       setMoveTarget(null);
     } catch (error) {
-      Alert.alert("Déplacement impossible", error instanceof Error ? error.message : "Le PDF n’a pas pu être déplacé.");
+      Alert.alert("Déplacement impossible", error instanceof Error ? error.message : "Le document n’a pas pu être déplacé.");
     }
   };
   const handleDeleteSelectedFiles = () => {
     const selected = storage.files.filter((file) => selection.selectedIds.includes(file.id));
     if (selected.length === 0) return;
     Alert.alert(
-      "Supprimer les PDF sélectionnés ?",
+      "Supprimer les documents sélectionnés ?",
       `${selected.length} document${selected.length > 1 ? "s" : ""} sera${selected.length > 1 ? "ont" : ""} déplacé${selected.length > 1 ? "s" : ""} dans la corbeille.`,
       [
         { text: "Annuler", style: "cancel" },
@@ -175,7 +203,7 @@ export default function StorageScreen() {
           text: "Supprimer",
           style: "destructive",
           onPress: () => {
-            selected.forEach((file) => { void storage.deletePdf(file); });
+            selected.forEach((file) => { void storage.deleteDocument(file); });
             selection.cancelSelection();
           },
         },
@@ -186,7 +214,7 @@ export default function StorageScreen() {
     const file = storage.files.find((item) => item.id === renameTarget);
     if (!file || !renameInput.trim()) return;
     try {
-      await storage.renamePdf(file, renameInput);
+      await storage.renameDocument(file, renameInput);
       setRenameTarget(null);
     } catch (error) {
       Alert.alert(
@@ -214,7 +242,7 @@ export default function StorageScreen() {
             </Pressable>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Supprimer les PDF sélectionnés"
+              accessibilityLabel="Supprimer les documents sélectionnés"
               accessibilityState={{ disabled: selection.selectedIds.length === 0 }}
               disabled={selection.selectedIds.length === 0}
               onPress={handleDeleteSelectedFiles}
@@ -230,22 +258,22 @@ export default function StorageScreen() {
         </View>
       ) : null}
     >
-      <AppHeader eyebrow="Documents de l’enseignant" title="Stockage" />
+      <AppHeader eyebrow="Documents de l’enseignant" title="Documents" />
       <Surface style={styles.hero}>
         <View style={[styles.heroIcon, { backgroundColor: colors.accent }]}>
           <Feather name="folder" size={25} color={colors.primary} />
         </View>
         <View style={styles.heroCopy}>
           <Text style={[styles.heroTitle, { color: colors.foreground }]}>
-            Ma bibliothèque PDF
+            Ma bibliothèque de documents
           </Text>
           <Text style={[styles.heroText, { color: colors.mutedForeground }]}>
-            Ajoutez vos cours, fiches et documents pédagogiques pour les
-            retrouver rapidement hors connexion.
+            Ajoutez vos PDF, images et vidéos pédagogiques pour les retrouver
+            rapidement hors connexion. Maximum 200 Mo par fichier.
           </Text>
         </View>
         <Button
-          label="Ajouter des PDF"
+          label="Ajouter des documents"
           icon="upload"
           compact
           onPress={() => {
@@ -308,7 +336,7 @@ export default function StorageScreen() {
         <TextInput
           value={query}
           onChangeText={setQuery}
-          placeholder="Rechercher un document PDF…"
+          placeholder="Rechercher un document…"
           placeholderTextColor={colors.mutedForeground}
           style={[styles.searchInput, { color: colors.foreground }]}
           returnKeyType="search"
@@ -348,7 +376,7 @@ export default function StorageScreen() {
           {storage.files.length > 0 && !selection.isSelecting ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Sélectionner des PDF"
+              accessibilityLabel="Sélectionner des documents"
               onPress={() => selection.startSelecting()}
               style={[styles.compactIconControl, { backgroundColor: colors.card, borderColor: colors.border }]}
             >
@@ -388,11 +416,11 @@ export default function StorageScreen() {
           <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
             {query
               ? "Essayez un autre nom de fichier."
-              : "Ajoutez un PDF ou créez un dossier pour organiser vos documents pédagogiques."}
+            : "Ajoutez un PDF, une image ou une vidéo, ou créez un dossier pour organiser vos ressources pédagogiques."}
           </Text>
           {!query ? (
             <Button
-              label="Ajouter des PDF"
+              label="Ajouter des documents"
               compact
               icon="plus"
               onPress={() => {
@@ -422,7 +450,7 @@ export default function StorageScreen() {
                   <View style={styles.fileCopy}>
                     <Text numberOfLines={2} style={[styles.fileName, { color: colors.foreground }]}>{folder.name}</Text>
                     <Text style={[styles.fileMeta, { color: colors.mutedForeground }]}>
-                      {childCount} PDF · {nestedCount} dossier{nestedCount === 1 ? "" : "s"}
+                      {childCount} document{childCount === 1 ? "" : "s"} · {nestedCount} dossier{nestedCount === 1 ? "" : "s"}
                     </Text>
                   </View>
                 </Pressable>
@@ -438,7 +466,9 @@ export default function StorageScreen() {
               </Surface>
             );
           })}
-          {filteredFiles.map((file) => (
+          {filteredFiles.map((file) => {
+            const mediaType = getDocumentMediaType(file.name, file.mimeType);
+            return (
             <Surface
               key={file.id}
               style={[
@@ -455,13 +485,13 @@ export default function StorageScreen() {
                 style={[
                   styles.fileIcon,
                   viewMode === "grid" && styles.fileGridIcon,
-                  { backgroundColor: colors.errorSurface },
+                  { backgroundColor: colors.accent },
                 ]}
               >
                 <Feather
-                  name="file-text"
+                  name={mediaType === "image" ? "image" : mediaType === "video" ? "video" : "file-text"}
                   size={21}
-                  color={colors.errorForeground}
+                  color={colors.primary}
                 />
               </View>
               <View style={[styles.fileCopy, viewMode === "grid" && styles.fileGridCopy]}>
@@ -470,7 +500,7 @@ export default function StorageScreen() {
                   onPress={() => {
                     if (selection.isSelecting) selection.toggleSelection(file.id);
                   }}
-                  accessibilityHint={selection.isSelecting ? 'Touchez pour sélectionner ce PDF.' : undefined}
+                  accessibilityHint={selection.isSelecting ? 'Touchez pour sélectionner ce document.' : undefined}
                 >
                   <Text numberOfLines={2} style={[styles.fileName, { color: colors.foreground }]}>{file.name}</Text>
                 </Pressable>
@@ -478,6 +508,7 @@ export default function StorageScreen() {
                   style={[styles.fileMeta, { color: colors.mutedForeground }]}
                 >
                   {formatSize(file.size)} ·{" "}
+                  {mediaType === "pdf" ? "PDF" : mediaType === "image" ? "Image" : "Vidéo"} ·{" "}
                   {new Date(file.createdAt).toLocaleDateString("fr-FR")}
                 </Text>
               </View>
@@ -486,17 +517,27 @@ export default function StorageScreen() {
               ) : (
                 <View style={[styles.fileActions, viewMode === "grid" && styles.fileGridActions]}>
                   <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Prévisualiser ${file.name}`}
                     onPress={() => setPreviewFile(file)}
-                    style={[styles.action, { backgroundColor: colors.accent }]}
+                    style={[styles.action, viewMode === "grid" && styles.gridAction, { backgroundColor: colors.accent }]}
                   >
                     <Feather name="eye" size={17} color={colors.primary} />
                   </Pressable>
                   <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Partager ${file.name}`}
+                    onPress={() => handleShare(file)}
+                    style={[styles.action, viewMode === "grid" && styles.gridAction, { backgroundColor: colors.accent }]}
+                  >
+                    <Feather name="share-2" size={16} color={colors.primary} />
+                  </Pressable>
+                  <Pressable
                     onPress={() => {
                       setRenameTarget(file.id);
-                      setRenameInput(file.name.replace(/\.pdf$/i, ""));
+                      setRenameInput(file.name.replace(/\.[^.]+$/, ""));
                     }}
-                    style={[styles.action, { backgroundColor: colors.secondary }]}
+                    style={[styles.action, viewMode === "grid" && styles.gridAction, { backgroundColor: colors.secondary }]}
                   >
                     <Feather name="edit-2" size={16} color={colors.foreground} />
                   </Pressable>
@@ -507,14 +548,14 @@ export default function StorageScreen() {
                       setMoveFolderId(file.folderId ?? null);
                       setMoveTarget(file);
                     }}
-                    style={[styles.action, { backgroundColor: colors.secondary }]}
+                    style={[styles.action, viewMode === "grid" && styles.gridAction, { backgroundColor: colors.secondary }]}
                   >
                     <Feather name="folder" size={16} color={colors.foreground} />
                   </Pressable>
                 </View>
               )}
             </Surface>
-          ))}
+          );})}
         </View>
       )}
       {storage.trash.length > 0 ? (
@@ -574,7 +615,7 @@ export default function StorageScreen() {
               <Pressable
                 onPress={() => {
                   void storage
-                    .restorePdf(file)
+                    .restoreDocument(file)
                     .catch((error) =>
                       Alert.alert(
                         "Restauration impossible",
@@ -636,7 +677,7 @@ export default function StorageScreen() {
         <KeyboardAvoidingViewCompat style={styles.modalBackdrop}>
           <Surface style={styles.renameModal}>
             <Text style={[styles.renameTitle, { color: colors.foreground }]}>
-              Déplacer le PDF
+              Déplacer le document
             </Text>
             <View style={styles.destinationList}>
               <Pressable
@@ -683,7 +724,7 @@ export default function StorageScreen() {
         <KeyboardAvoidingViewCompat style={styles.modalBackdrop}>
           <Surface style={styles.renameModal}>
             <Text style={[styles.renameTitle, { color: colors.foreground }]}>
-              Renommer le PDF
+              Renommer le document
             </Text>
             <TextInput
               value={renameInput}
@@ -722,8 +763,14 @@ export default function StorageScreen() {
         visible={previewFile !== null}
         title={previewFile?.name ?? "Document pédagogique"}
         uri={previewFile?.uri}
+        mimeType={previewFile?.mimeType}
         filename={previewFile?.name ?? "document.pdf"}
         onClose={() => setPreviewFile(null)}
+      />
+      <LocalDocumentShareModal
+        visible={qrShareFile !== null}
+        file={qrShareFile}
+        onClose={() => setQrShareFile(null)}
       />
     </Screen>
   );
@@ -791,7 +838,7 @@ const styles = StyleSheet.create({
   fileCard: { flexDirection: "row", alignItems: "center", gap: 8, padding: 13 },
   fileGridCard: { width: "48%", minHeight: 160, flexDirection: "column", alignItems: "stretch", justifyContent: "space-between", gap: 10 },
   fileActions: { flexDirection: "row", alignItems: "center", gap: 8 },
-  fileGridActions: { justifyContent: "flex-start" },
+  fileGridActions: { justifyContent: "flex-start", flexWrap: "wrap", gap: 6 },
   fileGridIcon: { alignSelf: "flex-start" },
   fileGridCopy: { width: "100%", minHeight: 44 },
   selectionDock: {
@@ -840,6 +887,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  gridAction: { width: 30, height: 30 },
   empty: {
     alignItems: "center",
     gap: 10,

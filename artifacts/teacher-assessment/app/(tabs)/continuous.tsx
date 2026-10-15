@@ -133,7 +133,7 @@ export default function ContinuousEvaluationScreen() {
       </Surface>
       <SectionTitle title="Évaluation continue" />
       <Text style={[styles.sectionHint, { color: colors.mutedForeground }]}>
-        Choisissez le trimestre pour consulter ou saisir les notes. Chaque période conserve ses propres résultats.
+        Le trimestre en cours se choisit dans Paramètres. Gérez ici les périodes de chaque année.
       </Text>
       <SectionTitle title="Périodes d’évaluation" action="+ Ajouter" onAction={() => openPeriodEditor()} />
       {years.length > 1 ? (
@@ -165,10 +165,7 @@ export default function ContinuousEvaluationScreen() {
             const selected = period.id === activePeriod?.id;
             return (
               <View key={period.id} style={styles.periodRow}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityState={{ selected }}
-                  onPress={() => data.setActiveContinuousEvaluationPeriod(selectedYear, period.id)}
+                <View
                   style={[
                     styles.periodChoice,
                     {
@@ -188,7 +185,7 @@ export default function ContinuousEvaluationScreen() {
                       {period.startDate} – {period.endDate}
                     </Text>
                   </View>
-                </Pressable>
+                </View>
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={`Modifier ${period.name}`}

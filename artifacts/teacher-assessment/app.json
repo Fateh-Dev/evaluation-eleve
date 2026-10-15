@@ -9,7 +9,10 @@
     "scheme": "chaibeddra-evaluation",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSLocalNetworkUsageDescription": "Le réseau local sert uniquement à transférer temporairement un document vers un appareil qui scanne votre QR code."
+      }
     },
     "android": {
       "package": "com.fatehdev.teachercompetencyassessment",
@@ -48,7 +51,8 @@
       "expo-notifications",
       "@config-plugins/react-native-blob-util",
       "@config-plugins/react-native-pdf",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true,
