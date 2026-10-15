@@ -311,17 +311,17 @@ export default function NewAssessmentScreen() {
             ? 'Évaluation diagnostique'
             : isLevelTestFromClass
             ? 'Test de niveau initial'
-            : evaluationType === 'prerequisites' ? 'Test des prérequis' : 'Test de niveau'
+            : evaluationType === 'prerequisites' ? 'Test des prérequis' : 'Évaluation de compétence'
         }
         title={
           params.trainingSessionId
             ? 'Évaluer les prérequis'
             : isDiagnosticFromEntry
-            ? 'Créer l’évaluation diagnostique'
+            ? `Créer l'évaluation diagnostique`
             : isLevelTestFromClass
             ? (existingLevelTest ? 'Ajouter une compétence' : 'Créer le test initial')
             : existingLevelTest
-            ? 'Ajouter une évaluation'
+            ? 'Nouvelle évaluation de compétence'
             : 'Créer le test initial'
         }
         onBack={() => router.back()}
@@ -397,60 +397,20 @@ export default function NewAssessmentScreen() {
         )}
       </Surface>
 
-      <Surface style={styles.sectionCard}>
-        <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>
-          {params.trainingSessionId
-            ? '2. DIAGNOSTIC DES PRÉREQUIS'
-            : isDiagnosticFromEntry
-            ? '2. TYPE D’ÉVALUATION'
-            : '2. TYPE D’ÉVALUATION'}
-        </Text>
-        {params.trainingSessionId || isDiagnosticFromEntry ? (
+      {/* Type selector — only visible for diagnostic contexts */}
+      {(params.trainingSessionId || isDiagnosticFromEntry) && (
+        <Surface style={styles.sectionCard}>
+          <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>
+            {params.trainingSessionId ? '2. DIAGNOSTIC DES PRÉREQUIS' : '2. TYPE D\u2019\u00c9VALUATION'}
+          </Text>
           <Text style={[styles.typeChoiceDescription, { color: colors.mutedForeground }]}>
             {isDiagnosticFromEntry
-              ? `Type fixé : évaluation des prérequis. Choisissez la compétence et la date (passée ou aujourd'hui).`
-              : 'Choisissez une compétence configurée et renseignez les résultats de toute la classe sur ses prérequis.'}
+              ? `Type fix\u00e9\u00a0: \u00e9valuation des pr\u00e9requis. Choisissez la comp\u00e9tence et la date (pass\u00e9e ou aujourd'hui).`
+              : 'Choisissez une comp\u00e9tence configur\u00e9e et renseignez les r\u00e9sultats de toute la classe sur ses pr\u00e9requis.'}
           </Text>
-        ) : (
-          <View style={styles.typeChoices}>
-            {([
-              ['competency', 'Évaluation habituelle'],
-              ['prerequisites', 'Test des prérequis'],
-            ] as const).map(([type, label]) => {
-              const selected = evaluationType === type;
-              return (
-                <Pressable
-                  key={type}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected }}
-                  onPress={() => setEvaluationType(type)}
-                  style={[
-                    styles.typeChoice,
-                    {
-                      backgroundColor: selected ? colors.accent : colors.card,
-                      borderColor: selected ? colors.primary : colors.border,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.typeChoiceTitle,
-                      { color: selected ? colors.primary : colors.foreground },
-                    ]}
-                  >
-                    {label}
-                  </Text>
-                  <Text style={[styles.typeChoiceDescription, { color: colors.mutedForeground }]}>
-                    {type === 'prerequisites'
-                      ? 'Mesure les acquis déjà nécessaires pour cette compétence.'
-                      : 'Évalue les objectifs habituels de la compétence.'}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        )}
-      </Surface>
+        </Surface>
+      )}
+
 
       {/* Competencies configured for this school year and level */}
       <Surface
@@ -459,7 +419,7 @@ export default function NewAssessmentScreen() {
         guideDescription="Choisissez une compétence disponible pour le niveau et l’année scolaire de la classe."
       >
         <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>
-          3. COMPÉTENCES ASSOCIÉES À {selectedClass.level.toLocaleUpperCase()}
+          {(params.trainingSessionId || isDiagnosticFromEntry) ? '3' : '2'}. COMPÉTENCES ASSOCIÉES À {selectedClass.level.toLocaleUpperCase()}
         </Text>
         <Text style={[styles.templateCount, { color: colors.mutedForeground }]}>
           Année scolaire : {selectedClass.academicYear}. {evaluationType === 'prerequisites'
