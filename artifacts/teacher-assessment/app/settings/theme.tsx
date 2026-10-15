@@ -51,28 +51,15 @@ export default function ThemeSettingsScreen() {
                   <Text style={[styles.themeName, { color: colors.foreground }]}>
                     {option.label}
                   </Text>
-                  {selected && (
-                    <View
-                      style={[
-                        styles.selectedBadge,
-                        { backgroundColor: colors.primary },
-                      ]}
-                    >
+                  {selected ? (
+                    <View style={[styles.selectedMark, { backgroundColor: colors.primary }]}>
                       <Feather
                         name="check"
-                        size={11}
+                        size={10}
                         color={colors.primaryForeground}
                       />
-                      <Text
-                        style={[
-                          styles.selectedText,
-                          { color: colors.primaryForeground },
-                        ]}
-                      >
-                        Choisie
-                      </Text>
                     </View>
-                  )}
+                  ) : null}
                 </View>
                 <Text
                   style={[
@@ -89,7 +76,7 @@ export default function ThemeSettingsScreen() {
                     key={swatch}
                     style={[
                       styles.swatch,
-                      { backgroundColor: swatch, borderColor: colors.border },
+                      { backgroundColor: swatch },
                     ]}
                   />
                 ))}
@@ -113,30 +100,24 @@ const styles = StyleSheet.create({
   help: { fontSize: 12, lineHeight: 18, marginBottom: 14 },
   themeList: { gap: 9 },
   themeOption: {
-    minHeight: 74,
+    minHeight: 82,
     borderWidth: 1.5,
-    borderRadius: 14,
-    padding: 12,
+    borderRadius: 18,
+    paddingLeft: 16,
+    paddingRight: 0,
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'stretch',
     justifyContent: 'space-between',
-    gap: 10,
+    gap: 12,
+    overflow: 'hidden',
   },
-  themeCopy: { flex: 1, minWidth: 0, gap: 4 },
+  themeCopy: { flex: 1, minWidth: 0, gap: 5, justifyContent: 'center', paddingVertical: 12 },
   themeTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   themeName: { fontSize: 14, fontWeight: '800' },
   themeDescription: { fontSize: 11, lineHeight: 15 },
-  selectedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    borderRadius: 8,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-  },
-  selectedText: { fontSize: 9, fontWeight: '800' },
-  swatches: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  swatch: { width: 20, height: 20, borderRadius: 7, borderWidth: 1 },
+  selectedMark: { width: 17, height: 17, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  swatches: { width: 122, alignSelf: 'stretch', flexDirection: 'row' },
+  swatch: { flex: 1 },
   note: {
     flexDirection: 'row',
     alignItems: 'flex-start',

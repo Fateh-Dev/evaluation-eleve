@@ -3,50 +3,9 @@ import { Platform, StyleSheet, useColorScheme, View } from 'react-native';
 import { useColors } from '@/hooks/useColors';
 import { Feather } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { isLiquidGlassAvailable } from 'expo-glass-effect';
 import { Tabs } from 'expo-router';
-import { NativeTabs } from 'expo-router/unstable-native-tabs';
-import { SymbolView } from 'expo-symbols';
 
-// IMPORTANT: iOS 26 uses NativeTabs for native tabs with liquid glass support.
-// NativeTabs intentionally does NOT use custom design tokens — liquid glass
-// is a system-level appearance provided by iOS and cannot be overridden.
-// Custom brand colors are applied only on the ClassicTabLayout path (older iOS / Android / web).
-function NativeTabLayout() {
-  return (
-    <NativeTabs>
-      <NativeTabs.Trigger name="index">
-        <NativeTabs.Trigger.Icon
-          sf={{ default: 'house', selected: 'house.fill' }}
-        />
-        <NativeTabs.Trigger.Label>Accueil</NativeTabs.Trigger.Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="classes">
-        <NativeTabs.Trigger.Icon sf={{ default: 'person.2', selected: 'person.2.fill' }} />
-        <NativeTabs.Trigger.Label>Classes</NativeTabs.Trigger.Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="entry">
-        <NativeTabs.Trigger.Icon sf={{ default: 'square.and.pencil', selected: 'square.and.pencil' }} />
-        <NativeTabs.Trigger.Label>Saisie</NativeTabs.Trigger.Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="storage">
-        <NativeTabs.Trigger.Icon sf={{ default: 'doc.text', selected: 'doc.text.fill' }} />
-        <NativeTabs.Trigger.Label>Documents</NativeTabs.Trigger.Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="more">
-        <NativeTabs.Trigger.Icon sf={{ default: 'ellipsis', selected: 'ellipsis' }} />
-        <NativeTabs.Trigger.Label>Plus</NativeTabs.Trigger.Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="continuous" hidden />
-      <NativeTabs.Trigger name="pupils" hidden />
-      <NativeTabs.Trigger name="assessments" hidden />
-      <NativeTabs.Trigger name="reports" hidden />
-      <NativeTabs.Trigger name="settings" hidden />
-    </NativeTabs>
-  );
-}
-
-function ClassicTabLayout() {
+export default function TabLayout() {
   const colors = useColors();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
@@ -55,17 +14,31 @@ function ClassicTabLayout() {
 
   return (
     <Tabs
+      initialRouteName="index"
       screenOptions={{
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.mutedForeground,
         headerShown: false,
+        tabBarShowLabel: true,
+        tabBarLabelStyle: {
+          fontSize: 10,
+          fontWeight: '600',
+          marginTop: 1,
+        },
+        tabBarItemStyle: {
+          borderRadius: 14,
+          marginHorizontal: 4,
+          marginVertical: 6,
+          overflow: 'hidden',
+        },
         tabBarStyle: {
-          position: 'absolute',
           backgroundColor: isIOS ? 'transparent' : colors.background,
-          borderTopWidth: isWeb ? 1 : 0,
+          borderTopWidth: 1,
           borderTopColor: colors.border,
           elevation: 0,
-          ...(isWeb ? { height: 84 } : {}),
+          height: isWeb ? 72 : 68,
+          paddingTop: 3,
+          paddingBottom: isWeb ? 5 : 3,
         },
         tabBarBackground: () =>
           isIOS ? (
@@ -85,32 +58,51 @@ function ClassicTabLayout() {
       }}
     >
       <Tabs.Screen
+        name="classes"
+        options={{
+          title: 'Classes',
+          tabBarIcon: ({ color }) => <Feather name="users" size={21} color={color} />,
+          tabBarActiveBackgroundColor: colors.accent,
+        }}
+      />
+      <Tabs.Screen
+        name="entry"
+        options={{
+          title: 'Saisie',
+          tabBarActiveTintColor: colors.primaryForeground,
+          tabBarActiveBackgroundColor: colors.primary,
+          tabBarLabelStyle: {
+            fontSize: 10,
+            fontWeight: '700',
+            marginTop: 1,
+          },
+          tabBarIcon: ({ color }) => <Feather name="edit-3" size={21} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="index"
         options={{
           title: 'Accueil',
           tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="house" tintColor={color} size={24} />
-            ) : (
-              <Feather name="home" size={22} color={color} />
-            ),
+            <Feather name="home" size={21} color={color} />,
+          tabBarActiveBackgroundColor: colors.accent,
         }}
       />
       <Tabs.Screen
-        name="classes"
-        options={{ title: 'Classes', tabBarIcon: ({ color }) => <Feather name="users" size={22} color={color} /> }}
-      />
-      <Tabs.Screen
-        name="entry"
-        options={{ title: 'Saisie', tabBarIcon: ({ color }) => <Feather name="edit-3" size={22} color={color} /> }}
-      />
-      <Tabs.Screen
         name="storage"
-        options={{ title: 'Documents', tabBarIcon: ({ color }) => <Feather name="file-text" size={22} color={color} /> }}
+        options={{
+          title: 'Documents',
+          tabBarIcon: ({ color }) => <Feather name="file-text" size={21} color={color} />,
+          tabBarActiveBackgroundColor: colors.accent,
+        }}
       />
       <Tabs.Screen
         name="more"
-        options={{ title: 'Plus', tabBarIcon: ({ color }) => <Feather name="more-horizontal" size={22} color={color} /> }}
+        options={{
+          title: 'Plus',
+          tabBarIcon: ({ color }) => <Feather name="more-horizontal" size={21} color={color} />,
+          tabBarActiveBackgroundColor: colors.accent,
+        }}
       />
       <Tabs.Screen
         name="continuous"
@@ -134,11 +126,4 @@ function ClassicTabLayout() {
       />
     </Tabs>
   );
-}
-
-export default function TabLayout() {
-  if (isLiquidGlassAvailable()) {
-    return <NativeTabLayout />;
-  }
-  return <ClassicTabLayout />;
 }

@@ -312,6 +312,92 @@ function TrainingSessionControl({
                         trainingSessionId: session.id,
                       });
                       setPickerVisible(false);
+                      if (session.type !== "diagnostic") return;
+
+                      const studyObject = plan?.projects
+                        .flatMap((project) => project.studyObjects)
+                        .find(
+                          (item) => item.diagnostic?.id === session.id,
+                        );
+                      if (!studyObject) {
+                        Alert.alert(
+                          "Objet d’étude introuvable",
+                          "Cette séance diagnostique n’est associée à aucun objet d’étude dans le plan.",
+                        );
+                        return;
+                      }
+
+                      Alert.alert(
+                        "Voulez-vous évaluer cette classe ?",
+                        `Séance diagnostique : ${session.title}\nObjet d’étude : ${studyObject.title}`,
+                        [
+                          { text: "Non", style: "cancel" },
+                          {
+                            text: "Oui",
+                            onPress: () => {
+                              const existingAssessment = data
+                                .getAssessmentsForClass(classId)
+                                .find(
+                                  (assessment) =>
+                                    assessment.trainingSessionId === session.id &&
+                                    assessment.trainingStudyObjectId === studyObject.id &&
+                                    assessment.evaluationType === "prerequisites",
+                                );
+                              if (existingAssessment) {
+                                router.push(`/assessments/${existingAssessment.id}`);
+                                return;
+                              }
+
+                              const prerequisites = (studyObject.prerequisites ?? [])
+                                .map((item) => item.trim())
+                                .filter(Boolean);
+                              if (!prerequisites.length) {
+                                router.push({
+                                  pathname: "/assessments/diagnostic-prerequisites",
+                                  params: {
+                                    classId,
+                                    trainingSessionId: session.id,
+                                    trainingStudyObjectId: studyObject.id,
+                                  },
+                                });
+                                return;
+                              }
+
+                              const assessmentId = data.createAssessment({
+                                classId,
+                                trainingSessionId: session.id,
+                                trainingStudyObjectId: studyObject.id,
+                                competency: studyObject.title,
+                                evaluationType: "prerequisites",
+                                title: `${session.title} — ${studyObject.title}`,
+                                sessionObjectives: `Évaluation diagnostique des prérequis de l’objet d’étude « ${studyObject.title} ».`,
+                                objectives: prerequisites,
+                              });
+                              if (assessmentId) {
+                                router.push(`/assessments/${assessmentId}`);
+                                return;
+                              }
+
+                              const existing = data
+                                .getAssessmentsForClass(classId)
+                                .find(
+                                  (assessment) =>
+                                    assessment.trainingSessionId === session.id &&
+                                    assessment.trainingStudyObjectId === studyObject.id &&
+                                    assessment.evaluationType === "prerequisites",
+                                );
+                              if (existing) {
+                                router.push(`/assessments/${existing.id}`);
+                              } else {
+                                Alert.alert(
+                                  "Évaluation impossible",
+                                  "L’évaluation diagnostique n’a pas pu être créée. Vérifiez le plan et réessayez.",
+                                );
+                              }
+                            },
+                          },
+                        ],
+                      );
                     }}
                     style={[
                       styles.trainingChoice,
@@ -473,7 +559,19 @@ function DiagnosticPrerequisiteTasks({
         <Pressable
           accessibilityRole="button"
           onPress={() =>
-            router.push({ pathname: "/training-plan", params: { classId } })
+            studyObject
+              ? router.push({
+                  pathname: "/assessments/diagnostic-prerequisites",
+                  params: {
+                    classId,
+                    trainingSessionId: diagnostic.id,
+                    trainingStudyObjectId: studyObject.id,
+                  },
+                })
+              : Alert.alert(
+                  "Objet d’étude introuvable",
+                  "Cette séance diagnostique n’est associée à aucun objet d’étude dans le plan.",
+                )
           }
           style={[
             styles.actionRow,
@@ -496,7 +594,7 @@ function DiagnosticPrerequisiteTasks({
             <Text
               style={[styles.rowSubtitle, { color: colors.mutedForeground }]}
             >
-              {studyObjectContext} · ajoutez-les dans le plan de formation
+              {studyObjectContext} · ajoutez-les pour démarrer l’évaluation
             </Text>
           </View>
           <View

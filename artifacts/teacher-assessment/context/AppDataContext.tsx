@@ -495,6 +495,7 @@ export type AppDataContextValue = {
     sessionObjectives?: string;
     date?: string;
     objectives?: string[];
+    diagnosticPrerequisites?: string[];
   }) => string | undefined;
   setActiveAssessment: (assessmentId: string) => void;
   deleteAssessment: (assessmentId: string) => void;
@@ -3558,6 +3559,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     sessionObjectives?: string;
     date?: string;
     objectives?: string[];
+    diagnosticPrerequisites?: string[];
   }) => {
     const targetClass =
       state.classes.find((c) => c.id === input.classId);
@@ -3579,6 +3581,9 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       );
     const competencyId = input.competencyId ?? competency?.id;
     const evaluationType = input.evaluationType ?? 'competency';
+    const diagnosticPrerequisites = input.diagnosticPrerequisites
+      ?.map((item) => item.trim())
+      .filter(Boolean);
     const trainingStudyObject = input.trainingStudyObjectId
       ? state.trainingPlans
           .flatMap((plan) => plan.projects)
@@ -3589,7 +3594,8 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       input.trainingStudyObjectId &&
       input.trainingSessionId &&
       trainingStudyObject?.diagnostic?.id === input.trainingSessionId &&
-      (trainingStudyObject.prerequisites ?? []).some((item) => item.trim()),
+      (diagnosticPrerequisites ?? trainingStudyObject.prerequisites ?? [])
+        .some((item) => item.trim()),
     );
     if (
       evaluationType === 'prerequisites' &&
@@ -3676,6 +3682,22 @@ export function AppDataProvider({ children }: PropsWithChildren) {
 
     setState((prev) => ({
       ...prev,
+      ...(diagnosticPrerequisites?.length && input.trainingStudyObjectId
+        ? {
+            trainingPlans: prev.trainingPlans.map((plan) => ({
+              ...plan,
+              projects: plan.projects.map((project) => ({
+                ...project,
+                studyObjects: project.studyObjects.map((studyObject) =>
+                  studyObject.id === input.trainingStudyObjectId &&
+                  studyObject.diagnostic?.id === input.trainingSessionId
+                    ? { ...studyObject, prerequisites: diagnosticPrerequisites }
+                    : studyObject,
+                ),
+              })),
+            })),
+          }
+        : {}),
       levelTests: existingLevelTest
         ? prev.levelTests
         : [
