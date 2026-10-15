@@ -209,7 +209,13 @@ export default function ClassDetailScreen() {
     }
   };
 
-  const [activeTab, setActiveTab] = useState<'pupils' | 'continuous'>('continuous');
+  const [activeTab, setActiveTab] = useState<'pupils' | 'continuous' | 'level-test'>('continuous');
+
+  // Level test (once per class per year)
+  const existingLevelTest = data.getLevelTestForClassYear(currentClass.id, currentClass.academicYear);
+  const levelTestAssessments = data.assessments.filter(
+    (a) => a.classId === currentClass.id && a.levelTestId === existingLevelTest?.id,
+  );
   const [scoreDrafts, setScoreDrafts] = useState<Record<string, string>>({});
   const [studentSearch, setStudentSearch] = useState('');
   const [evaluationFilter, setEvaluationFilter] = useState<'all' | 'incomplete' | 'complete'>(
@@ -226,6 +232,13 @@ export default function ClassDetailScreen() {
       params.evaluationFilter === 'incomplete' ? 'incomplete' : 'all',
     );
   }, [currentClass.id, params.evaluationFilter]);
+
+  const openCreateLevelTest = () => {
+    router.push({
+      pathname: '/assessments/new',
+      params: { classId: currentClass.id, context: 'levelTest' },
+    });
+  };
   useEffect(() => () => {
     if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
   }, []);
@@ -564,7 +577,7 @@ export default function ClassDetailScreen() {
       </Surface>
       )}
 
-      {/* Continuous evaluation is the default class workflow. */}
+      {/* Tabs bar — continuous | level-test | pupils */}
       <View style={styles.tabBar}>
         <Pressable
           onPress={() => setActiveTab('continuous')}
@@ -587,7 +600,31 @@ export default function ClassDetailScreen() {
               { color: activeTab === 'continuous' ? colors.primaryForeground : colors.foreground },
             ]}
           >
-            Évaluation continue
+            Éval. continue
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => setActiveTab('level-test')}
+          style={[
+            styles.tabItem,
+            {
+              backgroundColor: activeTab === 'level-test' ? colors.primary : colors.card,
+              borderColor: activeTab === 'level-test' ? colors.primary : colors.border,
+            },
+          ]}
+        >
+          <Feather
+            name="target"
+            size={16}
+            color={activeTab === 'level-test' ? colors.primaryForeground : colors.foreground}
+          />
+          <Text
+            style={[
+              styles.tabText,
+              { color: activeTab === 'level-test' ? colors.primaryForeground : colors.foreground },
+            ]}
+          >
+            Test niveau
           </Text>
         </Pressable>
         <Pressable
@@ -615,6 +652,108 @@ export default function ClassDetailScreen() {
           </Text>
         </Pressable>
       </View>
+
+      {/* ─── TAB: Test de niveau (once per class per year) ─── */}
+      {activeTab === 'level-test' && (
+        <View style={styles.tabContent}>
+          {!existingLevelTest ? (
+            /* No level test yet → invite to create */
+            <Surface style={styles.levelTestCallout}>
+              <View style={[styles.levelTestCalloutIcon, { backgroundColor: colors.accent }]}>
+                <Feather name="target" size={22} color={colors.primary} />
+              </View>
+              <View style={styles.levelTestCalloutCopy}>
+                <Text style={[styles.levelTestCalloutTitle, { color: colors.foreground }]}>
+                  Aucun test de niveau
+                </Text>
+                <Text style={[styles.levelTestCalloutMeta, { color: colors.mutedForeground }]}>
+                  Créez le test de niveau initial pour {currentClass.name} ({currentClass.academicYear}).
+                  Il ne peut être créé qu'une seule fois.
+                </Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Créer le test de niveau initial"
+                onPress={openCreateLevelTest}
+                style={[styles.levelTestCreateBtn, { backgroundColor: colors.primary }]}
+              >
+                <Feather name="plus" size={16} color={colors.primaryForeground} />
+                <Text style={[styles.levelTestCreateBtnText, { color: colors.primaryForeground }]}>
+                  Créer
+                </Text>
+              </Pressable>
+            </Surface>
+          ) : (
+            /* Level test exists → show results only, no recreate button */
+            <>
+              <Surface style={[styles.levelTestDoneCard, { backgroundColor: colors.accent, borderColor: colors.border }]}>
+                <Feather name="check-circle" size={18} color={colors.primary} />
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={[styles.levelTestDoneTitle, { color: colors.foreground }]}>
+                    Test de niveau créé
+                  </Text>
+                  <Text style={[styles.levelTestDoneMeta, { color: colors.mutedForeground }]}>
+                    {levelTestAssessments.length} compétence{levelTestAssessments.length !== 1 ? 's' : ''} évaluée{levelTestAssessments.length !== 1 ? 's' : ''} · {currentClass.academicYear}
+                  </Text>
+                </View>
+              </Surface>
+              {levelTestAssessments.length === 0 ? (
+                <Surface style={styles.emptyCard}>
+                  <Text style={[styles.emptySubtitle, { color: colors.mutedForeground }]}>
+                    Aucune compétence enregistrée pour ce test.
+                  </Text>
+                </Surface>
+              ) : (
+                levelTestAssessments.map((assessment) => (
+                  <Pressable
+                    key={assessment.id}
+                    accessibilityRole="button"
+                    onPress={() => router.push(`/assessments/${assessment.id}`)}
+                    style={({ pressed }) => [{ opacity: pressed ? 0.75 : 1 }]}
+                  >
+                    <Surface style={[styles.levelTestAssessmentCard, { borderColor: colors.border }]}>
+                      <View style={[styles.levelTestAssessmentIcon, { backgroundColor: colors.accent }]}>
+                        <Feather
+                          name={assessment.evaluationType === 'prerequisites' ? 'grid' : 'book-open'}
+                          size={17}
+                          color={colors.primary}
+                        />
+                      </View>
+                      <View style={styles.levelTestAssessmentCopy}>
+                        <Text style={[styles.levelTestAssessmentTitle, { color: colors.foreground }]} numberOfLines={2}>
+                          {assessment.title}
+                        </Text>
+                        <Text style={[styles.levelTestAssessmentMeta, { color: colors.mutedForeground }]}>
+                          {assessment.competency} · {assessment.date}
+                          {assessment.evaluationType === 'prerequisites' ? ' · Prérequis' : ''}
+                        </Text>
+                      </View>
+                      <View style={[styles.levelTestAssessmentStatus, {
+                        backgroundColor:
+                          assessment.status === 'Completed' ? colors.successSurface
+                          : assessment.status === 'InProgress' ? colors.accent
+                          : colors.secondary,
+                      }]}>
+                        <Text style={[styles.levelTestAssessmentStatusText, {
+                          color:
+                            assessment.status === 'Completed' ? colors.successForeground
+                            : colors.primary,
+                        }]}>
+                          {assessment.status === 'Completed' ? 'Terminé'
+                            : assessment.status === 'InProgress' ? 'En cours'
+                            : assessment.status === 'Archived' ? 'Archivé'
+                            : 'Brouillon'}
+                        </Text>
+                      </View>
+                      <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+                    </Surface>
+                  </Pressable>
+                ))
+              )}
+            </>
+          )}
+        </View>
+      )}
 
       {activeTab === 'continuous' && (
         <View style={styles.tabContent}>
@@ -1249,6 +1388,66 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingBottom: 30,
   },
+  levelTestCallout: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    borderRadius: 16,
+  },
+  levelTestCalloutIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  levelTestCalloutCopy: { flex: 1, gap: 3 },
+  levelTestCalloutTitle: { fontSize: 14, fontWeight: '800' },
+  levelTestCalloutMeta: { fontSize: 11.5, lineHeight: 16 },
+  levelTestCreateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 11,
+  },
+  levelTestCreateBtnText: { fontSize: 12, fontWeight: '800' },
+  levelTestDoneCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  levelTestDoneTitle: { fontSize: 13, fontWeight: '800' },
+  levelTestDoneMeta: { fontSize: 11.5 },
+  levelTestAssessmentCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  levelTestAssessmentIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  levelTestAssessmentCopy: { flex: 1, gap: 2 },
+  levelTestAssessmentTitle: { fontSize: 13, fontWeight: '700' },
+  levelTestAssessmentMeta: { fontSize: 11 },
+  levelTestAssessmentStatus: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 7,
+  },
+  levelTestAssessmentStatusText: { fontSize: 10, fontWeight: '800' },
   assessmentList: {
     gap: 12,
   },

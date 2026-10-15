@@ -54,6 +54,16 @@ export default function EntryScreen() {
               params: { classId: selectedClass.id },
             }),
         },
+        {
+          title: 'Évaluation diagnostique',
+          detail: 'Choisir une séance diagnostique à évaluer',
+          icon: 'search',
+          onPress: () =>
+            router.push({
+              pathname: '/assessments/pick-diagnostic-session',
+              params: { classId: selectedClass.id },
+            }),
+        },
       ]
     : [];
 

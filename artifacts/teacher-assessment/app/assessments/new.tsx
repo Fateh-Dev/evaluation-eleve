@@ -33,7 +33,12 @@ export default function NewAssessmentScreen() {
     trainingSessionId?: string;
     diagnosticTitle?: string;
     studyObjectTitle?: string;
+    /** 'levelTest' = from class detail tab (once per class)\n     *  'diagnostic' = from Saisie screen (free date, prerequisites type) */
+    context?: string;
   }>();
+
+  const isLevelTestFromClass = params.context === 'levelTest';
+  const isDiagnosticFromEntry = params.context === 'diagnostic';
 
   const [selectedClassId, setSelectedClassId] = useState<string>(
     params.classId || data.activeClassId || data.classes[0]?.id || '',
@@ -299,12 +304,22 @@ export default function NewAssessmentScreen() {
   return (
     <Screen onTouchStart={() => setRemoveArmedObjectiveIndex(null)}>
       <AppHeader
-        eyebrow={params.trainingSessionId
-          ? 'Évaluation diagnostique de la classe'
-          : evaluationType === 'prerequisites' ? 'Test des prérequis' : 'Test de niveau'}
+        eyebrow={
+          params.trainingSessionId
+            ? 'Évaluation diagnostique de la classe'
+            : isDiagnosticFromEntry
+            ? 'Évaluation diagnostique'
+            : isLevelTestFromClass
+            ? 'Test de niveau initial'
+            : evaluationType === 'prerequisites' ? 'Test des prérequis' : 'Test de niveau'
+        }
         title={
           params.trainingSessionId
             ? 'Évaluer les prérequis'
+            : isDiagnosticFromEntry
+            ? 'Créer l’évaluation diagnostique'
+            : isLevelTestFromClass
+            ? (existingLevelTest ? 'Ajouter une compétence' : 'Créer le test initial')
             : existingLevelTest
             ? 'Ajouter une évaluation'
             : 'Créer le test initial'
@@ -316,6 +331,12 @@ export default function NewAssessmentScreen() {
         <Text style={[styles.templateCount, { color: colors.mutedForeground }]}>
           {params.trainingSessionId
             ? `Évaluation liée au diagnostic « ${params.diagnosticTitle ?? 'Diagnostic'} »${params.studyObjectTitle ? ` — ${params.studyObjectTitle}` : ''}, pour les élèves de ${selectedClass.name}.`
+            : isDiagnosticFromEntry
+            ? `Évaluation diagnostique pour ${selectedClass.name} (${selectedClass.academicYear}). La date est libre — vous pouvez saisir une date passée.`
+            : isLevelTestFromClass && existingLevelTest
+            ? `Le test initial de ${selectedClass.name} pour ${selectedClass.academicYear} existe déjà. ${existingCompetencyCount} compétence${existingCompetencyCount > 1 ? 's' : ''} évaluée${existingCompetencyCount > 1 ? 's' : ''} actuellement.`
+            : isLevelTestFromClass
+            ? `Vous créez le test de niveau initial de ${selectedClass.name} (${selectedClass.academicYear}). Il ne peut être créé qu'une seule fois par classe.`
             : existingLevelTest
             ? `Le test initial de ${selectedClass.name} pour ${selectedClass.academicYear} existe déjà. ${existingCompetencyCount} compétence${existingCompetencyCount > 1 ? 's' : ''} évaluée${existingCompetencyCount > 1 ? 's' : ''} actuellement.`
             : `Vous créez le test initial de ${selectedClass.name} pour ${selectedClass.academicYear}.`}
@@ -331,7 +352,7 @@ export default function NewAssessmentScreen() {
         <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>
           1. CHOISIR LA CLASSE
         </Text>
-        {params.trainingSessionId ? (
+        {params.trainingSessionId || isLevelTestFromClass || isDiagnosticFromEntry ? (
           <Text style={[styles.templateTitle, { color: colors.foreground }]}>
             {selectedClass.name} ({selectedClass.level})
           </Text>
@@ -378,11 +399,17 @@ export default function NewAssessmentScreen() {
 
       <Surface style={styles.sectionCard}>
         <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>
-          {params.trainingSessionId ? '2. DIAGNOSTIC DES PRÉREQUIS' : '2. TYPE D’ÉVALUATION'}
+          {params.trainingSessionId
+            ? '2. DIAGNOSTIC DES PRÉREQUIS'
+            : isDiagnosticFromEntry
+            ? '2. TYPE D’ÉVALUATION'
+            : '2. TYPE D’ÉVALUATION'}
         </Text>
-        {params.trainingSessionId ? (
+        {params.trainingSessionId || isDiagnosticFromEntry ? (
           <Text style={[styles.typeChoiceDescription, { color: colors.mutedForeground }]}>
-            Choisissez une compétence configurée et renseignez les résultats de toute la classe sur ses prérequis.
+            {isDiagnosticFromEntry
+              ? `Type fixé : évaluation des prérequis. Choisissez la compétence et la date (passée ou aujourd'hui).`
+              : 'Choisissez une compétence configurée et renseignez les résultats de toute la classe sur ses prérequis.'}
           </Text>
         ) : (
           <View style={styles.typeChoices}>
